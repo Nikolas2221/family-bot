@@ -1,10 +1,14 @@
 {
   "members": {},
+  "weekly": {},
   "applications": [],
   "warns": [],
   "commends": [],
   "contracts": [],
   "logs": [],
   "cooldowns": {},
-  "sessions": {}
+  "sessions": {},
+  "promotions": [],
+  "blacklisted": [],
+  "inactive": []
 }

@@ -1,6 +1,6 @@
 {
-  "name": "family-bot-ultimate-v4",
-  "version": "4.0.0",
+  "name": "family-bot-v5-rp-ru",
+  "version": "5.1.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
