@@ -1,44 +1,37 @@
-Family Bot Pro
+Family Bot Ultimate v4
 
-Что умеет:
-- embed панель семьи
-- статусы онлайн / оффлайн
-- автообновление
-- кнопка обновления
-- кнопка подачи заявки
-- /apply для заявки
-- /applypanel для панели заявок
-- /invite для инвайта
-- логи:
-  кто зашёл в семью
-  кто вышел из семьи
-  кто получил роль
-  кто потерял роль
+Что добавлено:
+1. Система активности без базы (сообщения + голос)
+2. Автоотчёты по расписанию
+3. /profile
+4. /promote и /demote
+5. Панель статистики семьи
+6. Защита от спама заявками и самовыдачи
+7. Умные уведомления в отчётах
+8. RP-команды /warn /commend /contract
+9. ЛС при одобрении / повышении / понижении
+10. Кнопка обновления и cooldown заявок
 
 Важно:
-1. Включи в Discord Developer Portal:
-   - SERVER MEMBERS INTENT
-   - PRESENCE INTENT
+- Включи SERVER MEMBERS INTENT
+- Включи PRESENCE INTENT
+- Для активности сообщений нужен Message Content Intent
+- Права бота: Manage Roles, View Channels, Send Messages, Read Message History, Use Application Commands
 
-2. Дай боту права:
-   - Manage Roles
-   - View Channels
-   - Send Messages
-   - Read Message History
-   - Use Application Commands
+Команды:
+- /familypanel
+- /familystats
+- /apply
+- /applypanel
+- /invite
+- /profile
+- /promote
+- /demote
+- /warn
+- /commend
+- /contract create
+- /contract list
+- /applications
 
-3. В Railway Variables заполни:
-   TOKEN
-   GUILD_ID
-   CHANNEL_ID
-   MESSAGE_ID
-   LOG_CHANNEL_ID
-   APPLICATIONS_CHANNEL_ID
-   MANAGER_ROLE_IDS
-   APPLICATION_DEFAULT_ROLE
-   ROLE_LEADER
-   ROLE_DEPUTY
-   ROLE_ELDER
-   ROLE_MEMBER
-   ROLE_NEWBIE
-   UPDATE_INTERVAL_MS
+Примечание:
+storage.json это не база данных, а локальное хранилище. Для Railway оно подходит для лёгких сценариев, но после полного redeploy часть истории может сбиться.
