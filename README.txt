@@ -1,14 +1,16 @@
-Majestic apps + discipline
+Majestic apps + discipline + AI
 
-Добавлено:
+Что добавлено:
+- /ai — AI-помощник семьи
+- кнопка 🤖 AI-анализ заявки
+- Responses API через официальный пакет openai
 - /profile
 - /warn
 - /commend
-- лог выговоров
-- лог похвал
-- счётчики в профиле
-- заявки с кнопками возвращены
+- заявки с кнопками и логами
 
 Важно:
-ACCESS_DISCIPLINE=ID_роли_лидера,ID_роли_зама
-DISCIPLINE_LOG_CHANNEL_ID=ID_канала_дисциплины
+1. Добавь OPENAI_API_KEY
+2. Поставь AI_ENABLED=true
+3. Для AI анализа заявок укажи ACCESS_APPLICATIONS
+4. Для новых проектов OpenAI рекомендует Responses API

@@ -1,12 +1,13 @@
 {
-  "name": "family-bot-majestic-discipline",
-  "version": "6.2.0",
+  "name": "family-bot-ai-majestic",
+  "version": "6.3.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "openai": "^5.23.2"
   }
 }

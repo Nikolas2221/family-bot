@@ -14,6 +14,7 @@ const {
   TextInputStyle,
   ChannelType
 } = require('discord.js');
+const OpenAI = require('openai');
 const ROLES = require('./roles');
 
 const DATA_FILE = path.join(__dirname, 'storage.json');
@@ -30,6 +31,10 @@ const APPLICATION_DEFAULT_ROLE = process.env.APPLICATION_DEFAULT_ROLE || process
 const FAMILY_TITLE = process.env.FAMILY_TITLE || '🏠 Семья';
 const ACCESS_APPLICATIONS = (process.env.ACCESS_APPLICATIONS || '').split(',').map(x => x.trim()).filter(Boolean);
 const ACCESS_DISCIPLINE = (process.env.ACCESS_DISCIPLINE || '').split(',').map(x => x.trim()).filter(Boolean);
+const AI_ENABLED = process.env.AI_ENABLED === 'true';
+const AI_MODEL = process.env.AI_MODEL || 'gpt-5.4-mini';
+
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 const client = new Client({
   intents: [
@@ -188,6 +193,7 @@ function buildApplicationButtons(applicationId, userId) {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`app_accept:${applicationId}:${userId}`).setLabel('✅ Принять').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`app_ai:${applicationId}:${userId}`).setLabel('🤖 AI-анализ').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`app_review:${applicationId}:${userId}`).setLabel('🕒 На рассмотрении').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`app_reject:${applicationId}:${userId}`).setLabel('❌ Отклонить').setStyle(ButtonStyle.Danger)
     )
@@ -313,6 +319,44 @@ async function sendDisciplineLog(guild, embed) {
   await channel.send({ embeds: [embed] });
 }
 
+async function aiText(systemPrompt, userPrompt) {
+  if (!AI_ENABLED || !openai) {
+    throw new Error('AI выключен. Проверь AI_ENABLED=true и OPENAI_API_KEY.');
+  }
+
+  const response = await openai.responses.create({
+    model: AI_MODEL,
+    input: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]
+  });
+
+  return (response.output_text || '').trim() || 'AI не вернул текст.';
+}
+
+async function analyzeApplicationAI(app) {
+  const systemPrompt = [
+    'Ты помощник руководства семьи на RP-сервере.',
+    'Анализируй заявку кратко и по делу.',
+    'Пиши только на русском.',
+    'Верни ответ в 4 блоках:',
+    '1. Сильные стороны',
+    '2. Слабые стороны',
+    '3. Риск',
+    '4. Рекомендация: ПРИНЯТЬ / РАССМОТРЕТЬ / ОТКЛОНИТЬ'
+  ].join(' ');
+
+  const userPrompt = [
+    `Ник: ${app.nickname}`,
+    `Возраст: ${app.age}`,
+    `Текст заявки: ${app.text}`,
+    `Статус: ${app.status}`
+  ].join('\n');
+
+  return aiText(systemPrompt, userPrompt);
+}
+
 async function buildFamilyEmbeds(guild) {
   const configuredRoles = ROLES
     .map(item => ({ ...item, role: guild.roles.cache.get(item.id) }))
@@ -419,7 +463,9 @@ async function registerCommands(guild) {
       .addStringOption(o => o.setName('причина').setDescription('Причина').setRequired(true)),
     new SlashCommandBuilder().setName('commend').setDescription('Выдать похвалу')
       .addUserOption(o => o.setName('пользователь').setDescription('Кому').setRequired(true))
-      .addStringOption(o => o.setName('причина').setDescription('Причина').setRequired(true))
+      .addStringOption(o => o.setName('причина').setDescription('Причина').setRequired(true)),
+    new SlashCommandBuilder().setName('ai').setDescription('AI-помощник семьи')
+      .addStringOption(o => o.setName('запрос').setDescription('Что нужно?').setRequired(true))
   ].map(c => c.toJSON());
 
   await guild.commands.set(commands);
@@ -556,6 +602,20 @@ client.on('interactionCreate', async interaction => {
         await sendDisciplineLog(interaction.guild, buildCommendLogEmbed({ targetUser: user, moderatorUser: interaction.user, reason }));
         return interaction.reply({ content: `🏅 Похвала выдана <@${user.id}>.`, ephemeral: true });
       }
+
+      if (interaction.commandName === 'ai') {
+        const query = interaction.options.getString('запрос', true);
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const answer = await aiText(
+            'Ты помощник семьи на RP-сервере. Отвечай по-русски, кратко, полезно, в стиле игрового помощника. Если просят текст, давай готовый вариант.',
+            query
+          );
+          return interaction.editReply({ content: answer.slice(0, 1900) });
+        } catch (e) {
+          return interaction.editReply({ content: `AI ошибка: ${e.message}` });
+        }
+      }
     }
 
     if (interaction.isButton()) {
@@ -574,9 +634,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.customId.startsWith('app_accept:')) {
-        if (!canApplications(interaction.member)) {
-          return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
-        }
+        if (!canApplications(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
 
         const [, applicationId, userId] = interaction.customId.split(':');
         const app = store.applications.find(x => x.id === applicationId);
@@ -608,10 +666,31 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: `✅ <@${userId}> принят в семью.`, ephemeral: true });
       }
 
-      if (interaction.customId.startsWith('app_review:')) {
-        if (!canApplications(interaction.member)) {
-          return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+      if (interaction.customId.startsWith('app_ai:')) {
+        if (!canApplications(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+
+        const [, applicationId] = interaction.customId.split(':');
+        const app = store.applications.find(x => x.id === applicationId);
+        if (!app) return interaction.reply({ content: 'Заявка не найдена.', ephemeral: true });
+
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const analysis = await analyzeApplicationAI(app);
+          const embed = new EmbedBuilder()
+            .setColor(0x3B82F6)
+            .setTitle('🤖 AI-анализ заявки')
+            .setDescription(analysis.slice(0, 3900))
+            .setFooter({ text: `Заявка ${applicationId}` })
+            .setTimestamp();
+
+          return interaction.editReply({ embeds: [embed] });
+        } catch (e) {
+          return interaction.editReply({ content: `AI ошибка: ${e.message}` });
         }
+      }
+
+      if (interaction.customId.startsWith('app_review:')) {
+        if (!canApplications(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
 
         const [, applicationId, userId] = interaction.customId.split(':');
         const app = store.applications.find(x => x.id === applicationId);
@@ -632,9 +711,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.customId.startsWith('app_reject:')) {
-        if (!canApplications(interaction.member)) {
-          return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
-        }
+        if (!canApplications(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
 
         const [, applicationId, userId] = interaction.customId.split(':');
         const app = store.applications.find(x => x.id === applicationId);
