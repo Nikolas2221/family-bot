@@ -1,5 +1,7 @@
 {
   "members": {},
   "applications": [],
-  "cooldowns": {}
+  "cooldowns": {},
+  "warns": [],
+  "commends": []
 }

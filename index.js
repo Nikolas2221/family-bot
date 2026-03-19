@@ -12,7 +12,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ChannelType,
+  ChannelType
 } = require('discord.js');
 const ROLES = require('./roles');
 
@@ -22,15 +22,14 @@ const GUILD_ID = process.env.GUILD_ID;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const APPLICATIONS_CHANNEL_ID = process.env.APPLICATIONS_CHANNEL_ID || CHANNEL_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '';
+const DISCIPLINE_LOG_CHANNEL_ID = process.env.DISCIPLINE_LOG_CHANNEL_ID || LOG_CHANNEL_ID || '';
 const MESSAGE_ID = process.env.MESSAGE_ID || '';
 const UPDATE_INTERVAL_MS = Math.max(60000, Number(process.env.UPDATE_INTERVAL_MS || 60000));
 const APPLICATION_COOLDOWN_MS = Math.max(10000, Number(process.env.APPLICATION_COOLDOWN_MS || 300000));
 const APPLICATION_DEFAULT_ROLE = process.env.APPLICATION_DEFAULT_ROLE || process.env.ROLE_NEWBIE || '';
 const FAMILY_TITLE = process.env.FAMILY_TITLE || '🏠 Семья';
-const ACCESS_APPLICATIONS = (process.env.ACCESS_APPLICATIONS || '')
-  .split(',')
-  .map(x => x.trim())
-  .filter(Boolean);
+const ACCESS_APPLICATIONS = (process.env.ACCESS_APPLICATIONS || '').split(',').map(x => x.trim()).filter(Boolean);
+const ACCESS_DISCIPLINE = (process.env.ACCESS_DISCIPLINE || '').split(',').map(x => x.trim()).filter(Boolean);
 
 const client = new Client({
   intents: [
@@ -46,7 +45,9 @@ function defaultStore() {
   return {
     members: {},
     applications: [],
-    cooldowns: {}
+    cooldowns: {},
+    warns: [],
+    commends: []
   };
 }
 
@@ -67,7 +68,12 @@ function saveStore() {
 
 function ensureMember(id) {
   if (!store.members[id]) {
-    store.members[id] = { messageCount: 0, lastSeenAt: Date.now() };
+    store.members[id] = {
+      messageCount: 0,
+      lastSeenAt: Date.now(),
+      warns: 0,
+      commends: 0
+    };
   }
   return store.members[id];
 }
@@ -76,6 +82,12 @@ function canApplications(member) {
   if (!member) return false;
   if (!ACCESS_APPLICATIONS.length) return member.permissions.has('ManageRoles');
   return member.roles.cache.some(r => ACCESS_APPLICATIONS.includes(r.id)) || member.permissions.has('ManageRoles');
+}
+
+function canDiscipline(member) {
+  if (!member) return false;
+  if (!ACCESS_DISCIPLINE.length) return member.permissions.has('ManageRoles');
+  return member.roles.cache.some(r => ACCESS_DISCIPLINE.includes(r.id)) || member.permissions.has('ManageRoles');
 }
 
 function getRoleIds() {
@@ -104,7 +116,8 @@ function statusWeight(member) {
 }
 
 function activityScore(id) {
-  return ensureMember(id).messageCount || 0;
+  const m = ensureMember(id);
+  return (m.messageCount || 0) + (m.commends || 0) * 5 - (m.warns || 0) * 3;
 }
 
 function sortMembers(members) {
@@ -232,19 +245,71 @@ function buildRejectLogEmbed({ user, moderatorUser, reason = 'Отказ' }) {
     .setTimestamp();
 }
 
+function buildWarnLogEmbed({ targetUser, moderatorUser, reason }) {
+  return new EmbedBuilder()
+    .setColor(0xF97316)
+    .setTitle('⚠️ Выговор')
+    .setDescription(`**<@${moderatorUser.id}> выдал выговор <@${targetUser.id}>**`)
+    .addFields(
+      { name: '👤 Участник', value: `<@${targetUser.id}>\n\`${targetUser.id}\``, inline: true },
+      { name: '👑 Выдал', value: `<@${moderatorUser.id}>\n\`${moderatorUser.id}\``, inline: true },
+      { name: '📋 Причина', value: reason, inline: false }
+    )
+    .setFooter({ text: 'Discipline Log' })
+    .setTimestamp();
+}
+
+function buildCommendLogEmbed({ targetUser, moderatorUser, reason }) {
+  return new EmbedBuilder()
+    .setColor(0x3B82F6)
+    .setTitle('🏅 Похвала')
+    .setDescription(`**<@${moderatorUser.id}> отметил <@${targetUser.id}>**`)
+    .addFields(
+      { name: '👤 Участник', value: `<@${targetUser.id}>\n\`${targetUser.id}\``, inline: true },
+      { name: '👑 Выдал', value: `<@${moderatorUser.id}>\n\`${moderatorUser.id}\``, inline: true },
+      { name: '📋 Причина', value: reason, inline: false }
+    )
+    .setFooter({ text: 'Discipline Log' })
+    .setTimestamp();
+}
+
+function buildProfileEmbed(member) {
+  const data = ensureMember(member.id);
+  const familyRoles = member.roles.cache
+    .filter(r => getRoleIds().includes(r.id))
+    .map(r => `<@&${r.id}>`)
+    .join(', ') || 'Нет';
+  return new EmbedBuilder()
+    .setColor(0x8B5CF6)
+    .setTitle(`👤 Профиль участника`)
+    .setDescription(`> Информация о <@${member.id}>`)
+    .setThumbnail(member.user.displayAvatarURL())
+    .addFields(
+      { name: '📛 Ник', value: member.displayName, inline: true },
+      { name: '👤 Discord', value: `<@${member.id}>`, inline: true },
+      { name: '🆔 ID', value: `\`${member.id}\``, inline: true },
+      { name: '📌 Роли семьи', value: familyRoles, inline: false },
+      { name: '📈 Активность', value: String(activityScore(member.id)), inline: true },
+      { name: '⚠️ Выговоры', value: String(data.warns || 0), inline: true },
+      { name: '🏅 Похвалы', value: String(data.commends || 0), inline: true },
+      { name: '💬 Сообщения', value: String(data.messageCount || 0), inline: true },
+      { name: '🟢 Статус', value: `${getStatusEmoji(member)} ${member.presence?.status || 'offline'}`, inline: true }
+    )
+    .setFooter({ text: 'Family Profile System' })
+    .setTimestamp();
+}
+
 async function sendAcceptLog(guild, member, moderatorUser, reason = 'Собеседование', rankName = '1 ранг') {
   if (!LOG_CHANNEL_ID) return;
-
   const channel = await fetchTextChannel(guild, LOG_CHANNEL_ID);
   if (!channel) return;
+  await channel.send({ embeds: [buildAcceptLogEmbed({ member, moderatorUser, reason, rankName })] });
+}
 
-  const embed = buildAcceptLogEmbed({
-    member,
-    moderatorUser,
-    reason,
-    rankName
-  });
-
+async function sendDisciplineLog(guild, embed) {
+  if (!DISCIPLINE_LOG_CHANNEL_ID) return;
+  const channel = await fetchTextChannel(guild, DISCIPLINE_LOG_CHANNEL_ID);
+  if (!channel) return;
   await channel.send({ embeds: [embed] });
 }
 
@@ -346,7 +411,15 @@ async function registerCommands(guild) {
     new SlashCommandBuilder().setName('apply').setDescription('Подать заявку в семью'),
     new SlashCommandBuilder().setName('applypanel').setDescription('Отправить панель заявок'),
     new SlashCommandBuilder().setName('applications').setDescription('Показать последние заявки'),
-    new SlashCommandBuilder().setName('testaccept').setDescription('Тест красивого лога приёма')
+    new SlashCommandBuilder().setName('testaccept').setDescription('Тест красивого лога приёма'),
+    new SlashCommandBuilder().setName('profile').setDescription('Профиль участника')
+      .addUserOption(o => o.setName('пользователь').setDescription('Кого посмотреть').setRequired(false)),
+    new SlashCommandBuilder().setName('warn').setDescription('Выдать выговор')
+      .addUserOption(o => o.setName('пользователь').setDescription('Кому').setRequired(true))
+      .addStringOption(o => o.setName('причина').setDescription('Причина').setRequired(true)),
+    new SlashCommandBuilder().setName('commend').setDescription('Выдать похвалу')
+      .addUserOption(o => o.setName('пользователь').setDescription('Кому').setRequired(true))
+      .addStringOption(o => o.setName('причина').setDescription('Причина').setRequired(true))
   ].map(c => c.toJSON());
 
   await guild.commands.set(commands);
@@ -448,6 +521,41 @@ client.on('interactionCreate', async interaction => {
         await sendAcceptLog(interaction.guild, interaction.member, interaction.user, 'Собеседование', '1 ранг');
         return interaction.reply({ content: 'Тестовый лог отправлен.', ephemeral: true });
       }
+
+      if (interaction.commandName === 'profile') {
+        const user = interaction.options.getUser('пользователь') || interaction.user;
+        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (!member) return interaction.reply({ content: 'Участник не найден.', ephemeral: true });
+        return interaction.reply({ embeds: [buildProfileEmbed(member)], ephemeral: true });
+      }
+
+      if (interaction.commandName === 'warn') {
+        if (!canDiscipline(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        const user = interaction.options.getUser('пользователь', true);
+        const reason = interaction.options.getString('причина', true);
+        const data = ensureMember(user.id);
+        data.warns = (data.warns || 0) + 1;
+        store.warns.unshift({ userId: user.id, moderatorId: interaction.user.id, reason, createdAt: new Date().toISOString() });
+        store.warns = store.warns.slice(0, 200);
+        saveStore();
+
+        await sendDisciplineLog(interaction.guild, buildWarnLogEmbed({ targetUser: user, moderatorUser: interaction.user, reason }));
+        return interaction.reply({ content: `⚠️ Выговор выдан <@${user.id}>.`, ephemeral: true });
+      }
+
+      if (interaction.commandName === 'commend') {
+        if (!canDiscipline(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        const user = interaction.options.getUser('пользователь', true);
+        const reason = interaction.options.getString('причина', true);
+        const data = ensureMember(user.id);
+        data.commends = (data.commends || 0) + 1;
+        store.commends.unshift({ userId: user.id, moderatorId: interaction.user.id, reason, createdAt: new Date().toISOString() });
+        store.commends = store.commends.slice(0, 200);
+        saveStore();
+
+        await sendDisciplineLog(interaction.guild, buildCommendLogEmbed({ targetUser: user, moderatorUser: interaction.user, reason }));
+        return interaction.reply({ content: `🏅 Похвала выдана <@${user.id}>.`, ephemeral: true });
+      }
     }
 
     if (interaction.isButton()) {
@@ -480,9 +588,7 @@ client.on('interactionCreate', async interaction => {
 
         if (APPLICATION_DEFAULT_ROLE) {
           const role = interaction.guild.roles.cache.get(APPLICATION_DEFAULT_ROLE);
-          if (role) {
-            await member.roles.add(role).catch(() => {});
-          }
+          if (role) await member.roles.add(role).catch(() => {});
         }
 
         app.status = 'accepted';
@@ -551,13 +657,7 @@ client.on('interactionCreate', async interaction => {
           const channel = await fetchTextChannel(interaction.guild, LOG_CHANNEL_ID);
           if (channel) {
             await channel.send({
-              embeds: [
-                buildRejectLogEmbed({
-                  user,
-                  moderatorUser: interaction.user,
-                  reason: 'Отказ по решению руководства'
-                })
-              ]
+              embeds: [buildRejectLogEmbed({ user, moderatorUser: interaction.user, reason: 'Отказ по решению руководства' })]
             });
           }
         }
@@ -572,8 +672,8 @@ client.on('interactionCreate', async interaction => {
       const text = interaction.fields.getTextInputValue('text');
 
       store.cooldowns[interaction.user.id] = Date.now();
-
       const applicationId = `${Date.now()}_${interaction.user.id}`;
+
       store.applications.unshift({
         id: applicationId,
         discordId: interaction.user.id,
@@ -588,17 +688,8 @@ client.on('interactionCreate', async interaction => {
 
       const channel = await fetchTextChannel(interaction.guild, APPLICATIONS_CHANNEL_ID);
       if (channel) {
-        const embed = buildApplicationEmbed({
-          user: interaction.user,
-          nickname,
-          age,
-          text,
-          applicationId,
-          source: 'Заявка'
-        });
-
         await channel.send({
-          embeds: [embed],
+          embeds: [buildApplicationEmbed({ user: interaction.user, nickname, age, text, applicationId, source: 'Заявка' })],
           components: buildApplicationButtons(applicationId, interaction.user.id)
         });
       }

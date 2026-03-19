@@ -1,6 +1,6 @@
 {
-  "name": "family-bot-majestic-apps",
-  "version": "6.1.0",
+  "name": "family-bot-majestic-discipline",
+  "version": "6.2.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
