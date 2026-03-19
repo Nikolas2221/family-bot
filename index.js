@@ -12,7 +12,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ChannelType
+  ChannelType,
 } = require('discord.js');
 const ROLES = require('./roles');
 
@@ -27,7 +27,10 @@ const UPDATE_INTERVAL_MS = Math.max(60000, Number(process.env.UPDATE_INTERVAL_MS
 const APPLICATION_COOLDOWN_MS = Math.max(10000, Number(process.env.APPLICATION_COOLDOWN_MS || 300000));
 const APPLICATION_DEFAULT_ROLE = process.env.APPLICATION_DEFAULT_ROLE || process.env.ROLE_NEWBIE || '';
 const FAMILY_TITLE = process.env.FAMILY_TITLE || '🏠 Семья';
-const ACCESS_APPLICATIONS = (process.env.ACCESS_APPLICATIONS || '').split(',').map(x => x.trim()).filter(Boolean);
+const ACCESS_APPLICATIONS = (process.env.ACCESS_APPLICATIONS || '')
+  .split(',')
+  .map(x => x.trim())
+  .filter(Boolean);
 
 const client = new Client({
   intents: [
@@ -227,6 +230,22 @@ function buildRejectLogEmbed({ user, moderatorUser, reason = 'Отказ' }) {
     )
     .setFooter({ text: 'Family Log System' })
     .setTimestamp();
+}
+
+async function sendAcceptLog(guild, member, moderatorUser, reason = 'Собеседование', rankName = '1 ранг') {
+  if (!LOG_CHANNEL_ID) return;
+
+  const channel = await fetchTextChannel(guild, LOG_CHANNEL_ID);
+  if (!channel) return;
+
+  const embed = buildAcceptLogEmbed({
+    member,
+    moderatorUser,
+    reason,
+    rankName
+  });
+
+  await channel.send({ embeds: [embed] });
 }
 
 async function buildFamilyEmbeds(guild) {
@@ -529,10 +548,17 @@ client.on('interactionCreate', async interaction => {
 
         const user = await client.users.fetch(userId).catch(() => null);
         if (user && LOG_CHANNEL_ID) {
-          const guild = interaction.guild;
-          const channel = await fetchTextChannel(guild, LOG_CHANNEL_ID);
+          const channel = await fetchTextChannel(interaction.guild, LOG_CHANNEL_ID);
           if (channel) {
-            await channel.send({ embeds: [buildRejectLogEmbed({ user, moderatorUser: interaction.user, reason: 'Отказ по решению руководства' })] });
+            await channel.send({
+              embeds: [
+                buildRejectLogEmbed({
+                  user,
+                  moderatorUser: interaction.user,
+                  reason: 'Отказ по решению руководства'
+                })
+              ]
+            });
           }
         }
 
