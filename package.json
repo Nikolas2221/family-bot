@@ -1,6 +1,6 @@
 {
-  "name": "family-bot-final",
-  "version": "1.0.0",
+  "name": "family-bot-optimized",
+  "version": "6.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
