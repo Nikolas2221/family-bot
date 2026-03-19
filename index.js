@@ -12,20 +12,22 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ChannelType,
+  ChannelType
 } = require('discord.js');
-
 const ROLES = require('./roles');
+
 const DATA_FILE = path.join(__dirname, 'storage.json');
 
 const GUILD_ID = process.env.GUILD_ID;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const APPLICATIONS_CHANNEL_ID = process.env.APPLICATIONS_CHANNEL_ID || CHANNEL_ID;
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '';
+const MESSAGE_ID = process.env.MESSAGE_ID || '';
 const UPDATE_INTERVAL_MS = Math.max(60000, Number(process.env.UPDATE_INTERVAL_MS || 60000));
 const APPLICATION_COOLDOWN_MS = Math.max(10000, Number(process.env.APPLICATION_COOLDOWN_MS || 300000));
 const APPLICATION_DEFAULT_ROLE = process.env.APPLICATION_DEFAULT_ROLE || process.env.ROLE_NEWBIE || '';
 const FAMILY_TITLE = process.env.FAMILY_TITLE || '🏠 Семья';
+const ACCESS_APPLICATIONS = (process.env.ACCESS_APPLICATIONS || '').split(',').map(x => x.trim()).filter(Boolean);
 
 const client = new Client({
   intents: [
@@ -41,8 +43,7 @@ function defaultStore() {
   return {
     members: {},
     applications: [],
-    cooldowns: {},
-    stats: {}
+    cooldowns: {}
   };
 }
 
@@ -54,19 +55,24 @@ function loadStore() {
     return defaultStore();
   }
 }
+
 let store = loadStore();
+
 function saveStore() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf8');
 }
 
 function ensureMember(id) {
   if (!store.members[id]) {
-    store.members[id] = {
-      messageCount: 0,
-      lastSeenAt: Date.now()
-    };
+    store.members[id] = { messageCount: 0, lastSeenAt: Date.now() };
   }
   return store.members[id];
+}
+
+function canApplications(member) {
+  if (!member) return false;
+  if (!ACCESS_APPLICATIONS.length) return member.permissions.has('ManageRoles');
+  return member.roles.cache.some(r => ACCESS_APPLICATIONS.includes(r.id)) || member.permissions.has('ManageRoles');
 }
 
 function getRoleIds() {
@@ -94,9 +100,8 @@ function statusWeight(member) {
   return 3;
 }
 
-function activityScore(memberId) {
-  const m = ensureMember(memberId);
-  return m.messageCount || 0;
+function activityScore(id) {
+  return ensureMember(id).messageCount || 0;
 }
 
 function sortMembers(members) {
@@ -147,6 +152,83 @@ function buildApplyModal() {
   return modal;
 }
 
+function buildApplicationEmbed({ user, nickname, age, text, applicationId, source = 'Заявка' }) {
+  return new EmbedBuilder()
+    .setColor(0x22C55E)
+    .setTitle('📝 Заявка в семью')
+    .setDescription(`> **${source} от <@${user.id}>**\n> Статус: **На рассмотрении**`)
+    .addFields(
+      { name: '👤 Пользователь', value: `<@${user.id}>`, inline: true },
+      { name: '📛 Ник', value: nickname, inline: true },
+      { name: '🎂 Возраст', value: age, inline: true },
+      { name: '📄 Текст заявки', value: text, inline: false },
+      { name: '🆔 Номер заявки', value: `\`${applicationId}\``, inline: true }
+    )
+    .setFooter({ text: 'Majestic Style • Family Applications' })
+    .setTimestamp();
+}
+
+function buildApplicationButtons(applicationId, userId) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`app_accept:${applicationId}:${userId}`).setLabel('✅ Принять').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`app_review:${applicationId}:${userId}`).setLabel('🕒 На рассмотрении').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`app_reject:${applicationId}:${userId}`).setLabel('❌ Отклонить').setStyle(ButtonStyle.Danger)
+    )
+  ];
+}
+
+function buildAcceptLogEmbed({ member, moderatorUser, reason = 'Собеседование', rankName = '1 ранг' }) {
+  return new EmbedBuilder()
+    .setColor(0x16a34a)
+    .setTitle('🏠 Отчёт о приёме в семью')
+    .setDescription(`**<@${moderatorUser.id}> принимает <@${member.id}> в семью**`)
+    .addFields(
+      {
+        name: '👤 Принят в семью',
+        value: [
+          `**Пользователь:** <@${member.id}>`,
+          `**Ник:** ${member.displayName}`,
+          `**Discord ID:** \`${member.id}\``
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '👑 Кто принял',
+        value: [
+          `**Пользователь:** <@${moderatorUser.id}>`,
+          `**Ник:** ${moderatorUser.username}`,
+          `**Discord ID:** \`${moderatorUser.id}\``
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '📋 Детали приёма',
+        value: [
+          `**Причина:** ${reason}`,
+          `**Принят на:** ${rankName}`
+        ].join('\n'),
+        inline: false
+      }
+    )
+    .setFooter({ text: 'Family Log System' })
+    .setTimestamp();
+}
+
+function buildRejectLogEmbed({ user, moderatorUser, reason = 'Отказ' }) {
+  return new EmbedBuilder()
+    .setColor(0xEF4444)
+    .setTitle('❌ Отчёт об отказе')
+    .setDescription(`**<@${moderatorUser.id}> отклоняет заявку <@${user.id}>**`)
+    .addFields(
+      { name: '👤 Кандидат', value: `**Пользователь:** <@${user.id}>\n**Discord ID:** \`${user.id}\``, inline: false },
+      { name: '👑 Кто отклонил', value: `**Пользователь:** <@${moderatorUser.id}>\n**Discord ID:** \`${moderatorUser.id}\``, inline: false },
+      { name: '📋 Причина', value: reason, inline: false }
+    )
+    .setFooter({ text: 'Family Log System' })
+    .setTimestamp();
+}
+
 async function buildFamilyEmbeds(guild) {
   const configuredRoles = ROLES
     .map(item => ({ ...item, role: guild.roles.cache.get(item.id) }))
@@ -159,7 +241,7 @@ async function buildFamilyEmbeds(guild) {
     .setColor(0x8B5CF6)
     .setDescription('🟢 Онлайн • 🟡 Отошёл • ⛔ Не беспокоить • ⚫ Оффлайн')
     .setTimestamp()
-    .setFooter({ text: `Оптимизировано • обновление ${Math.floor(UPDATE_INTERVAL_MS / 1000)} сек.` });
+    .setFooter({ text: `Обновление ${Math.floor(UPDATE_INTERVAL_MS / 1000)} сек.` });
 
   let total = 0;
   let fieldCount = 0;
@@ -187,10 +269,7 @@ async function buildFamilyEmbeds(guild) {
     }
   }
 
-  if (fieldCount === 0) {
-    embed.setDescription('Нет участников в выбранных ролях.');
-  }
-
+  if (fieldCount === 0) embed.setDescription('Нет участников в выбранных ролях.');
   embed.setAuthor({ name: `Всего участников: ${total}` });
   embeds.push(embed);
   return embeds;
@@ -205,7 +284,6 @@ async function doPanelUpdate(force = false) {
     pendingPanelUpdate = true;
     return;
   }
-
   const now = Date.now();
   if (!force && now - lastPanelUpdate < 15000) return;
 
@@ -218,9 +296,9 @@ async function doPanelUpdate(force = false) {
 
     const embeds = await buildFamilyEmbeds(guild);
 
-    if (process.env.MESSAGE_ID) {
+    if (MESSAGE_ID) {
       try {
-        const message = await channel.messages.fetch(process.env.MESSAGE_ID);
+        const message = await channel.messages.fetch(MESSAGE_ID);
         await message.edit({ embeds, components: panelButtons(), content: '' });
       } catch {
         const message = await channel.send({ embeds, components: panelButtons(), content: '' });
@@ -243,26 +321,6 @@ async function doPanelUpdate(force = false) {
   }
 }
 
-async function sendAcceptLog(guild, member, moderatorUser, reason, rankName) {
-  if (!LOG_CHANNEL_ID) return;
-  const channel = await fetchTextChannel(guild, LOG_CHANNEL_ID);
-  if (!channel) return;
-
-  const embed = new EmbedBuilder()
-    .setColor(0x16a34a)
-    .setTitle('🏠 Приём в семью')
-    .setDescription(`> **<@${member.id}> принят в семью**\n> Принял: <@${moderatorUser.id}>`)
-    .addFields(
-      { name: '👤 Кандидат', value: `**Ник:** ${member.displayName}\n**ID:** \`${member.id}\``, inline: false },
-      { name: '👑 Принял', value: `**Ник:** ${moderatorUser.username}\n**ID:** \`${moderatorUser.id}\``, inline: false },
-      { name: '📋 Детали', value: `**Причина:** ${reason}\n**Ранг:** ${rankName}`, inline: false }
-    )
-    .setThumbnail(member.user.displayAvatarURL())
-    .setTimestamp();
-
-  await channel.send({ embeds: [embed] });
-}
-
 async function registerCommands(guild) {
   const commands = [
     new SlashCommandBuilder().setName('family').setDescription('Открыть меню семьи'),
@@ -277,7 +335,6 @@ async function registerCommands(guild) {
 
 client.on('clientReady', async () => {
   console.log(`Бот запущен как ${client.user.tag}`);
-
   const guild = await client.guilds.fetch(GUILD_ID);
   await guild.roles.fetch();
   await guild.members.fetch();
@@ -292,7 +349,6 @@ client.on('clientReady', async () => {
 client.on('messageCreate', message => {
   if (!message.guild || message.author.bot || !message.member) return;
   if (!hasFamilyRole(message.member)) return;
-
   const data = ensureMember(message.member.id);
   data.messageCount += 1;
   data.lastSeenAt = Date.now();
@@ -302,7 +358,6 @@ client.on('messageCreate', message => {
 client.on('presenceUpdate', (_, presence) => {
   const member = presence?.member;
   if (!member || !hasFamilyRole(member)) return;
-
   const data = ensureMember(member.id);
   data.lastSeenAt = Date.now();
   saveStore();
@@ -311,10 +366,7 @@ client.on('presenceUpdate', (_, presence) => {
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   const before = hasFamilyRole(oldMember);
   const after = hasFamilyRole(newMember);
-
-  if (before !== after) {
-    setTimeout(() => doPanelUpdate(false), 2000);
-  }
+  if (before !== after) setTimeout(() => doPanelUpdate(false), 2000);
 });
 
 client.on('interactionCreate', async interaction => {
@@ -327,12 +379,7 @@ client.on('interactionCreate', async interaction => {
           .setDescription('Выбери действие ниже.')
           .setTimestamp();
 
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('family_refresh').setLabel('Обновить').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('family_apply').setLabel('Подать заявку').setStyle(ButtonStyle.Success)
-        );
-
-        return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+        return interaction.reply({ embeds: [embed], components: panelButtons(), ephemeral: true });
       }
 
       if (interaction.commandName === 'apply') {
@@ -348,10 +395,19 @@ client.on('interactionCreate', async interaction => {
         if (!channel) return interaction.reply({ content: 'Канал заявок не найден.', ephemeral: true });
 
         await channel.send({
-          embeds: [new EmbedBuilder().setTitle('📨 Заявки в семью').setColor(0x22C55E).setDescription('Нажми кнопку ниже, чтобы подать заявку.').setTimestamp()],
-          components: [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('family_apply').setLabel('Подать заявку').setStyle(ButtonStyle.Success)
-          )]
+          embeds: [
+            new EmbedBuilder()
+              .setTitle('📨 Заявки в семью')
+              .setColor(0x22C55E)
+              .setDescription('Нажми кнопку ниже, чтобы подать заявку в семью.')
+              .setFooter({ text: 'Majestic Style • Family Applications' })
+              .setTimestamp()
+          ],
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId('family_apply').setLabel('Подать заявку').setStyle(ButtonStyle.Success)
+            )
+          ]
         });
 
         return interaction.reply({ content: 'Панель заявок отправлена.', ephemeral: true });
@@ -359,7 +415,7 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'applications') {
         const list = store.applications.slice(0, 10).map((a, i) =>
-          `${i + 1}. <@${a.discordId}> • ${a.status} • ${String(a.text).slice(0, 50)}`
+          `${i + 1}. \`${a.id}\` • <@${a.discordId}> • ${a.status}`
         ).join('\n') || 'Нет заявок';
 
         return interaction.reply({
@@ -369,6 +425,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'testaccept') {
+        if (!LOG_CHANNEL_ID) return interaction.reply({ content: 'LOG_CHANNEL_ID не указан.', ephemeral: true });
         await sendAcceptLog(interaction.guild, interaction.member, interaction.user, 'Собеседование', '1 ранг');
         return interaction.reply({ content: 'Тестовый лог отправлен.', ephemeral: true });
       }
@@ -388,6 +445,99 @@ client.on('interactionCreate', async interaction => {
         }
         return interaction.showModal(buildApplyModal());
       }
+
+      if (interaction.customId.startsWith('app_accept:')) {
+        if (!canApplications(interaction.member)) {
+          return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        }
+
+        const [, applicationId, userId] = interaction.customId.split(':');
+        const app = store.applications.find(x => x.id === applicationId);
+        if (!app) return interaction.reply({ content: 'Заявка не найдена.', ephemeral: true });
+        if (app.status === 'accepted') return interaction.reply({ content: 'Заявка уже принята.', ephemeral: true });
+
+        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        if (!member) return interaction.reply({ content: 'Пользователь не найден на сервере.', ephemeral: true });
+
+        if (APPLICATION_DEFAULT_ROLE) {
+          const role = interaction.guild.roles.cache.get(APPLICATION_DEFAULT_ROLE);
+          if (role) {
+            await member.roles.add(role).catch(() => {});
+          }
+        }
+
+        app.status = 'accepted';
+        app.reviewedBy = interaction.user.id;
+        app.reviewedAt = new Date().toISOString();
+        saveStore();
+
+        const accepted = EmbedBuilder.from(interaction.message.embeds[0])
+          .setColor(0x16a34a)
+          .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **Принята**`)
+          .setFooter({ text: `Принял: ${interaction.user.username}` });
+
+        await interaction.message.edit({ embeds: [accepted], components: [] });
+        await sendAcceptLog(interaction.guild, member, interaction.user, 'Собеседование', '1 ранг');
+        await doPanelUpdate(false);
+
+        return interaction.reply({ content: `✅ <@${userId}> принят в семью.`, ephemeral: true });
+      }
+
+      if (interaction.customId.startsWith('app_review:')) {
+        if (!canApplications(interaction.member)) {
+          return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        }
+
+        const [, applicationId, userId] = interaction.customId.split(':');
+        const app = store.applications.find(x => x.id === applicationId);
+        if (!app) return interaction.reply({ content: 'Заявка не найдена.', ephemeral: true });
+
+        app.status = 'review';
+        app.reviewedBy = interaction.user.id;
+        app.reviewedAt = new Date().toISOString();
+        saveStore();
+
+        const review = EmbedBuilder.from(interaction.message.embeds[0])
+          .setColor(0x64748b)
+          .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **На рассмотрении**`)
+          .setFooter({ text: `Рассматривает: ${interaction.user.username}` });
+
+        await interaction.message.edit({ embeds: [review], components: interaction.message.components });
+        return interaction.reply({ content: '🕒 Заявка переведена в статус "На рассмотрении".', ephemeral: true });
+      }
+
+      if (interaction.customId.startsWith('app_reject:')) {
+        if (!canApplications(interaction.member)) {
+          return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        }
+
+        const [, applicationId, userId] = interaction.customId.split(':');
+        const app = store.applications.find(x => x.id === applicationId);
+        if (!app) return interaction.reply({ content: 'Заявка не найдена.', ephemeral: true });
+
+        app.status = 'rejected';
+        app.reviewedBy = interaction.user.id;
+        app.reviewedAt = new Date().toISOString();
+        saveStore();
+
+        const rejected = EmbedBuilder.from(interaction.message.embeds[0])
+          .setColor(0xEF4444)
+          .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **Отклонена**`)
+          .setFooter({ text: `Отклонил: ${interaction.user.username}` });
+
+        await interaction.message.edit({ embeds: [rejected], components: [] });
+
+        const user = await client.users.fetch(userId).catch(() => null);
+        if (user && LOG_CHANNEL_ID) {
+          const guild = interaction.guild;
+          const channel = await fetchTextChannel(guild, LOG_CHANNEL_ID);
+          if (channel) {
+            await channel.send({ embeds: [buildRejectLogEmbed({ user, moderatorUser: interaction.user, reason: 'Отказ по решению руководства' })] });
+          }
+        }
+
+        return interaction.reply({ content: `❌ <@${userId}> отклонён.`, ephemeral: true });
+      }
     }
 
     if (interaction.isModalSubmit() && interaction.customId === 'family_apply_modal') {
@@ -396,8 +546,10 @@ client.on('interactionCreate', async interaction => {
       const text = interaction.fields.getTextInputValue('text');
 
       store.cooldowns[interaction.user.id] = Date.now();
+
+      const applicationId = `${Date.now()}_${interaction.user.id}`;
       store.applications.unshift({
-        id: `${Date.now()}_${interaction.user.id}`,
+        id: applicationId,
         discordId: interaction.user.id,
         nickname,
         age,
@@ -410,19 +562,18 @@ client.on('interactionCreate', async interaction => {
 
       const channel = await fetchTextChannel(interaction.guild, APPLICATIONS_CHANNEL_ID);
       if (channel) {
+        const embed = buildApplicationEmbed({
+          user: interaction.user,
+          nickname,
+          age,
+          text,
+          applicationId,
+          source: 'Заявка'
+        });
+
         await channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle('📝 Заявка в семью')
-              .setColor(0x22C55E)
-              .addFields(
-                { name: 'Пользователь', value: `<@${interaction.user.id}>`, inline: true },
-                { name: 'Ник', value: nickname, inline: true },
-                { name: 'Возраст', value: age, inline: true },
-                { name: 'Текст', value: text, inline: false }
-              )
-              .setTimestamp()
-          ]
+          embeds: [embed],
+          components: buildApplicationButtons(applicationId, interaction.user.id)
         });
       }
 
