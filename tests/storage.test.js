@@ -49,10 +49,19 @@ async function testVoiceMinutesAccumulate() {
   assert.equal(storage.voiceMinutes('user-3'), 60);
 }
 
+async function testStoredGuildPanelMessageIdOverridesLegacyFixedId() {
+  const storage = createTempStorage();
+
+  storage.setGuildPanelMessageId('guild-1', 'new-panel-id', 'old-fixed-id');
+
+  assert.equal(storage.getGuildPanelMessageId('guild-1', 'old-fixed-id'), 'new-panel-id');
+}
+
 async function main() {
   await runTest('commends increase points up to 100', testCommendsIncreasePointsUpToHundred);
   await runTest('warns do not drop points below zero', testWarnsDoNotDropPointsBelowZero);
   await runTest('voice minutes accumulate', testVoiceMinutesAccumulate);
+  await runTest('stored guild panel id overrides legacy fixed id', testStoredGuildPanelMessageIdOverridesLegacyFixedId);
   console.log('ALL STORAGE TESTS PASSED');
 }
 

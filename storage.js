@@ -170,10 +170,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   }
 
   function setGuildPanelMessageId(guildId, messageId, fixedMessageId = '') {
-    if (fixedMessageId) {
-      return;
-    }
-
     if (messageId && store.panelMessageIds[guildId] !== messageId) {
       store.panelMessageIds[guildId] = messageId;
       save();
@@ -181,7 +177,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   }
 
   function getGuildPanelMessageId(guildId, fixedMessageId = '') {
-    return fixedMessageId || store.panelMessageIds[guildId] || '';
+    return store.panelMessageIds[guildId] || fixedMessageId || '';
   }
 
   function trackMessage(memberId) {
