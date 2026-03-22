@@ -118,6 +118,14 @@ function createRankService({ roles, storage, autoRanks }) {
       return { ok: false, code: 'auto_unavailable', currentRole, score };
     }
 
+    const currentIndex = familyRoles.findIndex(role => role.id === currentRole.id);
+    const targetIndex = familyRoles.findIndex(role => role.id === targetRole.id);
+
+    // Auto-ranks only promote. They never demote members during refresh/startup.
+    if (currentIndex !== -1 && targetIndex > currentIndex) {
+      return { ok: false, code: 'auto_keep_current', currentRole, targetRole, score };
+    }
+
     if (currentRole.id === targetRole.id) {
       return { ok: false, code: 'already_synced', currentRole, score };
     }

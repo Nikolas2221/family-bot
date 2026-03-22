@@ -20,6 +20,7 @@ const files = [
   path.join('tests', 'config.test.js'),
   path.join('tests', 'embeds.test.js'),
   path.join('tests', 'ranks.test.js'),
+  path.join('tests', 'storage.test.js'),
   path.join('tests', 'run.js')
 ];
 

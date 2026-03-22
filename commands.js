@@ -10,6 +10,8 @@ async function registerCommands(guild) {
     new SlashCommandBuilder().setName('setup').setDescription(copy.commands.setupDescription),
     new SlashCommandBuilder().setName('adminpanel').setDescription(copy.commands.adminPanelDescription),
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
+    new SlashCommandBuilder().setName('leaderboard').setDescription(copy.commands.leaderboardDescription),
+    new SlashCommandBuilder().setName('voiceactivity').setDescription(copy.commands.voiceActivityDescription),
     new SlashCommandBuilder()
       .setName('subscription')
       .setDescription(copy.commands.subscriptionDescription)
@@ -18,7 +20,7 @@ async function registerCommands(guild) {
           .setName(copy.commands.planOptionName)
           .setDescription(copy.commands.planDescription)
           .setRequired(true)
-          .addChoices({ name: 'free', value: 'free' }, { name: 'premium', value: 'premium' })
+          .addChoices({ name: 'Free — 0$', value: 'free' }, { name: 'Premium — 5$', value: 'premium' })
       ),
     new SlashCommandBuilder()
       .setName('blacklistadd')
@@ -35,6 +37,13 @@ async function registerCommands(guild) {
       .addUserOption(option =>
         option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
       ),
+    new SlashCommandBuilder()
+      .setName('unbanid')
+      .setDescription(copy.commands.unbanIdDescription)
+      .addStringOption(option =>
+        option.setName(copy.commands.userIdOptionName).setDescription(copy.commands.userIdDescription).setRequired(true)
+      ),
+    new SlashCommandBuilder().setName('banlist').setDescription(copy.commands.banListDescription),
     new SlashCommandBuilder().setName('blacklistlist').setDescription(copy.commands.blacklistListDescription),
     new SlashCommandBuilder().setName('testaccept').setDescription(copy.commands.testAcceptDescription),
     new SlashCommandBuilder().setName('debugconfig').setDescription(copy.commands.debugConfigDescription),

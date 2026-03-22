@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const path = require('path');
-const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { createAIService } = require('./ai');
 const { createApplicationsService } = require('./applications');
 const { registerCommands } = require('./commands');
@@ -47,6 +47,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildPresences,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
@@ -125,6 +126,65 @@ function buildGuildSettingsSnapshot(guild) {
   };
 }
 
+function formatVoiceHours(minutes) {
+  return (Math.max(0, Number(minutes) || 0) / 60).toFixed(1);
+}
+
+function getLiveVoiceMinutes(memberId) {
+  const storedMinutes = storage.voiceMinutes(memberId);
+  const startedAt = voiceSessions.get(memberId);
+  if (!startedAt) return storedMinutes;
+
+  return storedMinutes + Math.floor((Date.now() - startedAt) / 60000);
+}
+
+function getDisplayRankName(member) {
+  return rankService.getCurrentRole(member)?.name || copy.profile.noRoles;
+}
+
+function buildLeaderboardLines(guild, limit = 10) {
+  return guild.members.cache
+    .filter(member => !member.user.bot && hasFamilyRole(member))
+    .map(member => ({
+      member,
+      points: storage.pointsScore(member.id),
+      voiceHours: Number(formatVoiceHours(getLiveVoiceMinutes(member.id))),
+      roleName: getDisplayRankName(member)
+    }))
+    .sort((left, right) => {
+      const byPoints = right.points - left.points;
+      if (byPoints !== 0) return byPoints;
+
+      const byVoice = right.voiceHours - left.voiceHours;
+      if (byVoice !== 0) return byVoice;
+
+      return left.member.displayName.localeCompare(right.member.displayName, 'ru');
+    })
+    .slice(0, limit)
+    .map((entry, index) => copy.stats.leaderboardLine(index, entry.member, entry.roleName, entry.points, entry.voiceHours));
+}
+
+function buildVoiceActivityLines(guild, limit = 10) {
+  return guild.members.cache
+    .filter(member => !member.user.bot && hasFamilyRole(member))
+    .map(member => ({
+      member,
+      hours: Number(formatVoiceHours(getLiveVoiceMinutes(member.id))),
+      points: storage.pointsScore(member.id)
+    }))
+    .sort((left, right) => {
+      const byHours = right.hours - left.hours;
+      if (byHours !== 0) return byHours;
+
+      const byPoints = right.points - left.points;
+      if (byPoints !== 0) return byPoints;
+
+      return left.member.displayName.localeCompare(right.member.displayName, 'ru');
+    })
+    .slice(0, limit)
+    .map((entry, index) => copy.stats.voiceLine(index, entry.member, entry.hours, entry.points));
+}
+
 function getGuildRecord(guild) {
   return database.ensureGuild(guild.id, {
     guildName: guild.name,
@@ -138,6 +198,8 @@ function getHelpCatalog(guildId, userId) {
     { name: 'apply', description: copy.commands.applyDescription },
     { name: 'applications', description: copy.commands.applicationsDescription },
     { name: 'profile', description: copy.commands.profileDescription },
+    { name: 'leaderboard', description: copy.commands.leaderboardDescription },
+    { name: 'voiceactivity', description: copy.commands.voiceActivityDescription },
     { name: 'help', description: copy.commands.helpDescription },
     { name: 'setup', description: copy.commands.setupDescription },
     { name: 'adminpanel', description: copy.commands.adminPanelDescription },
@@ -146,6 +208,8 @@ function getHelpCatalog(guildId, userId) {
     { name: 'blacklistadd', description: copy.commands.blacklistAddDescription },
     { name: 'blacklistremove', description: copy.commands.blacklistRemoveDescription },
     { name: 'blacklistlist', description: copy.commands.blacklistListDescription },
+    { name: 'banlist', description: copy.commands.banListDescription },
+    { name: 'unbanid', description: copy.commands.unbanIdDescription },
     { name: 'debugconfig', description: copy.commands.debugConfigDescription }
   ];
 
@@ -164,18 +228,21 @@ function getHelpCatalog(guildId, userId) {
 
 function canApplications(member) {
   if (!member) return false;
+  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
   if (!ACCESS_APPLICATIONS.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
   return hasAnyRole(member, ACCESS_APPLICATIONS) || hasPermission(member, PermissionFlagsBits.ManageRoles);
 }
 
 function canDiscipline(member) {
   if (!member) return false;
+  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
   if (!ACCESS_DISCIPLINE.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
   return hasAnyRole(member, ACCESS_DISCIPLINE) || hasPermission(member, PermissionFlagsBits.ManageRoles);
 }
 
 function canManageRanks(member) {
   if (!member) return false;
+  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
   if (!ACCESS_RANKS.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
   return hasAnyRole(member, ACCESS_RANKS) || hasPermission(member, PermissionFlagsBits.ManageRoles);
 }
@@ -193,13 +260,7 @@ function canDebugConfig(interaction) {
 
 function canUseSecurity(member) {
   if (!member) return false;
-
-  return (
-    hasPermission(member, PermissionFlagsBits.Administrator) ||
-    hasPermission(member, PermissionFlagsBits.ManageGuild) ||
-    hasPermission(member, PermissionFlagsBits.BanMembers) ||
-    hasPermission(member, PermissionFlagsBits.ManageChannels)
-  );
+  return hasPermission(member, PermissionFlagsBits.Administrator);
 }
 
 function canBypassLeakGuard(member) {
@@ -270,12 +331,24 @@ async function sendSecurityLog(guild, content) {
   await channel.send({ content }).catch(() => {});
 }
 
+async function sendWelcomeInvite(member) {
+  const channel = (await fetchTextChannel(member.guild, APPLICATIONS_CHANNEL_ID)) || (await fetchTextChannel(member.guild, CHANNEL_ID));
+  if (!channel) return;
+
+  await channel.send({
+    content: `<@${member.id}>`,
+    embeds: [embeds.buildWelcomeEmbed(member, FAMILY_TITLE)],
+    components: embeds.buildApplicationsPanelButtons()
+  }).catch(() => {});
+}
+
 async function refreshMember(member) {
   if (typeof member.fetch !== 'function') return member;
   return member.fetch().catch(() => member);
 }
 
 function buildProfilePayload(member, allowRankButtons, content = '') {
+  const memberData = { ...storage.ensureMember(member.id), voiceMinutes: getLiveVoiceMinutes(member.id) };
   const rankInfo = {
     ...rankService.describeMember(member),
     autoEnabled: isPremiumGuild(member.guild.id) && AUTO_RANKS.enabled
@@ -284,7 +357,7 @@ function buildProfilePayload(member, allowRankButtons, content = '') {
     embeds: [
       embeds.buildProfileEmbed(member, {
         activityScore: storage.activityScore,
-        memberData: storage.ensureMember(member.id),
+        memberData,
         familyRoleIds: getRoleIds(),
         rankInfo
       })
@@ -322,6 +395,10 @@ function formatRankResult(userId, result) {
       return copy.ranks.manualOnly(result.currentRole.name);
     case 'already_synced':
       return copy.ranks.alreadySynced(result.currentRole.name, result.score);
+    case 'auto_keep_current':
+      return typeof copy.ranks.autoKeepCurrent === 'function'
+        ? copy.ranks.autoKeepCurrent(result.currentRole.name, result.score)
+        : `Авто-ранг сохранил текущую роль ${result.currentRole.name}. Понижение вниз автоматически не применяется (${result.score} очк.).`;
     case 'auto_disabled':
       return copy.ranks.autoDisabled;
     case 'auto_unavailable':
@@ -365,6 +442,37 @@ let panelUpdateInProgress = false;
 let pendingPanelUpdate = false;
 let lastPanelUpdate = 0;
 let autoRankSyncInProgress = false;
+const voiceSessions = new Map();
+
+function startVoiceSession(member) {
+  if (!member?.id || !member.voice?.channelId || member.user?.bot) return;
+  if (!voiceSessions.has(member.id)) {
+    voiceSessions.set(member.id, Date.now());
+  }
+}
+
+function stopVoiceSession(member) {
+  if (!member?.id) return 0;
+  const startedAt = voiceSessions.get(member.id);
+  if (!startedAt) return 0;
+
+  voiceSessions.delete(member.id);
+  const elapsedMs = Date.now() - startedAt;
+  const minutes = Math.floor(elapsedMs / 60000);
+  if (minutes <= 0) return 0;
+
+  return storage.addVoiceMinutes(member.id, minutes);
+}
+
+function flushVoiceSessions() {
+  for (const guild of client.guilds.cache.values()) {
+    for (const member of guild.members.cache.values()) {
+      if (voiceSessions.has(member.id)) {
+        stopVoiceSession(member);
+      }
+    }
+  }
+}
 
 async function doPanelUpdate(force = false) {
   if (panelUpdateInProgress) {
@@ -477,6 +585,12 @@ client.on('clientReady', async () => {
       console.error('Не удалось получить участников guild:', error);
     });
 
+    for (const member of guild.members.cache.values()) {
+      if (member.voice?.channelId) {
+        startVoiceSession(member);
+      }
+    }
+
     await syncAutoRanks('startup').catch(error => {
       console.error('Ошибка стартовой синхронизации авто-рангов:', error);
     });
@@ -526,8 +640,35 @@ client.on('presenceUpdate', (_, presence) => {
   storage.trackPresence(member.id);
 });
 
+client.on('voiceStateUpdate', (oldState, newState) => {
+  const member = newState.member || oldState.member;
+  if (!member || member.user?.bot) return;
+
+  const oldChannelId = oldState.channelId;
+  const newChannelId = newState.channelId;
+
+  if (!oldChannelId && newChannelId) {
+    startVoiceSession(member);
+    return;
+  }
+
+  if (oldChannelId && !newChannelId) {
+    stopVoiceSession(member);
+    return;
+  }
+
+  if (oldChannelId && newChannelId && oldChannelId !== newChannelId) {
+    stopVoiceSession(member);
+    startVoiceSession(member);
+  }
+});
+
 client.on('guildMemberAdd', async member => {
-  await enforceBlacklist(member);
+  if (member.user?.bot) return;
+  const blocked = await enforceBlacklist(member);
+  if (!blocked) {
+    await sendWelcomeInvite(member);
+  }
 });
 
 client.on('guildMemberUpdate', (oldMember, newMember) => {
@@ -558,18 +699,21 @@ client.on('channelDelete', async channel => {
 });
 
 process.on('SIGINT', () => {
+  flushVoiceSessions();
   database.flush();
   storage.flush();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
+  flushVoiceSessions();
   database.flush();
   storage.flush();
   process.exit(0);
 });
 
 process.on('beforeExit', () => {
+  flushVoiceSessions();
   database.flush();
   storage.flush();
 });
@@ -646,6 +790,20 @@ client.on('interactionCreate', async interaction => {
         });
       }
 
+      if (interaction.commandName === 'leaderboard') {
+        return interaction.reply({
+          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15))],
+          ephemeral: true
+        });
+      }
+
+      if (interaction.commandName === 'voiceactivity') {
+        return interaction.reply({
+          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15))],
+          ephemeral: true
+        });
+      }
+
       if (interaction.commandName === 'subscription') {
         if (!isOwner(interaction.user.id)) {
           return interaction.reply({ content: copy.admin.noOwnerAccess, ephemeral: true });
@@ -681,6 +839,8 @@ client.on('interactionCreate', async interaction => {
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
         if (member) {
           await enforceBlacklist(member);
+        } else {
+          await interaction.guild.bans.create(user.id, { reason: copy.security.blacklistBanReason(reason) }).catch(() => {});
         }
 
         return interaction.reply({
@@ -713,6 +873,40 @@ client.on('interactionCreate', async interaction => {
           embeds: [embeds.buildBlacklistEmbed(storage.listBlacklist().slice(0, 25))],
           ephemeral: true
         });
+      }
+
+      if (interaction.commandName === 'banlist') {
+        if (!canUseSecurity(interaction.member)) {
+          return interaction.reply({ content: copy.security.noSecurityAccess, ephemeral: true });
+        }
+
+        const bans = await interaction.guild.bans.fetch().catch(() => null);
+        const entries = bans ? [...bans.values()].slice(0, 25) : [];
+
+        return interaction.reply({
+          embeds: [embeds.buildBanListEmbed(entries)],
+          ephemeral: true
+        });
+      }
+
+      if (interaction.commandName === 'unbanid') {
+        if (!canUseSecurity(interaction.member)) {
+          return interaction.reply({ content: copy.security.noSecurityAccess, ephemeral: true });
+        }
+
+        const userId = interaction.options.getString(copy.commands.userIdOptionName, true).trim();
+        if (!/^\d{5,25}$/.test(userId)) {
+          return interaction.reply({ content: copy.security.unbanFailed(userId), ephemeral: true });
+        }
+
+        const removedFromBlacklist = storage.removeBlacklistEntry(userId);
+        const unbanned = await interaction.guild.bans.remove(userId).then(() => true).catch(() => false);
+
+        if (!unbanned && !removedFromBlacklist) {
+          return interaction.reply({ content: copy.security.unbanFailed(userId), ephemeral: true });
+        }
+
+        return interaction.reply({ content: copy.security.unbanSuccess(userId), ephemeral: true });
       }
 
       if (interaction.commandName === 'debugconfig') {
@@ -829,10 +1023,14 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.isButton()) {
       if (interaction.customId === 'family_refresh') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await syncAutoRanks('manual-refresh');
         await doPanelUpdate(true);
-        return interaction.editReply({ content: copy.family.panelUpdated });
+        await interaction.editReply({ content: copy.family.panelUpdated });
+        setTimeout(() => {
+          interaction.deleteReply().catch(() => {});
+        }, 3000);
+        return;
       }
 
       if (interaction.customId === 'family_apply') {

@@ -9,12 +9,33 @@ const {
 } = require('discord.js');
 const copy = require('./copy');
 
+const THEME = {
+  brand: 0x7c3aed,
+  phoenix: 0xf97316,
+  ruby: 0xe11d48,
+  gold: 0xf59e0b,
+  royal: 0x2563eb,
+  emerald: 0x10b981,
+  warning: 0xf97316,
+  slate: 0x334155
+};
+
+const BRAND_FOOTER = 'BRHD • Phoenix';
+
 function getStatusEmoji(member) {
   const status = member.presence?.status || 'offline';
   if (status === 'online') return '🟢';
   if (status === 'idle') return '🟡';
   if (status === 'dnd') return '⛔';
   return '⚫';
+}
+
+function getStatusLabel(member) {
+  const status = member.presence?.status || 'offline';
+  if (status === 'online') return 'Онлайн';
+  if (status === 'idle') return 'Отошёл';
+  if (status === 'dnd') return 'Не беспокоить';
+  return 'Оффлайн';
 }
 
 function statusWeight(member) {
@@ -45,6 +66,47 @@ function chunk(items, size) {
   return parts;
 }
 
+function trimValue(value, limit = 1024, fallback = '—') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+function hoursFromMinutes(minutes) {
+  return (Math.max(0, Number(minutes) || 0) / 60).toFixed(1);
+}
+
+function avatarUrl(user) {
+  return typeof user?.displayAvatarURL === 'function' ? user.displayAvatarURL() : null;
+}
+
+function card({ title, description, color, footer, thumbnail, author }) {
+  const embed = new EmbedBuilder().setColor(color).setTitle(title).setTimestamp();
+
+  if (description) embed.setDescription(description);
+  embed.setFooter({ text: footer || BRAND_FOOTER });
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  if (author) embed.setAuthor(author);
+
+  return embed;
+}
+
+function section(name, value, inline = false) {
+  return {
+    name,
+    value: trimValue(value),
+    inline
+  };
+}
+
+function roleLine(label, roleId) {
+  return `${label}: ${roleId ? `<@&${roleId}>` : 'не задано'}`;
+}
+
+function channelLine(label, channelId) {
+  return `${label}: ${channelId ? `<#${channelId}>` : 'не задан'}`;
+}
+
 function panelButtons() {
   return [
     new ActionRowBuilder().addComponents(
@@ -55,11 +117,34 @@ function panelButtons() {
 }
 
 function buildFamilyMenuEmbed() {
-  return new EmbedBuilder()
-    .setTitle(copy.family.menuTitle)
-    .setColor(0x8b5cf6)
-    .setDescription(copy.family.menuDescription)
-    .setTimestamp();
+  return card({
+    title: copy.family.menuTitle,
+    color: THEME.brand,
+    description: [
+      'Панель семьи в стиле BRHD / Phoenix.',
+      '',
+      `• ${copy.family.refreshButton} — обновить состав, активность и ранги`,
+      `• ${copy.family.applyButton} — открыть фирменную анкету кандидата`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Family Control'
+  });
+}
+
+function buildWelcomeEmbed(member, familyTitle) {
+  return card({
+    title: 'Добро пожаловать в Phoenix',
+    color: THEME.brand,
+    description: [
+      `<@${member.id}>, ты только что зашёл на сервер **${member.guild.name}**.`,
+      '',
+      `Если хочешь вступить в **${familyTitle}**, нажми кнопку ниже и отправь заявку.`,
+      'Карточка сразу уйдёт руководству на рассмотрение.'
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Welcome',
+    thumbnail: avatarUrl(member.user)
+  }).addFields(
+    section('Что дальше', ['1. Открой анкету', '2. Заполни данные', '3. Дождись решения руководства'].join('\n'), false)
+  );
 }
 
 function buildApplyModal() {
@@ -83,12 +168,21 @@ function buildApplyModal() {
 }
 
 function buildApplicationsPanelEmbed() {
-  return new EmbedBuilder()
-    .setTitle(copy.applications.panelTitle)
-    .setColor(0x22c55e)
-    .setDescription(copy.applications.panelDescription)
-    .setFooter({ text: copy.applications.panelFooter })
-    .setTimestamp();
+  return card({
+    title: copy.applications.panelTitle,
+    color: THEME.brand,
+    description: [
+      'Премиум-вход в семью в стиле BRHD / Phoenix.',
+      '',
+      copy.applications.panelDescription,
+      '',
+      'Как проходит подача:',
+      '1. Нажми кнопку ниже',
+      '2. Заполни анкету кандидата',
+      '3. Руководство получит красивую карточку на рассмотрение'
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Applications'
+  });
 }
 
 function buildApplicationsPanelButtons() {
@@ -122,19 +216,23 @@ function buildRankButtons({ userId, canPromote, canDemote, canAutoSync }) {
 }
 
 function buildApplicationEmbed({ user, nickname, age, text, applicationId, source = copy.applications.source }) {
-  return new EmbedBuilder()
-    .setColor(0x22c55e)
-    .setTitle(copy.applications.embedTitle)
-    .setDescription(copy.applications.description(source, user.id, copy.applications.statusLabel('review')))
-    .addFields(
-      { name: copy.applications.fieldUser, value: `<@${user.id}>`, inline: true },
-      { name: copy.applications.fieldNick, value: nickname, inline: true },
-      { name: copy.applications.fieldAge, value: age, inline: true },
-      { name: copy.applications.fieldText, value: text, inline: false },
-      { name: copy.applications.fieldId, value: `\`${applicationId}\``, inline: true }
-    )
-    .setFooter({ text: copy.applications.panelFooter })
-    .setTimestamp();
+  const embed = card({
+    title: `${copy.applications.embedTitle} • Phoenix Intake`,
+    color: THEME.phoenix,
+    description: [
+      copy.applications.description(source, user.id, copy.applications.statusLabel('review')),
+      '',
+      'Стильная карточка кандидата для быстрого решения руководства.'
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Candidate Card',
+    thumbnail: avatarUrl(user)
+  });
+
+  return embed.addFields(
+    section('Кандидат', [`Пользователь: <@${user.id}>`, `Игровой ник: ${nickname}`, `Возраст: ${age}`].join('\n'), true),
+    section('ID анкеты', `\`${applicationId}\``, true),
+    section('Текст заявки', text, false)
+  );
 }
 
 function buildApplicationButtons(applicationId, userId) {
@@ -149,87 +247,59 @@ function buildApplicationButtons(applicationId, userId) {
 }
 
 function buildAcceptLogEmbed({ member, moderatorUser, reason = copy.applications.acceptReason, rankName = copy.applications.acceptRank }) {
-  return new EmbedBuilder()
-    .setColor(0x16a34a)
-    .setTitle(copy.logs.acceptTitle)
-    .setDescription(copy.logs.acceptDescription(moderatorUser.id, member.id))
-    .addFields(
-      {
-        name: copy.logs.acceptedMember,
-        value: [
-          `**Пользователь:** <@${member.id}>`,
-          `**Ник:** ${member.displayName}`,
-          `**Discord ID:** \`${member.id}\``
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: copy.logs.acceptedBy,
-        value: [
-          `**Пользователь:** <@${moderatorUser.id}>`,
-          `**Ник:** ${moderatorUser.username}`,
-          `**Discord ID:** \`${moderatorUser.id}\``
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: copy.logs.acceptDetails,
-        value: [`**Причина:** ${reason}`, `**Принят на:** ${rankName}`].join('\n'),
-        inline: false
-      }
-    )
-    .setFooter({ text: copy.logs.familyLogFooter })
-    .setTimestamp();
+  return card({
+    title: copy.logs.acceptTitle,
+    color: THEME.emerald,
+    description: copy.logs.acceptDescription(moderatorUser.id, member.id),
+    footer: 'BRHD • Phoenix • Family Log',
+    thumbnail: avatarUrl(member.user)
+  }).addFields(
+    section(copy.logs.acceptedMember, [`Пользователь: <@${member.id}>`, `Ник: ${member.displayName}`, `ID: \`${member.id}\``].join('\n')),
+    section(copy.logs.acceptedBy, [`Пользователь: <@${moderatorUser.id}>`, `Ник: ${moderatorUser.username}`, `ID: \`${moderatorUser.id}\``].join('\n')),
+    section(copy.logs.acceptDetails, [`Причина: ${reason}`, `Принят на: ${rankName}`].join('\n'))
+  );
 }
 
 function buildRejectLogEmbed({ user, moderatorUser, reason = 'Отказ' }) {
-  return new EmbedBuilder()
-    .setColor(0xef4444)
-    .setTitle(copy.logs.rejectTitle)
-    .setDescription(copy.logs.rejectDescription(moderatorUser.id, user.id))
-    .addFields(
-      {
-        name: copy.logs.candidate,
-        value: `**Пользователь:** <@${user.id}>\n**Discord ID:** \`${user.id}\``,
-        inline: false
-      },
-      {
-        name: copy.logs.rejectedBy,
-        value: `**Пользователь:** <@${moderatorUser.id}>\n**Discord ID:** \`${moderatorUser.id}\``,
-        inline: false
-      },
-      { name: copy.logs.reason, value: reason, inline: false }
-    )
-    .setFooter({ text: copy.logs.familyLogFooter })
-    .setTimestamp();
+  return card({
+    title: copy.logs.rejectTitle,
+    color: THEME.ruby,
+    description: copy.logs.rejectDescription(moderatorUser.id, user.id),
+    footer: 'BRHD • Phoenix • Family Log',
+    thumbnail: avatarUrl(user)
+  }).addFields(
+    section(copy.logs.candidate, [`Пользователь: <@${user.id}>`, `ID: \`${user.id}\``].join('\n')),
+    section(copy.logs.rejectedBy, [`Пользователь: <@${moderatorUser.id}>`, `ID: \`${moderatorUser.id}\``].join('\n')),
+    section(copy.logs.reason, reason)
+  );
 }
 
 function buildWarnLogEmbed({ targetUser, moderatorUser, reason }) {
-  return new EmbedBuilder()
-    .setColor(0xf97316)
-    .setTitle(copy.logs.warnTitle)
-    .setDescription(copy.logs.warnDescription(moderatorUser.id, targetUser.id))
-    .addFields(
-      { name: copy.logs.participant, value: `<@${targetUser.id}>\n\`${targetUser.id}\``, inline: true },
-      { name: copy.logs.moderator, value: `<@${moderatorUser.id}>\n\`${moderatorUser.id}\``, inline: true },
-      { name: copy.logs.reason, value: reason, inline: false }
-    )
-    .setFooter({ text: copy.logs.disciplineLogFooter })
-    .setTimestamp();
+  return card({
+    title: copy.logs.warnTitle,
+    color: THEME.warning,
+    description: copy.logs.warnDescription(moderatorUser.id, targetUser.id),
+    footer: 'BRHD • Phoenix • Discipline',
+    thumbnail: avatarUrl(targetUser)
+  }).addFields(
+    section(copy.logs.participant, `<@${targetUser.id}>\n\`${targetUser.id}\``, true),
+    section(copy.logs.moderator, `<@${moderatorUser.id}>\n\`${moderatorUser.id}\``, true),
+    section(copy.logs.reason, reason, false)
+  );
 }
 
 function buildCommendLogEmbed({ targetUser, moderatorUser, reason }) {
-  return new EmbedBuilder()
-    .setColor(0x3b82f6)
-    .setTitle(copy.logs.commendTitle)
-    .setDescription(copy.logs.commendDescription(moderatorUser.id, targetUser.id))
-    .addFields(
-      { name: copy.logs.participant, value: `<@${targetUser.id}>\n\`${targetUser.id}\``, inline: true },
-      { name: copy.logs.moderator, value: `<@${moderatorUser.id}>\n\`${moderatorUser.id}\``, inline: true },
-      { name: copy.logs.reason, value: reason, inline: false }
-    )
-    .setFooter({ text: copy.logs.disciplineLogFooter })
-    .setTimestamp();
+  return card({
+    title: copy.logs.commendTitle,
+    color: THEME.royal,
+    description: copy.logs.commendDescription(moderatorUser.id, targetUser.id),
+    footer: 'BRHD • Phoenix • Discipline',
+    thumbnail: avatarUrl(targetUser)
+  }).addFields(
+    section(copy.logs.participant, `<@${targetUser.id}>\n\`${targetUser.id}\``, true),
+    section(copy.logs.moderator, `<@${moderatorUser.id}>\n\`${moderatorUser.id}\``, true),
+    section(copy.logs.reason, reason, false)
+  );
 }
 
 function buildProfileEmbed(member, { activityScore, memberData, familyRoleIds, rankInfo }) {
@@ -249,128 +319,163 @@ function buildProfileEmbed(member, { activityScore, memberData, familyRoleIds, r
           ? copy.ranks.autoStatus(rankInfo.autoTargetRole.name, rankInfo.score)
           : copy.ranks.autoUnavailable;
 
-  return new EmbedBuilder()
-    .setColor(0x8b5cf6)
-    .setTitle(copy.profile.title)
-    .setDescription(copy.profile.description(member.id))
-    .setThumbnail(member.user.displayAvatarURL())
-    .addFields(
-      { name: copy.profile.fieldNick, value: member.displayName, inline: true },
-      { name: copy.profile.fieldDiscord, value: `<@${member.id}>`, inline: true },
-      { name: copy.profile.fieldId, value: `\`${member.id}\``, inline: true },
-      { name: copy.profile.fieldRoles, value: familyRoles, inline: false },
-      { name: copy.profile.fieldActivity, value: String(activityScore(member.id)), inline: true },
-      { name: copy.profile.fieldRank, value: currentRoleName, inline: true },
-      { name: copy.profile.fieldWarns, value: String(memberData.warns || 0), inline: true },
-      { name: copy.profile.fieldCommends, value: String(memberData.commends || 0), inline: true },
-      { name: copy.profile.fieldMessages, value: String(memberData.messageCount || 0), inline: true },
-      { name: copy.profile.fieldStatus, value: `${getStatusEmoji(member)} ${member.presence?.status || 'offline'}`, inline: true },
-      { name: copy.profile.fieldAutoRank, value: autoRankText, inline: false }
-    )
-    .setFooter({ text: copy.profile.footer })
-    .setTimestamp();
+  return card({
+    title: copy.profile.title,
+    color: THEME.brand,
+    description: copy.profile.description(member.id),
+    footer: 'BRHD • Phoenix • Profile',
+    thumbnail: avatarUrl(member.user)
+  }).addFields(
+    section('Основное', [`Ник: ${member.displayName}`, `Discord: <@${member.id}>`, `ID: \`${member.id}\``].join('\n'), false),
+    section(copy.profile.fieldRoles, familyRoles, false),
+    section(
+      'Активность',
+      [
+        `Актив-очки: ${activityScore(member.id)}`,
+        `Репутация: ${memberData.points || 0}/100`,
+        `Сообщения: ${memberData.messageCount || 0}`,
+        `Похвалы: ${memberData.commends || 0}`,
+        `Выговоры: ${memberData.warns || 0}`
+      ].join('\n'),
+      true
+    ),
+    section('Голосовые каналы', `Онлайн в голосе: ${hoursFromMinutes(memberData.voiceMinutes || 0)} ч`, true),
+    section('Статус и ранг', [`Статус: ${getStatusEmoji(member)} ${getStatusLabel(member)}`, `Ранг: ${currentRoleName}`].join('\n'), true),
+    section(copy.profile.fieldAutoRank, autoRankText, false)
+  );
+}
+
+function buildLeaderboardEmbed(entries) {
+  const content = entries.length ? entries.join('\n') : copy.stats.leaderboardEmpty;
+
+  return card({
+    title: copy.stats.leaderboardTitle,
+    color: THEME.gold,
+    description: copy.stats.leaderboardDescription,
+    footer: 'BRHD • Phoenix • Leaderboard'
+  }).addFields(section('Рейтинг', content, false));
+}
+
+function buildVoiceActivityEmbed(entries) {
+  const content = entries.length ? entries.join('\n') : copy.stats.voiceEmpty;
+
+  return card({
+    title: copy.stats.voiceTitle,
+    color: THEME.royal,
+    description: copy.stats.voiceDescription,
+    footer: 'BRHD • Phoenix • Voice Activity'
+  }).addFields(section('Топ по голосу', content, false));
 }
 
 function buildApplicationsListEmbed(applications) {
-  const description = applications.length
+  const lines = applications.length
     ? applications.map((application, index) => copy.list.line(index, application)).join('\n')
     : copy.list.empty;
 
-  return new EmbedBuilder()
-    .setTitle(copy.list.title)
-    .setColor(0x22c55e)
-    .setDescription(description)
-    .setTimestamp();
+  return card({
+    title: copy.list.title,
+    color: THEME.phoenix,
+    description: applications.length ? `Всего последних заявок: ${applications.length}` : 'Пока заявок нет.',
+    footer: 'BRHD • Phoenix • Applications Feed'
+  }).addFields(section('Последние заявки', lines, false));
 }
 
 function buildBlacklistEmbed(entries) {
-  const description = entries.length
+  const lines = entries.length
     ? entries.map((entry, index) => copy.security.blacklistLine(index, entry)).join('\n')
     : copy.security.blacklistEmpty;
 
-  return new EmbedBuilder()
-    .setColor(0xef4444)
-    .setTitle(copy.security.blacklistTitle)
-    .setDescription(description)
-    .setTimestamp();
+  return card({
+    title: copy.security.blacklistTitle,
+    color: THEME.ruby,
+    description: entries.length ? `Записей в чёрном списке: ${entries.length}` : 'Чёрный список пуст.',
+    footer: 'BRHD • Phoenix • Security'
+  }).addFields(section('Список', lines, false));
+}
+
+function buildBanListEmbed(entries) {
+  const lines = entries.length
+    ? entries.map((entry, index) => copy.security.banListLine(index, entry)).join('\n')
+    : copy.security.banListEmpty;
+
+  return card({
+    title: copy.security.banListTitle,
+    color: THEME.ruby,
+    description: 'Текущий список банов Discord-сервера.',
+    footer: 'BRHD • Phoenix • Bans'
+  }).addFields(section('Забаненные пользователи', lines, false));
 }
 
 function buildAdminPanelEmbed({ guildName, record }) {
-  const planLabel = record.plan === 'premium' ? copy.admin.panelPremium : copy.admin.panelFree;
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? copy.admin.panelPremium : copy.admin.panelFree;
 
-  return new EmbedBuilder()
-    .setColor(record.plan === 'premium' ? 0xf59e0b : 0x22c55e)
-    .setTitle(copy.admin.panelTitle)
-    .setDescription(guildName)
-    .addFields(
-      { name: copy.admin.panelFieldPlan, value: planLabel, inline: true },
-      { name: copy.admin.panelFieldSetup, value: record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending, inline: true },
-      { name: copy.admin.panelFieldFeatures, value: copy.admin.panelFeatures(record.plan), inline: false },
-      {
-        name: copy.admin.panelFieldChannels,
-        value: [
-          copy.admin.channelLine('Панель', record.settings.channels.panel),
-          copy.admin.channelLine('Заявки', record.settings.channels.applications),
-          copy.admin.channelLine('Логи', record.settings.channels.logs),
-          copy.admin.channelLine('Дисциплина', record.settings.channels.disciplineLogs)
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: copy.admin.panelFieldRoles,
-        value: [
-          copy.admin.roleLine('Лидер', record.settings.roles.leader),
-          copy.admin.roleLine('Зам', record.settings.roles.deputy),
-          copy.admin.roleLine('Старший', record.settings.roles.elder),
-          copy.admin.roleLine('Участник', record.settings.roles.member),
-          copy.admin.roleLine('Новичок', record.settings.roles.newbie)
-        ].join('\n'),
-        inline: false
-      }
+  return card({
+    title: copy.admin.panelTitle,
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `Сервер: **${guildName}**`,
+    footer: 'BRHD • Phoenix • Administration'
+  }).addFields(
+    section('Статус', [`План: ${planLabel}`, `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`].join('\n'), true),
+    section('Возможности', copy.admin.panelFeatures(record.plan), true),
+    section(
+      copy.admin.panelFieldChannels,
+      [
+        channelLine('Панель', record.settings.channels.panel),
+        channelLine('Заявки', record.settings.channels.applications),
+        channelLine('Логи', record.settings.channels.logs),
+        channelLine('Дисциплина', record.settings.channels.disciplineLogs)
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldRoles,
+      [
+        roleLine('Лидер', record.settings.roles.leader),
+        roleLine('Зам', record.settings.roles.deputy),
+        roleLine('Старший', record.settings.roles.elder),
+        roleLine('Участник', record.settings.roles.member),
+        roleLine('Новичок', record.settings.roles.newbie)
+      ].join('\n'),
+      false
     )
-    .setTimestamp();
+  );
 }
 
 function buildHelpEmbed({ plan, availableCommands, premiumCommands }) {
-  return new EmbedBuilder()
-    .setColor(plan === 'premium' ? 0xf59e0b : 0x3b82f6)
-    .setTitle(copy.help.title(plan))
-    .addFields(
-      {
-        name: copy.help.freeSection,
-        value: availableCommands.map(command => copy.help.line(command.name, command.description)).join('\n'),
-        inline: false
-      },
-      {
-        name: copy.help.premiumSection,
-        value: premiumCommands.length
-          ? premiumCommands.map(command => copy.help.line(command.name, command.description)).join('\n')
-          : copy.debugConfig.none,
-        inline: false
-      }
+  return card({
+    title: copy.help.title(plan),
+    color: plan === 'premium' ? THEME.gold : THEME.brand,
+    description: plan === 'premium' ? 'Открыт полный набор команд.' : 'Показываю доступные команды для текущего тарифа.',
+    footer: 'BRHD • Phoenix • Commands'
+  }).addFields(
+    section(copy.help.freeSection, availableCommands.map(command => copy.help.line(command.name, command.description)).join('\n')),
+    section(
+      copy.help.premiumSection,
+      premiumCommands.length ? premiumCommands.map(command => copy.help.line(command.name, command.description)).join('\n') : copy.debugConfig.none
     )
-    .setTimestamp();
+  );
 }
 
 function joinSectionLines(lines) {
-  return lines && lines.length ? lines.join('\n') : copy.debugConfig.none;
+  return lines && lines.length ? trimValue(lines.join('\n')) : copy.debugConfig.none;
 }
 
 function buildDebugConfigEmbed({ summaryLines, validation }) {
   const hasErrors = validation.errors.length > 0;
   const hasWarnings = validation.warnings.length > 0;
 
-  return new EmbedBuilder()
-    .setColor(hasErrors ? 0xef4444 : hasWarnings ? 0xf59e0b : 0x22c55e)
-    .setTitle(hasErrors ? copy.debugConfig.titleError : hasWarnings ? copy.debugConfig.titleWarn : copy.debugConfig.titleOk)
-    .addFields(
-      { name: copy.debugConfig.summaryField, value: joinSectionLines(summaryLines), inline: false },
-      { name: copy.debugConfig.notesField, value: joinSectionLines(validation.notes), inline: false },
-      { name: copy.debugConfig.warningsField, value: joinSectionLines(validation.warnings), inline: false },
-      { name: copy.debugConfig.errorsField, value: joinSectionLines(validation.errors), inline: false }
-    )
-    .setFooter({ text: copy.debugConfig.footer })
-    .setTimestamp();
+  return card({
+    title: hasErrors ? copy.debugConfig.titleError : hasWarnings ? copy.debugConfig.titleWarn : copy.debugConfig.titleOk,
+    color: hasErrors ? THEME.ruby : hasWarnings ? THEME.gold : THEME.brand,
+    description: 'Текущая диагностика конфигурации сервера и бота.',
+    footer: `BRHD • Phoenix • ${copy.debugConfig.footer}`
+  }).addFields(
+    { name: copy.debugConfig.summaryField, value: joinSectionLines(summaryLines), inline: false },
+    { name: copy.debugConfig.notesField, value: joinSectionLines(validation.notes), inline: false },
+    { name: copy.debugConfig.warningsField, value: joinSectionLines(validation.warnings), inline: false },
+    { name: copy.debugConfig.errorsField, value: joinSectionLines(validation.errors), inline: false }
+  );
 }
 
 async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, activityScore }) {
@@ -379,48 +484,61 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
     .filter(item => item.role)
     .sort((a, b) => b.role.position - a.role.position);
 
-  const result = [];
-  let embed = new EmbedBuilder()
-    .setTitle(familyTitle)
-    .setColor(0x8b5cf6)
-    .setDescription(copy.family.legend)
-    .setTimestamp()
-    .setFooter({ text: copy.family.updateInterval(Math.floor(updateIntervalMs / 1000)) });
+  const roleSnapshots = configuredRoles.map(item => ({
+    ...item,
+    members: sortMembers(item.role.members.map(member => member), activityScore)
+  }));
 
-  let total = 0;
-  let fieldCount = 0;
+  const totalMembers = roleSnapshots.reduce((sum, item) => sum + item.members.length, 0);
+  const activeRoles = roleSnapshots.filter(item => item.members.length);
+  const embeds = [];
 
-  for (const item of configuredRoles) {
-    const members = sortMembers(item.role.members.map(member => member), activityScore);
-    if (!members.length) continue;
+  const overview = card({
+    title: familyTitle,
+    color: THEME.brand,
+    description: [
+      `**Всего участников:** ${totalMembers}`,
+      `**Активных секций:** ${activeRoles.length}`,
+      `**Обновление:** каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
+      '',
+      copy.family.legend,
+      '',
+      'BRHD • Phoenix • Live Family Board'
+    ].join('\n'),
+    footer: `BRHD • Phoenix • ${copy.family.updateInterval(Math.floor(updateIntervalMs / 1000))}`
+  }).addFields(
+    section(
+      'Секции семьи',
+      activeRoles.length
+        ? activeRoles.map(item => `${item.name}: ${item.members.length}`).join('\n')
+        : copy.family.emptyMembers,
+      false
+    )
+  );
 
-    total += members.length;
-    const lines = members.map(member => `${getStatusEmoji(member)} <@${member.id}> • ${copy.family.points(activityScore(member.id))}`);
+  embeds.push(overview);
+
+  if (!activeRoles.length) {
+    return embeds;
+  }
+
+  for (const item of activeRoles) {
+    const lines = item.members.map(member => `${getStatusEmoji(member)} <@${member.id}> • ${copy.family.points(activityScore(member.id))}`);
     const parts = chunk(lines, 15);
 
     for (let index = 0; index < parts.length; index += 1) {
-      if (fieldCount >= 25) {
-        result.push(embed);
-        embed = new EmbedBuilder().setColor(0x8b5cf6).setTimestamp();
-        fieldCount = 0;
-      }
-
-      embed.addFields({
-        name: index === 0 ? `${item.name} (${members.length})` : copy.family.continued(item.name),
-        value: parts[index].join('\n'),
-        inline: false
-      });
-      fieldCount += 1;
+      embeds.push(
+        card({
+          title: index === 0 ? `${item.name} • ${item.members.length}` : `${item.name} • продолжение`,
+          color: item.role.color || THEME.slate,
+          description: index === 0 ? 'Участники отсортированы по статусу и активности.' : 'Продолжение списка.',
+          footer: `BRHD • Phoenix • ${copy.family.updateInterval(Math.floor(updateIntervalMs / 1000))}`
+        }).addFields(section('Состав', parts[index].join('\n'), false))
+      );
     }
   }
 
-  if (fieldCount === 0) {
-    embed.setDescription(copy.family.emptyMembers);
-  }
-
-  embed.setAuthor({ name: copy.family.totalMembers(total) });
-  result.push(embed);
-  return result;
+  return embeds;
 }
 
 module.exports = {
@@ -432,15 +550,19 @@ module.exports = {
   buildApplicationsPanelEmbed,
   buildApplyModal,
   buildAdminPanelEmbed,
+  buildBanListEmbed,
   buildBlacklistEmbed,
   buildCommendLogEmbed,
   buildDebugConfigEmbed,
   buildFamilyEmbeds,
   buildFamilyMenuEmbed,
   buildHelpEmbed,
+  buildLeaderboardEmbed,
   buildProfileEmbed,
   buildRankButtons,
   buildRejectLogEmbed,
+  buildVoiceActivityEmbed,
+  buildWelcomeEmbed,
   buildWarnLogEmbed,
   panelButtons
 };

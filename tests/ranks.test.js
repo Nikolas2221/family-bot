@@ -107,11 +107,23 @@ async function testAutoRankSkipsManualLeadershipRoles() {
   assert.deepEqual(member.getAssignedRoleIds(), ['role-deputy']);
 }
 
+async function testAutoRankDoesNotDemoteOnLowActivity() {
+  const rankService = createRankServiceForTest({ 'user-5': 0 });
+  const member = createFakeMember('user-5', ['role-member']);
+
+  const result = await rankService.applyAutoRank(member);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'auto_keep_current');
+  assert.deepEqual(member.getAssignedRoleIds(), ['role-member']);
+}
+
 async function main() {
   await runTest('rank promote moves member one step up', testPromoteMovesMemberOneStepUp);
   await runTest('rank demote moves member one step down', testDemoteMovesMemberOneStepDown);
   await runTest('auto rank promotes by activity score', testAutoRankPromotesByActivity);
   await runTest('auto rank skips leadership roles', testAutoRankSkipsManualLeadershipRoles);
+  await runTest('auto rank does not demote on low activity', testAutoRankDoesNotDemoteOnLowActivity);
   console.log('ALL RANK TESTS PASSED');
 }
 

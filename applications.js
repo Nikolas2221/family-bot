@@ -8,7 +8,8 @@ function createApplicationsService({
   logChannelId,
   client,
   embeds,
-  sendAcceptLog
+  sendAcceptLog,
+  sendAcceptanceDm = async () => {}
 }) {
   function formatStatus(status) {
     return copy.applications.statusLabel(status);
@@ -116,6 +117,13 @@ function createApplicationsService({
 
     await interaction.message.edit({ embeds: [accepted], components: [] });
     await sendAcceptLog(interaction.guild, member, interaction.user, copy.applications.acceptReason, copy.applications.acceptRank);
+    await sendAcceptanceDm({
+      guild: interaction.guild,
+      member,
+      moderatorUser: interaction.user,
+      reason: copy.applications.acceptReason,
+      rankName: copy.applications.acceptRank
+    });
 
     return interaction.reply({ content: copy.applications.acceptedReply(userId), ephemeral: true });
   }

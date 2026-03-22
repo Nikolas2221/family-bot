@@ -291,8 +291,8 @@ const copy = {
       return `Конфигурация для сервера "${guildName}" сохранена.`;
     },
     panelTitle: '🛠 Админ-панель сервера',
-    panelFree: 'Free',
-    panelPremium: 'Premium',
+    panelFree: 'Free — 0$',
+    panelPremium: 'Premium — 5$',
     panelFieldPlan: 'Тариф',
     panelFieldSetup: 'Setup',
     panelFieldFeatures: 'Функции',
@@ -323,12 +323,12 @@ const copy = {
       return `${label}: ${value || 'не задана'}`;
     },
     subscriptionUpdated(plan) {
-      return `Подписка сервера обновлена: ${plan}.`;
+      return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}.`;
     }
   },
   help: {
     title(plan) {
-      return `📚 Команды бота • ${plan === 'premium' ? 'Premium' : 'Free'}`;
+      return `📚 Команды бота • ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}`;
     },
     freeSection: 'Доступно сейчас',
     premiumSection: 'В Premium',
@@ -347,6 +347,51 @@ const copy = {
     none: 'Нет',
     footer: 'Токены и ключи скрыты'
   }
+};
+
+copy.commands.leaderboardDescription = 'Показать таблицу участников по очкам';
+copy.commands.voiceActivityDescription = 'Показать активность в голосовых каналах';
+copy.commands.unbanIdDescription = 'Разбанить пользователя по Discord ID';
+copy.commands.banListDescription = 'Показать список банов сервера';
+copy.commands.userIdOptionName = 'id';
+copy.commands.userIdDescription = 'Discord ID пользователя';
+
+copy.ranks.autoKeepCurrent = function autoKeepCurrent(roleName, score) {
+  return `Авто-ранг сохранил текущую роль ${roleName}. Автоматическое понижение не применяется (${score} очк.).`;
+};
+
+copy.stats = {
+  leaderboardTitle: '🏆 Таблица участников',
+  leaderboardDescription: 'Рейтинг по очкам репутации от 0 до 100.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: '🎙 Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours(value) {
+    return `${value.toFixed(1)} ч`;
+  },
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
+  }
+};
+
+copy.security.banListTitle = '🔨 Список банов';
+copy.security.banListEmpty = 'На сервере сейчас нет активных банов.';
+copy.security.banListLine = function banListLine(index, ban) {
+  const username = ban?.user?.username || 'unknown';
+  const reason = ban?.reason || 'без причины';
+  return `${index + 1}. ${username} • \`${ban.user.id}\` • ${reason}`;
+};
+copy.security.unbanSuccess = function unbanSuccess(userId) {
+  return `✅ Пользователь \`${userId}\` разбанен и удалён из чёрного списка.`;
+};
+copy.security.unbanFailed = function unbanFailed(userId) {
+  return `Не удалось разбанить пользователя \`${userId}\`. Проверь ID и наличие бана.`;
 };
 
 module.exports = copy;

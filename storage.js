@@ -14,6 +14,10 @@ function defaultStore() {
   };
 }
 
+function clampPoints(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
 function createStorage({ dataFile, saveDelayMs = 500 }) {
   let store = loadStore();
   let saveTimer = null;
@@ -67,9 +71,14 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
         messageCount: 0,
         lastSeenAt: Date.now(),
         warns: 0,
-        commends: 0
+        commends: 0,
+        points: 0,
+        voiceMinutes: 0
       };
     }
+
+    store.members[key].points = clampPoints(store.members[key].points);
+    store.members[key].voiceMinutes = Math.max(0, Number(store.members[key].voiceMinutes) || 0);
     return store.members[key];
   }
 
@@ -79,9 +88,14 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
         messageCount: 0,
         lastSeenAt: Date.now(),
         warns: 0,
-        commends: 0
+        commends: 0,
+        points: 0,
+        voiceMinutes: 0
       };
     }
+
+    store.members[memberId].points = clampPoints(store.members[memberId].points);
+    store.members[memberId].voiceMinutes = Math.max(0, Number(store.members[memberId].voiceMinutes) || 0);
     return store.members[memberId];
   }
 
@@ -93,6 +107,22 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   function activityScore(memberId) {
     const member = ensureMember(memberId);
     return (member.messageCount || 0) + (member.commends || 0) * 5 - (member.warns || 0) * 3;
+  }
+
+  function pointsScore(memberId) {
+    return ensureMember(memberId).points || 0;
+  }
+
+  function guildPointsScore(guildId, memberId) {
+    return ensureGuildMember(guildId, memberId).points || 0;
+  }
+
+  function voiceMinutes(memberId) {
+    return ensureMember(memberId).voiceMinutes || 0;
+  }
+
+  function guildVoiceMinutes(guildId, memberId) {
+    return ensureGuildMember(guildId, memberId).voiceMinutes || 0;
   }
 
   function sanitizeApplicationInput(fields) {
@@ -173,6 +203,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   function addWarn({ userId, moderatorId, reason }) {
     const member = ensureMember(userId);
     member.warns = (member.warns || 0) + 1;
+    member.points = clampPoints((member.points || 0) - 1);
     store.warns.unshift({ userId, moderatorId, reason, createdAt: new Date().toISOString() });
     store.warns = store.warns.slice(0, 200);
     save();
@@ -181,6 +212,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   function addGuildWarn({ guildId, userId, moderatorId, reason }) {
     const member = ensureGuildMember(guildId, userId);
     member.warns = (member.warns || 0) + 1;
+    member.points = clampPoints((member.points || 0) - 1);
     store.warns.unshift({ guildId, userId, moderatorId, reason, createdAt: new Date().toISOString() });
     store.warns = store.warns.slice(0, 500);
     save();
@@ -189,6 +221,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   function addCommend({ userId, moderatorId, reason }) {
     const member = ensureMember(userId);
     member.commends = (member.commends || 0) + 1;
+    member.points = clampPoints((member.points || 0) + 1);
     store.commends.unshift({ userId, moderatorId, reason, createdAt: new Date().toISOString() });
     store.commends = store.commends.slice(0, 200);
     save();
@@ -197,9 +230,32 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   function addGuildCommend({ guildId, userId, moderatorId, reason }) {
     const member = ensureGuildMember(guildId, userId);
     member.commends = (member.commends || 0) + 1;
+    member.points = clampPoints((member.points || 0) + 1);
     store.commends.unshift({ guildId, userId, moderatorId, reason, createdAt: new Date().toISOString() });
     store.commends = store.commends.slice(0, 500);
     save();
+  }
+
+  function addVoiceMinutes(memberId, minutes) {
+    const safeMinutes = Math.max(0, Math.floor(Number(minutes) || 0));
+    if (!safeMinutes) return 0;
+
+    const member = ensureMember(memberId);
+    member.voiceMinutes = (member.voiceMinutes || 0) + safeMinutes;
+    member.lastSeenAt = Date.now();
+    save();
+    return safeMinutes;
+  }
+
+  function addGuildVoiceMinutes(guildId, memberId, minutes) {
+    const safeMinutes = Math.max(0, Math.floor(Number(minutes) || 0));
+    if (!safeMinutes) return 0;
+
+    const member = ensureGuildMember(guildId, memberId);
+    member.voiceMinutes = (member.voiceMinutes || 0) + safeMinutes;
+    member.lastSeenAt = Date.now();
+    save();
+    return safeMinutes;
   }
 
   function getCooldown(userId) {
@@ -372,6 +428,10 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     ensureGuildMember,
     activityScore,
     guildActivityScore,
+    pointsScore,
+    guildPointsScore,
+    voiceMinutes,
+    guildVoiceMinutes,
     sanitizeApplicationInput,
     setApplicationStatus,
     setPanelMessageId,
@@ -386,6 +446,8 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     addGuildWarn,
     addCommend,
     addGuildCommend,
+    addVoiceMinutes,
+    addGuildVoiceMinutes,
     getCooldown,
     getGuildCooldown,
     setCooldown,

@@ -4,12 +4,14 @@ async function main() {
   const { main: runConfigTests } = require('./config.test');
   const { main: runEmbedsTests } = require('./embeds.test');
   const { main: runRanksTests } = require('./ranks.test');
+  const { main: runStorageTests } = require('./storage.test');
 
   await runApplicationsTests();
   await runDatabaseTests();
   await runConfigTests();
   await runEmbedsTests();
   await runRanksTests();
+  await runStorageTests();
   console.log('ALL TEST SUITES PASSED');
 }
 

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 
 const { createConfig, summarizeConfig, validateConfig } = require('../config');
 const copy = require('../copy');
-const { buildDebugConfigEmbed } = require('../embeds');
+const { buildDebugConfigEmbed, buildWelcomeEmbed } = require('../embeds');
 
 async function runTest(name, fn) {
   try {
@@ -63,9 +63,29 @@ async function testDebugConfigEmbedShowsErrors() {
   assert.match(embed.fields[3].value, /CHANNEL_ID/);
 }
 
+async function testWelcomeEmbedShowsJoinFlow() {
+  const embed = buildWelcomeEmbed(
+    {
+      id: '123456789012345678',
+      guild: { name: 'Phoenix Guild' },
+      user: {
+        displayAvatarURL() {
+          return 'https://example.com/avatar.png';
+        }
+      }
+    },
+    'BRHD Family'
+  ).toJSON();
+
+  assert.equal(embed.title, 'Добро пожаловать в Phoenix');
+  assert.match(embed.description, /BRHD Family/);
+  assert.equal(embed.fields[0].name, 'Что дальше');
+}
+
 async function main() {
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
+  await runTest('welcome embed shows join flow', testWelcomeEmbedShowsJoinFlow);
   console.log('ALL EMBEDS TESTS PASSED');
 }
 
