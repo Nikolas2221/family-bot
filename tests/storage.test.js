@@ -177,6 +177,81 @@ async function testStorageCreatesNestedDirectoryOnFlush() {
   assert.equal(fs.existsSync(dataFile), true);
 }
 
+async function testStorageRestoresFromBackupWhenPrimaryIsInvalid() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-storage-backup-'));
+  const dataFile = path.join(tempDir, 'storage.json');
+  fs.writeFileSync(`${dataFile}.bak`, JSON.stringify({
+    members: {
+      'guild-backup:user-backup': {
+        guildId: 'guild-backup',
+        userId: 'user-backup',
+        messageCount: 3,
+        lastSeenAt: 1700000000000,
+        warns: 0,
+        commends: 2,
+        points: 2,
+        voiceMinutes: 30,
+        afkWarningSentAt: ''
+      }
+    },
+    applications: [],
+    cooldowns: {},
+    warns: [],
+    commends: [],
+    blacklist: [],
+    panelMessageId: '',
+    panelMessageIds: {}
+  }), 'utf8');
+  fs.writeFileSync(dataFile, '{broken json', 'utf8');
+
+  const storage = createStorage({ dataFile, saveDelayMs: 1 });
+
+  assert.equal(storage.guildPointsScore('guild-backup', 'user-backup'), 2);
+  assert.equal(storage.guildVoiceMinutes('guild-backup', 'user-backup'), 30);
+}
+
+async function testStoragePrefersBackupWhenPrimaryLooksEmpty() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-storage-empty-primary-'));
+  const dataFile = path.join(tempDir, 'storage.json');
+  fs.writeFileSync(dataFile, JSON.stringify({
+    members: {},
+    applications: [],
+    cooldowns: {},
+    warns: [],
+    commends: [],
+    blacklist: [],
+    panelMessageId: '',
+    panelMessageIds: {}
+  }), 'utf8');
+  fs.writeFileSync(`${dataFile}.bak`, JSON.stringify({
+    members: {
+      'guild-pref:user-pref': {
+        guildId: 'guild-pref',
+        userId: 'user-pref',
+        messageCount: 5,
+        lastSeenAt: 1700000000000,
+        warns: 1,
+        commends: 4,
+        points: 4,
+        voiceMinutes: 15,
+        afkWarningSentAt: ''
+      }
+    },
+    applications: [],
+    cooldowns: {},
+    warns: [],
+    commends: [],
+    blacklist: [],
+    panelMessageId: '',
+    panelMessageIds: {}
+  }), 'utf8');
+
+  const storage = createStorage({ dataFile, saveDelayMs: 1 });
+
+  assert.equal(storage.ensureGuildMember('guild-pref', 'user-pref').messageCount, 5);
+  assert.equal(storage.guildPointsScore('guild-pref', 'user-pref'), 4);
+}
+
 async function main() {
   await runTest('commends increase points up to 100', testCommendsIncreasePointsUpToHundred);
   await runTest('warns do not drop points below zero', testWarnsDoNotDropPointsBelowZero);
@@ -186,6 +261,8 @@ async function main() {
   await runTest('legacy member data merges into existing guild record', testLegacyMemberDataMergesIntoExistingGuildRecord);
   await runTest('guild activity persists across restart', testGuildActivityPersistsAcrossRestart);
   await runTest('storage creates nested directory on flush', testStorageCreatesNestedDirectoryOnFlush);
+  await runTest('storage restores from backup when primary is invalid', testStorageRestoresFromBackupWhenPrimaryIsInvalid);
+  await runTest('storage prefers backup when primary looks empty', testStoragePrefersBackupWhenPrimaryLooksEmpty);
   console.log('ALL STORAGE TESTS PASSED');
 }
 

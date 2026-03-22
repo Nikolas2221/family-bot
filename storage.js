@@ -23,13 +23,44 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   let store = loadStore();
   let saveTimer = null;
 
-  function loadStore() {
+  function readJsonFile(filePath) {
     try {
-      if (!fs.existsSync(dataFile)) return defaultStore();
-      return { ...defaultStore(), ...JSON.parse(fs.readFileSync(dataFile, 'utf8')) };
+      if (!fs.existsSync(filePath)) return null;
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     } catch {
-      return defaultStore();
+      return null;
     }
+  }
+
+  function hasMeaningfulStoreData(value) {
+    if (!value || typeof value !== 'object') return false;
+    return Boolean(
+      Object.keys(value.members || {}).length
+      || (value.applications || []).length
+      || Object.keys(value.cooldowns || {}).length
+      || (value.warns || []).length
+      || (value.commends || []).length
+      || (value.blacklist || []).length
+      || Object.keys(value.panelMessageIds || {}).length
+      || value.panelMessageId
+    );
+  }
+
+  function loadStore() {
+    const primary = readJsonFile(dataFile);
+    const backup = readJsonFile(`${dataFile}.bak`);
+
+    if (hasMeaningfulStoreData(primary)) {
+      return { ...defaultStore(), ...primary };
+    }
+
+    if (hasMeaningfulStoreData(backup)) {
+      return { ...defaultStore(), ...backup };
+    }
+
+    if (primary) return { ...defaultStore(), ...primary };
+    if (backup) return { ...defaultStore(), ...backup };
+    return defaultStore();
   }
 
   function getStore() {
@@ -41,8 +72,14 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+    const backupFile = `${dataFile}.bak`;
+    const tempFile = `${dataFile}.tmp`;
+    const payload = JSON.stringify(store, null, 2);
+
     fs.mkdirSync(path.dirname(dataFile), { recursive: true });
-    fs.writeFileSync(dataFile, JSON.stringify(store, null, 2), 'utf8');
+    fs.writeFileSync(tempFile, payload, 'utf8');
+    fs.renameSync(tempFile, dataFile);
+    fs.writeFileSync(backupFile, payload, 'utf8');
   }
 
   function save() {

@@ -61,20 +61,30 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
   let database = loadDatabase();
   let saveTimer = null;
 
-  function loadDatabase() {
+  function readJsonFile(filePath) {
     try {
-      if (!fs.existsSync(dataFile)) return defaultDatabase();
-      const parsed = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-      const normalized = defaultDatabase();
-
-      for (const [guildId, guild] of Object.entries(parsed.guilds || {})) {
-        normalized.guilds[guildId] = normalizeGuildRecord(guildId, guild);
-      }
-
-      return normalized;
+      if (!fs.existsSync(filePath)) return null;
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     } catch {
-      return defaultDatabase();
+      return null;
     }
+  }
+
+  function hasMeaningfulDatabaseData(value) {
+    return Boolean(value && typeof value === 'object' && Object.keys(value.guilds || {}).length);
+  }
+
+  function loadDatabase() {
+    const parsed = hasMeaningfulDatabaseData(readJsonFile(dataFile))
+      ? readJsonFile(dataFile)
+      : readJsonFile(`${dataFile}.bak`) || readJsonFile(dataFile);
+    const normalized = defaultDatabase();
+
+    for (const [guildId, guild] of Object.entries(parsed?.guilds || {})) {
+      normalized.guilds[guildId] = normalizeGuildRecord(guildId, guild);
+    }
+
+    return normalized;
   }
 
   function save() {
@@ -89,8 +99,14 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+    const backupFile = `${dataFile}.bak`;
+    const tempFile = `${dataFile}.tmp`;
+    const payload = JSON.stringify(database, null, 2);
+
     fs.mkdirSync(path.dirname(dataFile), { recursive: true });
-    fs.writeFileSync(dataFile, JSON.stringify(database, null, 2), 'utf8');
+    fs.writeFileSync(tempFile, payload, 'utf8');
+    fs.renameSync(tempFile, dataFile);
+    fs.writeFileSync(backupFile, payload, 'utf8');
   }
 
   function ensureGuild(guildId, defaults = {}) {
