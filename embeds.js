@@ -112,19 +112,62 @@ function panelButtons() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('family_refresh').setLabel(copy.family.refreshButton).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('family_profile').setLabel(copy.family.profileButton).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('family_leaderboard').setLabel(copy.family.leaderboardButton).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('family_voice').setLabel(copy.family.voiceButton).setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('family_apply').setLabel(copy.family.applyButton).setStyle(ButtonStyle.Success)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin_applications').setLabel(copy.family.adminApplicationsButton).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_aiadvisor').setLabel(copy.family.adminAiAdvisorButton).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_panel').setLabel(copy.family.adminPanelButton).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_blacklist').setLabel(copy.family.adminBlacklistButton).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('admin_activityreport').setLabel(copy.family.adminReportButton).setStyle(ButtonStyle.Secondary)
     )
   ];
 }
 
-function buildFamilyMenuEmbed({ imageUrl } = {}) {
+function buildAiAdvisorModal() {
+  const modal = new ModalBuilder().setCustomId('family_aiadvisor_modal').setTitle(copy.family.aiAdvisorModalTitle);
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('aiadvisor_member')
+        .setLabel(copy.family.aiAdvisorModalLabel)
+        .setPlaceholder(copy.family.aiAdvisorModalPlaceholder)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+    )
+  );
+  return modal;
+}
+
+function buildSummaryLines(summary = {}) {
+  return [
+    `**Всего участников:** ${summary.totalMembers ?? 0}`,
+    `**С ролями / без ролей:** ${summary.membersWithFamilyRoles ?? 0} / ${summary.membersWithoutFamilyRoles ?? 0}`,
+    `**Заявок на рассмотрении:** ${summary.pendingApplications ?? 0}`,
+    `**AFK-рисков:** ${summary.afkRiskCount ?? 0}`,
+    `**Тариф:** ${summary.planLabel || 'Free — 0$'}`,
+    `**Статусы:** 🟢 ${summary.onlineCount ?? 0} • 🟡 ${summary.idleCount ?? 0} • ⛔ ${summary.dndCount ?? 0} • ⚫ ${summary.offlineCount ?? 0}`,
+    `**Топ-1 активности:** ${summary.topMemberLine || 'нет данных'}`,
+    `**Последнее обновление:** ${summary.lastUpdatedLabel || 'сейчас'}`
+  ];
+}
+
+function buildFamilyMenuEmbed({ imageUrl, summary } = {}) {
   return card({
     title: copy.family.menuTitle,
     color: THEME.brand,
     description: [
-      'Панель семьи в стиле BRHD / Phoenix.',
+      'Панель семьи v2 в стиле BRHD / Phoenix.',
+      '',
+      ...buildSummaryLines(summary),
       '',
       `• ${copy.family.refreshButton} — обновить состав, активность и ранги`,
+      `• ${copy.family.profileButton} — открыть свой профиль`,
+      `• ${copy.family.leaderboardButton} — лидерборд по очкам`,
+      `• ${copy.family.voiceButton} — топ по голосовой активности`,
       `• ${copy.family.applyButton} — открыть фирменную анкету кандидата`
     ].join('\n'),
     footer: 'BRHD • Phoenix • Family Control',
@@ -517,7 +560,7 @@ function buildDebugConfigEmbed({ summaryLines, validation }) {
   );
 }
 
-async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, activityScore }) {
+async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, activityScore, summary, imageUrl }) {
   const configuredRoles = roles
     .map(item => ({ ...item, role: guild.roles.cache.get(item.id) }))
     .filter(item => item.role)
@@ -550,15 +593,20 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
     title: familyTitle,
     color: THEME.brand,
     description: [
-      `**Всего участников:** ${totalMembers}`,
-      `**С ролями:** ${membersWithFamilyRoles}`,
-      `**Без ролей:** ${membersWithoutFamilyRoles}`,
+      ...buildSummaryLines({
+        ...summary,
+        totalMembers,
+        membersWithFamilyRoles,
+        membersWithoutFamilyRoles
+      }),
+      '',
       `**Активных секций:** ${activeRoles.length}`,
       `**Обновление:** каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
       '',
       copy.family.legend
     ].join('\n'),
-    footer: `BRHD • Phoenix • ${copy.family.updateInterval(Math.floor(updateIntervalMs / 1000))}`
+    footer: `BRHD • Phoenix • ${copy.family.updateInterval(Math.floor(updateIntervalMs / 1000))}`,
+    image: imageUrl
   });
   let fieldCount = 0;
 
@@ -602,6 +650,7 @@ module.exports = {
   buildApplicationsPanelButtons,
   buildApplicationsPanelEmbed,
   buildAcceptModal,
+  buildAiAdvisorModal,
   buildApplyModal,
   buildAdminPanelEmbed,
   buildBanListEmbed,

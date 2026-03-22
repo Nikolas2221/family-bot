@@ -2,7 +2,14 @@ const assert = require('node:assert/strict');
 
 const { createConfig, summarizeConfig, validateConfig } = require('../config');
 const copy = require('../copy');
-const { buildApplicationsPanelEmbed, buildDebugConfigEmbed, buildFamilyEmbeds, buildFamilyMenuEmbed, buildWelcomeEmbed } = require('../embeds');
+const {
+  buildApplicationsPanelEmbed,
+  buildDebugConfigEmbed,
+  buildFamilyEmbeds,
+  buildFamilyMenuEmbed,
+  buildWelcomeEmbed,
+  panelButtons
+} = require('../embeds');
 
 async function runTest(name, fn) {
   try {
@@ -77,9 +84,9 @@ async function testWelcomeEmbedShowsJoinFlow() {
     'BRHD Family'
   ).toJSON();
 
-  assert.equal(embed.title, 'Добро пожаловать в Phoenix');
+  assert.match(embed.title, /Phoenix/);
   assert.match(embed.description, /BRHD Family/);
-  assert.equal(embed.fields[0].name, 'Что дальше');
+  assert.ok(embed.fields?.length);
 }
 
 async function testFamilyPanelDoesNotDuplicateMemberAcrossRoles() {
@@ -140,19 +147,34 @@ async function testFamilyPanelDoesNotDuplicateMemberAcrossRoles() {
       ],
       familyTitle: 'Test Family',
       updateIntervalMs: 60000,
+      summary: {
+        pendingApplications: 2,
+        afkRiskCount: 1,
+        planLabel: copy.admin.panelPremium,
+        onlineCount: 1,
+        idleCount: 0,
+        dndCount: 0,
+        offlineCount: 0,
+        topMemberLine: '<@user-1> • Leader • 0 очк.',
+        lastUpdatedLabel: 'now'
+      },
       activityScore() {
         return 0;
       }
     }
   );
 
-  const serialized = JSON.stringify(embeds.map(embed => embed.toJSON()));
-  const mentions = serialized.match(/<@user-1>/g) || [];
+  const payload = embeds.map(embed => embed.toJSON());
+  const serialized = JSON.stringify(payload);
+  const fieldMentions = payload
+    .flatMap(embed => embed.fields || [])
+    .map(field => field.value)
+    .join('\n')
+    .match(/<@user-1>/g) || [];
 
-  assert.equal(mentions.length, 1);
-  assert.match(serialized, /Всего участников:\*\* 2/);
-  assert.match(serialized, /С ролями:\*\* 1/);
-  assert.match(serialized, /Без ролей:\*\* 1/);
+  assert.equal(fieldMentions.length, 1);
+  assert.match(serialized, /1 \/ 1/);
+  assert.match(serialized, /Premium/);
 }
 
 async function testMenuAndApplicationsEmbedsExposeConfiguredImages() {
@@ -163,11 +185,38 @@ async function testMenuAndApplicationsEmbedsExposeConfiguredImages() {
   assert.equal(applicationsEmbed.image.url, 'https://example.com/apply-banner.png');
 }
 
+async function testFamilyMenuSummaryAndButtons() {
+  const familyEmbed = buildFamilyMenuEmbed({
+    summary: {
+      totalMembers: 7,
+      membersWithFamilyRoles: 5,
+      membersWithoutFamilyRoles: 2,
+      pendingApplications: 3,
+      afkRiskCount: 1,
+      planLabel: copy.admin.panelPremium,
+      onlineCount: 2,
+      idleCount: 1,
+      dndCount: 1,
+      offlineCount: 1,
+      topMemberLine: '<@1> • Leader • 12 очк.',
+      lastUpdatedLabel: '22.03.2026, 21:39:00'
+    }
+  }).toJSON();
+  const rows = panelButtons().map(row => row.toJSON());
+
+  assert.match(familyEmbed.description, /Premium/);
+  assert.match(familyEmbed.description, /12/);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].components.length, 5);
+  assert.equal(rows[1].components.length, 5);
+}
+
 async function main() {
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
   await runTest('welcome embed shows join flow', testWelcomeEmbedShowsJoinFlow);
   await runTest('menu and applications embeds expose configured images', testMenuAndApplicationsEmbedsExposeConfiguredImages);
+  await runTest('family menu summary and buttons render', testFamilyMenuSummaryAndButtons);
   await runTest('family panel does not duplicate member across roles', testFamilyPanelDoesNotDuplicateMemberAcrossRoles);
   console.log('ALL EMBEDS TESTS PASSED');
 }

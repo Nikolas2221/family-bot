@@ -280,11 +280,79 @@ function getDisplayRankName(member) {
   return getRankService(member.guild.id).getCurrentRole(member)?.name || copy.profile.noRoles;
 }
 
+function getFamilyMembers(guild) {
+  return Array.from(guild.members.cache.values()).filter(member => !member.user?.bot && hasFamilyRole(member));
+}
+
+function buildFamilyDashboardStats(guild) {
+  const guildStorage = getGuildStorage(guild.id);
+  const allMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot);
+  const familyMembers = getFamilyMembers(guild);
+  const pendingApplications = guildStorage
+    .listRecentApplications(500)
+    .filter(application => application.status === 'pending' || application.status === 'review').length;
+
+  let onlineCount = 0;
+  let idleCount = 0;
+  let dndCount = 0;
+  let offlineCount = 0;
+
+  for (const member of familyMembers) {
+    const status = member.presence?.status || 'offline';
+    if (status === 'online') {
+      onlineCount += 1;
+    } else if (status === 'idle') {
+      idleCount += 1;
+    } else if (status === 'dnd') {
+      dndCount += 1;
+    } else {
+      offlineCount += 1;
+    }
+  }
+
+  const afkRiskCount = familyMembers.filter(member => {
+    const data = guildStorage.ensureMember(member.id);
+    return Date.now() - Number(data.lastSeenAt || 0) >= AFK_WARNING_THRESHOLD_MS;
+  }).length;
+
+  const topEntry = familyMembers
+    .map(member => ({
+      member,
+      activity: guildStorage.activityScore(member.id),
+      points: guildStorage.pointsScore(member.id)
+    }))
+    .sort((left, right) => {
+      const byActivity = right.activity - left.activity;
+      if (byActivity !== 0) return byActivity;
+
+      const byPoints = right.points - left.points;
+      if (byPoints !== 0) return byPoints;
+
+      return left.member.displayName.localeCompare(right.member.displayName, 'ru');
+    })[0];
+
+  return {
+    totalMembers: allMembers.length,
+    membersWithFamilyRoles: familyMembers.length,
+    membersWithoutFamilyRoles: Math.max(0, allMembers.length - familyMembers.length),
+    pendingApplications,
+    afkRiskCount,
+    planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
+    onlineCount,
+    idleCount,
+    dndCount,
+    offlineCount,
+    topMemberLine: topEntry
+      ? `<@${topEntry.member.id}> • ${getDisplayRankName(topEntry.member)} • ${Math.max(0, topEntry.activity)} очк.`
+      : '',
+    lastUpdatedLabel: new Date().toLocaleString('ru-RU')
+  };
+}
+
 function buildLeaderboardLines(guild, limit = 10) {
   const guildStorage = getGuildStorage(guild.id);
 
-  return guild.members.cache
-    .filter(member => !member.user.bot && hasFamilyRole(member))
+  return getFamilyMembers(guild)
     .map(member => ({
       member,
       points: guildStorage.pointsScore(member.id),
@@ -307,8 +375,7 @@ function buildLeaderboardLines(guild, limit = 10) {
 function buildVoiceActivityLines(guild, limit = 10) {
   const guildStorage = getGuildStorage(guild.id);
 
-  return guild.members.cache
-    .filter(member => !member.user.bot && hasFamilyRole(member))
+  return getFamilyMembers(guild)
     .map(member => ({
       member,
       hours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
@@ -354,8 +421,7 @@ function buildActivityReportEmbed(guild, targetMember = null) {
       .setTimestamp();
   }
 
-  const lines = guild.members.cache
-    .filter(member => !member.user.bot && hasFamilyRole(member))
+  const lines = getFamilyMembers(guild)
     .map(member => {
       const data = guildStorage.ensureMember(member.id);
       return {
@@ -376,6 +442,60 @@ function buildActivityReportEmbed(guild, targetMember = null) {
       value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
     })
     .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
+    .setTimestamp();
+}
+
+function normalizeMemberQuery(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+async function resolveMemberQuery(guild, query, fallbackUserId = '') {
+  const rawQuery = String(query || '').trim();
+  if (!rawQuery) {
+    return fallbackUserId ? guild.members.fetch(fallbackUserId).catch(() => null) : null;
+  }
+
+  const mentionMatch = rawQuery.match(/^<@!?(\d+)>$/);
+  const directId = mentionMatch?.[1] || (/^\d{5,25}$/.test(rawQuery) ? rawQuery : '');
+  if (directId) {
+    return guild.members.fetch(directId).catch(() => null);
+  }
+
+  await guild.members.fetch().catch(() => {});
+  const lookup = normalizeMemberQuery(rawQuery);
+  const members = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot);
+
+  return (
+    members.find(member => normalizeMemberQuery(member.displayName) === lookup) ||
+    members.find(member => normalizeMemberQuery(member.user.username) === lookup) ||
+    members.find(member => normalizeMemberQuery(member.displayName).includes(lookup)) ||
+    members.find(member => normalizeMemberQuery(member.user.username).includes(lookup)) ||
+    null
+  );
+}
+
+async function buildAiAdvisorEmbed(guild, member) {
+  const guildStorage = getGuildStorage(guild.id);
+  const memberData = guildStorage.ensureMember(member.id);
+  const rankInfo = getRankService(guild.id).describeMember(member);
+  const analysis = await aiService.analyzeMember({
+    displayName: member.displayName,
+    currentRoleName: rankInfo.currentRole?.name || copy.profile.noRoles,
+    autoTargetRoleName: rankInfo.autoTargetRole?.name || '',
+    activityScore: guildStorage.activityScore(member.id),
+    points: guildStorage.pointsScore(member.id),
+    warns: memberData.warns || 0,
+    commends: memberData.commends || 0,
+    messageCount: memberData.messageCount || 0,
+    voiceMinutes: getLiveVoiceMinutes(member),
+    lastSeenAt: memberData.lastSeenAt || 0
+  });
+
+  return new EmbedBuilder()
+    .setColor(0x7c3aed)
+    .setTitle(copy.ai.advisorTitle(member.displayName))
+    .setDescription(analysis.slice(0, 3900))
+    .setFooter({ text: copy.ai.advisorFooter })
     .setTimestamp();
 }
 
@@ -821,12 +941,15 @@ async function doPanelUpdate(guildId, force = false) {
     const guildStorage = getGuildStorage(guild.id);
     const channel = await fetchTextChannel(guild, settings.channels.panel);
     if (!channel) return;
+    const summary = buildFamilyDashboardStats(guild);
 
     const familyEmbeds = await embeds.buildFamilyEmbeds(guild, {
       roles: settings.roles,
       familyTitle: settings.familyTitle,
       updateIntervalMs: UPDATE_INTERVAL_MS,
-      activityScore: guildStorage.activityScore
+      activityScore: guildStorage.activityScore,
+      summary,
+      imageUrl: settings.visuals.familyBanner
     });
 
     const fixedMessageId = guild.id === GUILD_ID ? MESSAGE_ID : '';
@@ -1333,8 +1456,9 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'family') {
         const settings = resolveGuildSettings(guildId);
+        const summary = buildFamilyDashboardStats(interaction.guild);
         return interaction.reply(ephemeral({
-          embeds: [embeds.buildFamilyMenuEmbed({ imageUrl: settings.visuals.familyBanner })],
+          embeds: [embeds.buildFamilyMenuEmbed({ imageUrl: settings.visuals.familyBanner, summary })],
           components: embeds.panelButtons()
         }));
       }
@@ -1532,29 +1656,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
-          const guildStorage = getGuildStorage(interaction.guild.id);
-          const memberData = guildStorage.ensureMember(member.id);
-          const rankInfo = getRankService(interaction.guild.id).describeMember(member);
-          const analysis = await aiService.analyzeMember({
-            displayName: member.displayName,
-            currentRoleName: rankInfo.currentRole?.name || copy.profile.noRoles,
-            autoTargetRoleName: rankInfo.autoTargetRole?.name || '',
-            activityScore: guildStorage.activityScore(member.id),
-            points: guildStorage.pointsScore(member.id),
-            warns: memberData.warns || 0,
-            commends: memberData.commends || 0,
-            messageCount: memberData.messageCount || 0,
-            voiceMinutes: getLiveVoiceMinutes(member),
-            lastSeenAt: memberData.lastSeenAt || 0
-          });
-
-          const embed = new EmbedBuilder()
-            .setColor(0x7c3aed)
-            .setTitle(copy.ai.advisorTitle(member.displayName))
-            .setDescription(analysis.slice(0, 3900))
-            .setFooter({ text: copy.ai.advisorFooter })
-            .setTimestamp();
-
+          const embed = await buildAiAdvisorEmbed(interaction.guild, member);
           return interaction.editReply({ embeds: [embed] });
         } catch (error) {
           return interaction.editReply({ content: copy.ai.unavailable(error?.message || copy.ai.advisorUnavailable) });
@@ -1818,6 +1920,30 @@ client.on('interactionCreate', async interaction => {
         return;
       }
 
+      if (interaction.customId === 'family_profile') {
+        return interaction.reply(ephemeral(buildProfilePayload(interaction.member, canManageRanks(interaction.member))));
+      }
+
+      if (interaction.customId === 'family_leaderboard') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15))]
+        }));
+      }
+
+      if (interaction.customId === 'family_voice') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15))]
+        }));
+      }
+
       if (interaction.customId === 'family_apply') {
         const secondsLeft = applicationsService.getCooldownSecondsLeft(interaction.user.id, APPLICATION_COOLDOWN_MS);
         if (secondsLeft > 0) {
@@ -1825,6 +1951,66 @@ client.on('interactionCreate', async interaction => {
         }
 
         return interaction.showModal(embeds.buildApplyModal());
+      }
+
+      if (interaction.customId === 'admin_applications') {
+        if (!canApplications(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildApplicationsListEmbed(guildStorage.listRecentApplications(10))]
+        }));
+      }
+
+      if (interaction.customId === 'admin_aiadvisor') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        return interaction.showModal(embeds.buildAiAdvisorModal());
+      }
+
+      if (interaction.customId === 'admin_panel') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record: getGuildRecord(interaction.guild) })]
+        }));
+      }
+
+      if (interaction.customId === 'admin_blacklist') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        if (!canUseSecurity(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.security.noSecurityAccess }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildBlacklistEmbed(guildStorage.listBlacklist().slice(0, 25))]
+        }));
+      }
+
+      if (interaction.customId === 'admin_activityreport') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [buildActivityReportEmbed(interaction.guild)]
+        }));
       }
 
       if (interaction.customId.startsWith('rank_')) {
@@ -1924,6 +2110,33 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isModalSubmit()) {
       if (interaction.customId === 'family_apply_modal') {
         return getApplicationsService(interaction.guild.id).submitApplication(interaction);
+      }
+
+      if (interaction.customId === 'family_aiadvisor_modal') {
+        if (!isPremiumGuild(interaction.guild.id)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const member = await resolveMemberQuery(
+          interaction.guild,
+          interaction.fields.getTextInputValue('aiadvisor_member'),
+          interaction.user.id
+        );
+        if (!member) {
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        try {
+          const embed = await buildAiAdvisorEmbed(interaction.guild, member);
+          return interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+          return interaction.editReply({ content: copy.ai.unavailable(error?.message || copy.ai.advisorUnavailable) });
+        }
       }
 
       if (interaction.customId.startsWith('app_accept_modal:')) {
