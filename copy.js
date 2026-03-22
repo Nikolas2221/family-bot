@@ -359,6 +359,7 @@ copy.commands.userIdDescription = 'Discord ID пользователя';
 copy.ranks.autoKeepCurrent = function autoKeepCurrent(roleName, score) {
   return `Авто-ранг сохранил текущую роль ${roleName}. Автоматическое понижение не применяется (${score} очк.).`;
 };
+copy.ranks.permissionFailed = 'Не удалось изменить ранг. Проверь, что роль бота выше семейных ролей и у него есть право Manage Roles.';
 
 copy.stats = {
   leaderboardTitle: '🏆 Таблица участников',

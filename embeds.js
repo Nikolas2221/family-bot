@@ -492,8 +492,7 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
   const totalMembers = roleSnapshots.reduce((sum, item) => sum + item.members.length, 0);
   const activeRoles = roleSnapshots.filter(item => item.members.length);
   const embeds = [];
-
-  const overview = card({
+  let currentEmbed = card({
     title: familyTitle,
     color: THEME.brand,
     description: [
@@ -501,25 +500,15 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
       `**Активных секций:** ${activeRoles.length}`,
       `**Обновление:** каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
       '',
-      copy.family.legend,
-      '',
-      'BRHD • Phoenix • Live Family Board'
+      copy.family.legend
     ].join('\n'),
     footer: `BRHD • Phoenix • ${copy.family.updateInterval(Math.floor(updateIntervalMs / 1000))}`
-  }).addFields(
-    section(
-      'Секции семьи',
-      activeRoles.length
-        ? activeRoles.map(item => `${item.name}: ${item.members.length}`).join('\n')
-        : copy.family.emptyMembers,
-      false
-    )
-  );
-
-  embeds.push(overview);
+  });
+  let fieldCount = 0;
 
   if (!activeRoles.length) {
-    return embeds;
+    currentEmbed.addFields(section('Состав', copy.family.emptyMembers, false));
+    return [currentEmbed];
   }
 
   for (const item of activeRoles) {
@@ -527,17 +516,25 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
     const parts = chunk(lines, 15);
 
     for (let index = 0; index < parts.length; index += 1) {
-      embeds.push(
-        card({
-          title: index === 0 ? `${item.name} • ${item.members.length}` : `${item.name} • продолжение`,
-          color: item.role.color || THEME.slate,
-          description: index === 0 ? 'Участники отсортированы по статусу и активности.' : 'Продолжение списка.',
+      if (fieldCount >= 25) {
+        embeds.push(currentEmbed);
+        currentEmbed = card({
+          title: `${familyTitle} • продолжение`,
+          color: THEME.slate,
+          description: 'Продолжение состава семьи.',
           footer: `BRHD • Phoenix • ${copy.family.updateInterval(Math.floor(updateIntervalMs / 1000))}`
-        }).addFields(section('Состав', parts[index].join('\n'), false))
+        });
+        fieldCount = 0;
+      }
+
+      currentEmbed.addFields(
+        section(index === 0 ? `${item.name} • ${item.members.length}` : `${item.name} • продолжение`, parts[index].join('\n'), false)
       );
+      fieldCount += 1;
     }
   }
 
+  embeds.push(currentEmbed);
   return embeds;
 }
 

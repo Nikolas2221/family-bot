@@ -1054,15 +1054,20 @@ client.on('interactionCreate', async interaction => {
         }
 
         let result;
-        if (action === 'rank_promote') {
-          result = await rankService.promote(member);
-        } else if (action === 'rank_demote') {
-          result = await rankService.demote(member);
-        } else {
-          if (!isPremiumGuild(interaction.guild.id)) {
-            return interaction.reply({ content: copy.admin.premiumOnly, ephemeral: true });
+        try {
+          if (action === 'rank_promote') {
+            result = await rankService.promote(member);
+          } else if (action === 'rank_demote') {
+            result = await rankService.demote(member);
+          } else {
+            if (!isPremiumGuild(interaction.guild.id)) {
+              return interaction.reply({ content: copy.admin.premiumOnly, ephemeral: true });
+            }
+            result = await rankService.applyAutoRank(member);
           }
-          result = await rankService.applyAutoRank(member);
+        } catch (error) {
+          console.error('Ошибка изменения ранга:', error);
+          return interaction.reply({ content: copy.ranks.permissionFailed, ephemeral: true });
         }
 
         const refreshedMember = await refreshMember(member);
