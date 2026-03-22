@@ -443,32 +443,63 @@ async function syncAutoRanks(reason = 'interval') {
 }
 
 client.on('clientReady', async () => {
-  console.log(`Бот запущен как ${client.user.tag}`);
+  try {
+    console.log(`Бот запущен как ${client.user.tag}`);
 
-  const guilds = await client.guilds.fetch();
-  for (const guildData of guilds.values()) {
-    const guild = await guildData.fetch();
-    database.ensureGuild(guild.id, {
-      guildName: guild.name,
-      ownerId: guild.ownerId || ''
+    const guilds = await client.guilds.fetch();
+    for (const guildData of guilds.values()) {
+      try {
+        const guild = await guildData.fetch();
+        database.ensureGuild(guild.id, {
+          guildName: guild.name,
+          ownerId: guild.ownerId || ''
+        });
+        await registerCommands(guild);
+      } catch (error) {
+        console.error(`Ошибка инициализации guild ${guildData.id}:`, error);
+      }
+    }
+
+    const guild = await client.guilds.fetch(GUILD_ID).catch(error => {
+      console.error(`Не удалось получить основной guild ${GUILD_ID}:`, error);
+      return null;
     });
-    await registerCommands(guild);
-  }
 
-  const guild = await client.guilds.fetch(GUILD_ID);
-  await guild.roles.fetch();
-  await guild.members.fetch();
-  await syncAutoRanks('startup');
-  await doPanelUpdate(true);
+    if (!guild) {
+      return;
+    }
 
-  setInterval(() => {
-    doPanelUpdate(false);
-  }, UPDATE_INTERVAL_MS);
+    await guild.roles.fetch().catch(error => {
+      console.error('Не удалось получить роли guild:', error);
+    });
 
-  if (AUTO_RANKS.enabled) {
+    await guild.members.fetch().catch(error => {
+      console.error('Не удалось получить участников guild:', error);
+    });
+
+    await syncAutoRanks('startup').catch(error => {
+      console.error('Ошибка стартовой синхронизации авто-рангов:', error);
+    });
+
+    await doPanelUpdate(true).catch(error => {
+      console.error('Ошибка стартового обновления панели:', error);
+    });
+
     setInterval(() => {
-      syncAutoRanks('interval');
-    }, AUTO_RANKS.intervalMs);
+      doPanelUpdate(false).catch(error => {
+        console.error('Ошибка interval обновления панели:', error);
+      });
+    }, UPDATE_INTERVAL_MS);
+
+    if (AUTO_RANKS.enabled) {
+      setInterval(() => {
+        syncAutoRanks('interval').catch(error => {
+          console.error('Ошибка interval авто-рангов:', error);
+        });
+      }, AUTO_RANKS.intervalMs);
+    }
+  } catch (error) {
+    console.error('Критическая ошибка clientReady:', error);
   }
 });
 
@@ -541,6 +572,14 @@ process.on('SIGTERM', () => {
 process.on('beforeExit', () => {
   database.flush();
   storage.flush();
+});
+
+process.on('unhandledRejection', error => {
+  console.error('Unhandled rejection:', error);
+});
+
+process.on('uncaughtException', error => {
+  console.error('Uncaught exception:', error);
 });
 
 client.on('interactionCreate', async interaction => {
