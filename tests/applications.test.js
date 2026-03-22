@@ -122,7 +122,7 @@ async function testAcceptApplication() {
   });
 
   const edits = [];
-  let acceptLogCalled = false;
+  let acceptLogPayload = null;
   const member = {
     id: 'user-2',
     displayName: 'Applicant',
@@ -141,8 +141,8 @@ async function testAcceptApplication() {
     logChannelId: '',
     client: {},
     embeds: createEmbedsStub(),
-    sendAcceptLog: async () => {
-      acceptLogCalled = true;
+    sendAcceptLog: async (_guild, _member, _moderatorUser, reason, rankName) => {
+      acceptLogPayload = { reason, rankName };
     }
   });
 
@@ -174,11 +174,17 @@ async function testAcceptApplication() {
     }
   };
 
-  await service.accept(interaction, applicationId, 'user-2');
+  await service.accept(interaction, applicationId, 'user-2', {
+    reason: 'Прошёл собеседование',
+    rankName: '1 ранг'
+  });
 
   assert.equal(storage.findApplication(applicationId).status, 'accepted');
   assert.equal(edits.length, 1);
-  assert.equal(acceptLogCalled, true);
+  assert.deepEqual(acceptLogPayload, {
+    reason: 'Прошёл собеседование',
+    rankName: '1 ранг'
+  });
   assert.match(replies[0].content, /принят в семью/i);
 }
 

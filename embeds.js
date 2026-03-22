@@ -167,6 +167,33 @@ function buildApplyModal() {
   return modal;
 }
 
+function buildAcceptModal(applicationId, userId, messageId) {
+  const modal = new ModalBuilder()
+    .setCustomId(`app_accept_modal:${applicationId}:${userId}:${messageId}`)
+    .setTitle(copy.applications.acceptModalTitle);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('accept_reason')
+        .setLabel(copy.applications.acceptModalReason)
+        .setPlaceholder(copy.applications.acceptModalReasonPlaceholder)
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('accept_rank')
+        .setLabel(copy.applications.acceptModalRank)
+        .setPlaceholder(copy.applications.acceptModalRankPlaceholder)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+    )
+  );
+
+  return modal;
+}
+
 function buildApplicationsPanelEmbed() {
   return card({
     title: copy.applications.panelTitle,
@@ -545,6 +572,7 @@ module.exports = {
   buildApplicationsListEmbed,
   buildApplicationsPanelButtons,
   buildApplicationsPanelEmbed,
+  buildAcceptModal,
   buildApplyModal,
   buildAdminPanelEmbed,
   buildBanListEmbed,

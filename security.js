@@ -1,9 +1,39 @@
-const { AuditLogEvent, ChannelType, OverwriteType } = require('discord.js');
+const { AuditLogEvent, ChannelType, OverwriteType, PermissionFlagsBits } = require('discord.js');
 
 const DISCORD_INVITE_PATTERN = /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[A-Za-z0-9-]+/i;
 
 function containsDiscordInvite(text) {
   return DISCORD_INVITE_PATTERN.test(String(text || ''));
+}
+
+function explainKickFailure(member, actorMember) {
+  if (!member?.guild) {
+    return 'не удалось определить сервер участника';
+  }
+
+  if (member.id === member.guild.ownerId) {
+    return 'нельзя кикнуть владельца сервера';
+  }
+
+  if (!actorMember) {
+    return 'бот не найден среди участников сервера';
+  }
+
+  if (!actorMember.permissions?.has?.(PermissionFlagsBits.KickMembers)) {
+    return 'у бота нет права Kick Members';
+  }
+
+  if (member.kickable === false) {
+    const botRolePosition = actorMember.roles?.highest?.position ?? -1;
+    const targetRolePosition = member.roles?.highest?.position ?? -1;
+    if (botRolePosition <= targetRolePosition) {
+      return 'роль бота стоит ниже или на уровне роли участника';
+    }
+
+    return 'Discord не разрешает кикнуть этого участника';
+  }
+
+  return '';
 }
 
 function serializePermissionOverwrites(channel) {
@@ -83,6 +113,7 @@ async function fetchDeletedChannelExecutor(guild, channelId) {
 module.exports = {
   buildChannelCreateOptions,
   containsDiscordInvite,
+  explainKickFailure,
   fetchDeletedChannelExecutor,
   restoreDeletedChannel
 };

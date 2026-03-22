@@ -76,7 +76,7 @@ function createApplicationsService({
     return interaction.reply(ephemeral({ content: copy.applications.sent }));
   }
 
-  async function accept(interaction, applicationId, userId) {
+  async function accept(interaction, applicationId, userId, details = {}) {
     const application = storage.findApplication(applicationId);
     if (!application) {
       return interaction.reply(ephemeral({ content: copy.applications.notFound }));
@@ -120,14 +120,24 @@ function createApplicationsService({
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('accepted')))
       .setFooter({ text: copy.applications.acceptedFooter(interaction.user.username) });
 
-    await interaction.message.edit({ embeds: [accepted], components: [] });
-    await sendAcceptLog(interaction.guild, member, interaction.user, copy.applications.acceptReason, copy.applications.acceptRank);
+    const reason = String(details.reason || '').trim() || copy.applications.acceptReason;
+    const rankName = String(details.rankName || '').trim() || copy.applications.acceptRank;
+
+    const targetMessage = interaction.message
+      || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
+
+    if (!targetMessage) {
+      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
+    }
+
+    await targetMessage.edit({ embeds: [accepted], components: [] });
+    await sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName);
     await sendAcceptanceDm({
       guild: interaction.guild,
       member,
       moderatorUser: interaction.user,
-      reason: copy.applications.acceptReason,
-      rankName: copy.applications.acceptRank
+      reason,
+      rankName
     });
 
     return interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));

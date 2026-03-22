@@ -11,7 +11,7 @@ const { createDatabase } = require('./database');
 const embeds = require('./embeds');
 const { createRankService } = require('./ranks');
 const ROLES = require('./roles');
-const { containsDiscordInvite, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
+const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
 
 const config = createConfig(process.env);
@@ -966,6 +966,68 @@ async function runRolelessCleanup(guildId, reason = 'interval') {
   }).catch(() => {});
 }
 
+async function runRolelessCleanupDetailed(guildId, reason = 'interval') {
+  if (!isPremiumGuild(guildId)) return;
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return;
+
+  const record = database.getGuild(guildId);
+  const lastRunAt = record.maintenance?.lastRolelessCleanupAt ? Date.parse(record.maintenance.lastRolelessCleanupAt) : 0;
+  if (lastRunAt && Date.now() - lastRunAt < ROLELESS_CLEANUP_INTERVAL_MS) {
+    return;
+  }
+
+  await guild.members.fetch().catch(() => {});
+
+  const kicked = [];
+  const failed = [];
+  const botMember = guild.members.me || guild.members.cache.get(client.user.id);
+
+  for (const member of guild.members.cache.values()) {
+    if (member.user?.bot) continue;
+    if (member.id === guild.ownerId) continue;
+    if (hasPermission(member, PermissionFlagsBits.Administrator)) continue;
+
+    const nonEveryoneRoles = member.roles.cache.filter(role => role.id !== guild.id);
+    if (nonEveryoneRoles.size > 0) continue;
+
+    const blockedReason = explainKickFailure(member, botMember);
+    if (blockedReason) {
+      failed.push(`${member.user.username} (\`${member.id}\`) - ${blockedReason}`);
+      continue;
+    }
+
+    try {
+      await member.kick('Еженедельная очистка участников без ролей');
+      kicked.push(member.user.username);
+    } catch (error) {
+      const fallbackReason = error?.code === 50013
+        ? 'у бота не хватает прав Discord для кика'
+        : (error?.message || 'неизвестная ошибка кика');
+      failed.push(`${member.user.username} (\`${member.id}\`) - ${fallbackReason}`);
+    }
+  }
+
+  database.updateGuildMaintenance(guildId, { lastRolelessCleanupAt: new Date().toISOString() });
+
+  const { channels } = resolveGuildSettings(guildId);
+  const logChannel = await fetchTextChannel(guild, channels.logs);
+  if (!logChannel) return;
+
+  await logChannel.send({
+    embeds: [
+      buildMaintenanceEmbed({
+        title: 'Еженедельная очистка без ролей',
+        description: [`Режим: ${reason}`, `Кикнуто: ${kicked.length}`, `Ошибок: ${failed.length}`].join('\n'),
+        color: 0xe11d48,
+        fieldName: 'Отчёт',
+        lines: [...kicked.slice(0, 15), ...failed.slice(0, 10)].length ? [...kicked.slice(0, 15), ...failed.slice(0, 10)] : ['Никого не пришлось кикать.']
+      })
+    ]
+  }).catch(() => {});
+}
+
 async function runAfkWarnings(guildId) {
   if (!isPremiumGuild(guildId)) return;
 
@@ -1056,7 +1118,7 @@ client.on('clientReady', async () => {
         console.error(`Ошибка стартового обновления панели ${guild.id}:`, error);
       });
 
-      await runRolelessCleanup(guild.id, 'startup').catch(error => {
+      await runRolelessCleanupDetailed(guild.id, 'startup').catch(error => {
         console.error(`Ошибка стартовой чистки ${guild.id}:`, error);
       });
 
@@ -1081,7 +1143,7 @@ client.on('clientReady', async () => {
 
     setInterval(() => {
       for (const guild of client.guilds.cache.values()) {
-        runRolelessCleanup(guild.id, 'interval').catch(error => {
+        runRolelessCleanupDetailed(guild.id, 'interval').catch(error => {
           console.error(`Ошибка interval очистки ${guild.id}:`, error);
         });
         runAfkWarnings(guild.id).catch(error => {
@@ -1722,9 +1784,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         const [, applicationId, userId] = interaction.customId.split(':');
-        const response = await applicationsService.accept(interaction, applicationId, userId);
-        await doPanelUpdate(guildId, false);
-        return response;
+        return interaction.showModal(embeds.buildAcceptModal(applicationId, userId, interaction.message.id));
       }
 
       if (interaction.customId.startsWith('app_ai:')) {
@@ -1777,8 +1837,25 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    if (interaction.isModalSubmit() && interaction.customId === 'family_apply_modal') {
-      return getApplicationsService(interaction.guild.id).submitApplication(interaction);
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'family_apply_modal') {
+        return getApplicationsService(interaction.guild.id).submitApplication(interaction);
+      }
+
+      if (interaction.customId.startsWith('app_accept_modal:')) {
+        if (!canApplications(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const [, applicationId, userId, messageId] = interaction.customId.split(':');
+        const response = await getApplicationsService(interaction.guild.id).accept(interaction, applicationId, userId, {
+          reason: interaction.fields.getTextInputValue('accept_reason'),
+          rankName: interaction.fields.getTextInputValue('accept_rank'),
+          messageId
+        });
+        await doPanelUpdate(interaction.guild.id, false);
+        return response;
+      }
     }
   } catch (error) {
     console.error('Ошибка interactionCreate:', error);
