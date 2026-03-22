@@ -1,4 +1,9 @@
+const { MessageFlags } = require('discord.js');
 const copy = require('./copy');
+
+function ephemeral(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
 
 function createApplicationsService({
   storage,
@@ -29,7 +34,7 @@ function createApplicationsService({
   async function sendApplyPanel(interaction) {
     const channel = await fetchTextChannel(interaction.guild, applicationsChannelId);
     if (!channel) {
-      return interaction.reply({ content: copy.applications.channelMissing, ephemeral: true });
+      return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
     }
 
     await channel.send({
@@ -37,7 +42,7 @@ function createApplicationsService({
       components: embeds.buildApplicationsPanelButtons()
     });
 
-    return interaction.reply({ content: copy.applications.panelSent, ephemeral: true });
+    return interaction.reply(ephemeral({ content: copy.applications.panelSent }));
   }
 
   async function submitApplication(interaction) {
@@ -48,7 +53,7 @@ function createApplicationsService({
     });
 
     if (sanitized.error) {
-      return interaction.reply({ content: sanitized.error, ephemeral: true });
+      return interaction.reply(ephemeral({ content: sanitized.error }));
     }
 
     const { nickname, age, text } = sanitized;
@@ -68,22 +73,22 @@ function createApplicationsService({
       });
     }
 
-    return interaction.reply({ content: copy.applications.sent, ephemeral: true });
+    return interaction.reply(ephemeral({ content: copy.applications.sent }));
   }
 
   async function accept(interaction, applicationId, userId) {
     const application = storage.findApplication(applicationId);
     if (!application) {
-      return interaction.reply({ content: copy.applications.notFound, ephemeral: true });
+      return interaction.reply(ephemeral({ content: copy.applications.notFound }));
     }
 
     if (isTerminalApplicationStatus(application.status)) {
-      return interaction.reply({ content: copy.applications.closed(formatStatus(application.status)), ephemeral: true });
+      return interaction.reply(ephemeral({ content: copy.applications.closed(formatStatus(application.status)) }));
     }
 
     const member = await interaction.guild.members.fetch(userId).catch(() => null);
     if (!member) {
-      return interaction.reply({ content: copy.applications.memberNotFound, ephemeral: true });
+      return interaction.reply(ephemeral({ content: copy.applications.memberNotFound }));
     }
 
     if (applicationDefaultRole) {
@@ -93,7 +98,7 @@ function createApplicationsService({
         if (!added) {
           return interaction.reply({
             content: copy.applications.roleAssignFailed,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
         }
       }
@@ -125,19 +130,19 @@ function createApplicationsService({
       rankName: copy.applications.acceptRank
     });
 
-    return interaction.reply({ content: copy.applications.acceptedReply(userId), ephemeral: true });
+    return interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
   }
 
   async function moveToReview(interaction, applicationId, userId) {
     const application = storage.findApplication(applicationId);
     if (!application) {
-      return interaction.reply({ content: copy.applications.notFound, ephemeral: true });
+      return interaction.reply(ephemeral({ content: copy.applications.notFound }));
     }
 
     if (isTerminalApplicationStatus(application.status)) {
       return interaction.reply({
         content: copy.applications.closedForReview(formatStatus(application.status)),
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -158,17 +163,17 @@ function createApplicationsService({
       .setFooter({ text: copy.applications.reviewFooter(interaction.user.username) });
 
     await interaction.message.edit({ embeds: [review], components: interaction.message.components });
-    return interaction.reply({ content: copy.applications.reviewReply, ephemeral: true });
+    return interaction.reply(ephemeral({ content: copy.applications.reviewReply }));
   }
 
   async function reject(interaction, applicationId, userId) {
     const application = storage.findApplication(applicationId);
     if (!application) {
-      return interaction.reply({ content: copy.applications.notFound, ephemeral: true });
+      return interaction.reply(ephemeral({ content: copy.applications.notFound }));
     }
 
     if (isTerminalApplicationStatus(application.status)) {
-      return interaction.reply({ content: copy.applications.closed(formatStatus(application.status)), ephemeral: true });
+      return interaction.reply(ephemeral({ content: copy.applications.closed(formatStatus(application.status)) }));
     }
 
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);
@@ -205,7 +210,7 @@ function createApplicationsService({
       }
     }
 
-    return interaction.reply({ content: copy.applications.rejectedReply(userId), ephemeral: true });
+    return interaction.reply(ephemeral({ content: copy.applications.rejectedReply(userId) }));
   }
 
   return {

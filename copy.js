@@ -19,6 +19,9 @@ const copy = {
     adminPanelDescription: 'Открыть админ-панель сервера',
     subscriptionDescription: 'Изменить подписку сервера',
     helpDescription: 'Показать доступные команды бота',
+    setRoleDescription: 'Назначить семейную роль через Discord',
+    setChannelDescription: 'Назначить канал бота через Discord',
+    setFamilyTitleDescription: 'Изменить название семьи через Discord',
     blacklistAddDescription: 'Добавить пользователя в чёрный список',
     blacklistRemoveDescription: 'Убрать пользователя из чёрного списка',
     blacklistListDescription: 'Показать чёрный список',
@@ -36,7 +39,17 @@ const copy = {
     queryOptionName: 'запрос',
     queryDescription: 'Что нужно?',
     planOptionName: 'план',
-    planDescription: 'Какой план установить'
+    planDescription: 'Какой план установить',
+    roleTargetOptionName: 'роль',
+    roleTargetDescription: 'Какую семейную роль настроить',
+    roleValueOptionName: 'значение',
+    roleValueDescription: 'Какую Discord-роль использовать',
+    channelTargetOptionName: 'канал',
+    channelTargetDescription: 'Какой канал настроить',
+    channelValueOptionName: 'значение',
+    channelValueDescription: 'Какой текстовый канал использовать',
+    familyTitleOptionName: 'название',
+    familyTitleOptionDescription: 'Новое название семьи'
   },
   roles: {
     leader: '🕴 Лидер',
@@ -303,18 +316,26 @@ const copy = {
     panelFeatures(plan) {
       if (plan === 'premium') {
         return [
-          '• панель семьи',
-          '• заявки',
-          '• логи',
-          '• оффлайн AI',
-          '• авто-ранги',
-          '• чёрный список',
-          '• anti-leak',
-          '• защита каналов'
+          '• всё из Free',
+          '• лидерборд и голосовая активность',
+          '• админ-отчёты по активности',
+          '• оффлайн AI и AI-анализ заявок',
+          '• авто-ранги и авто-DM',
+          '• чёрный список и бан-лист',
+          '• anti-leak и защита каналов',
+          '• еженедельная очистка без ролей',
+          '• AFK-предупреждения за 3 дня'
         ].join('\n');
       }
 
-      return ['• панель семьи', '• заявки', '• базовый профиль', '• 1 сервер'].join('\n');
+      return [
+        '• панель семьи',
+        '• заявки и кнопка подачи',
+        '• профили участников',
+        '• настройка ролей и каналов через Discord',
+        '• ручные похвалы и преды',
+        '• базовая админка сервера'
+      ].join('\n');
     },
     channelLine(label, value) {
       return `${label}: ${value || 'не задан'}`;
@@ -351,8 +372,18 @@ const copy = {
 
 copy.commands.leaderboardDescription = 'Показать таблицу участников по очкам';
 copy.commands.voiceActivityDescription = 'Показать активность в голосовых каналах';
+copy.commands.activityReportDescription = 'Админ-отчёт по активности семьи';
 copy.commands.unbanIdDescription = 'Разбанить пользователя по Discord ID';
 copy.commands.banListDescription = 'Показать список банов сервера';
+copy.commands.roleTargetLeader = 'Лидер';
+copy.commands.roleTargetDeputy = 'Заместитель';
+copy.commands.roleTargetElder = 'Старший';
+copy.commands.roleTargetMember = 'Участник';
+copy.commands.roleTargetNewbie = 'Новичок';
+copy.commands.channelTargetPanel = 'Панель';
+copy.commands.channelTargetApplications = 'Заявки';
+copy.commands.channelTargetLogs = 'Логи';
+copy.commands.channelTargetDiscipline = 'Дисциплина';
 copy.commands.userIdOptionName = 'id';
 copy.commands.userIdDescription = 'Discord ID пользователя';
 

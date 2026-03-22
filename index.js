@@ -42,6 +42,9 @@ const AI_ENABLED = config.aiEnabled;
 const AUTO_RANKS = config.autoRanks;
 const LEAK_GUARD = config.leakGuard;
 const CHANNEL_GUARD = config.channelGuard;
+const ROLELESS_CLEANUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const AFK_WARNING_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
+const AFK_WARNING_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const client = new Client({
   intents: [
@@ -57,18 +60,128 @@ const client = new Client({
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
-const rankService = createRankService({
-  roles: ROLES,
-  storage,
-  autoRanks: AUTO_RANKS
-});
+const ROLE_TEMPLATES = ROLES.map(role => ({ ...role }));
 
-function getRoleIds() {
-  return ROLES.map(role => role.id).filter(Boolean);
+function ephemeral(payload = {}) {
+  return { ...payload, flags: MessageFlags.Ephemeral };
+}
+
+function memberSessionKey(guildId, memberId) {
+  return `${guildId}:${memberId}`;
+}
+
+function resolveGuildSettings(guildId) {
+  const guild = database.getGuild(guildId);
+  const settings = guild.settings || {};
+  const roles = ROLE_TEMPLATES.map(role => ({
+    ...role,
+    id: settings.roles?.[role.key] || role.id || ''
+  }));
+  const panel = settings.channels?.panel || CHANNEL_ID;
+  const logs = settings.channels?.logs || LOG_CHANNEL_ID;
+
+  return {
+    familyTitle: settings.familyTitle || FAMILY_TITLE,
+    channels: {
+      panel,
+      applications: settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
+      logs,
+      disciplineLogs: settings.channels?.disciplineLogs || DISCIPLINE_LOG_CHANNEL_ID || logs || ''
+    },
+    roles,
+    access: {
+      applications: settings.access?.applications?.length ? settings.access.applications : ACCESS_APPLICATIONS,
+      discipline: settings.access?.discipline?.length ? settings.access.discipline : ACCESS_DISCIPLINE,
+      ranks: settings.access?.ranks?.length ? settings.access.ranks : ACCESS_RANKS
+    },
+    applicationDefaultRole: settings.roles?.newbie || APPLICATION_DEFAULT_ROLE
+  };
+}
+
+function getRoleIds(guildId) {
+  return resolveGuildSettings(guildId).roles.map(role => role.id).filter(Boolean);
+}
+
+function getGuildStorage(guildId) {
+  return {
+    ensureMember(memberId) {
+      return storage.ensureGuildMember(guildId, memberId);
+    },
+    activityScore(memberId) {
+      return storage.guildActivityScore(guildId, memberId);
+    },
+    pointsScore(memberId) {
+      return storage.guildPointsScore(guildId, memberId);
+    },
+    voiceMinutes(memberId) {
+      return storage.guildVoiceMinutes(guildId, memberId);
+    },
+    addVoiceMinutes(memberId, minutes) {
+      return storage.addGuildVoiceMinutes(guildId, memberId, minutes);
+    },
+    trackMessage(memberId) {
+      return storage.trackGuildMessage(guildId, memberId);
+    },
+    trackPresence(memberId) {
+      return storage.trackGuildPresence(guildId, memberId);
+    },
+    addWarn({ userId, moderatorId, reason }) {
+      return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
+    },
+    addCommend({ userId, moderatorId, reason }) {
+      return storage.addGuildCommend({ guildId, userId, moderatorId, reason });
+    },
+    getCooldown(userId) {
+      return storage.getGuildCooldown(guildId, userId);
+    },
+    setCooldown(userId, value) {
+      return storage.setGuildCooldown(guildId, userId, value);
+    },
+    createApplication({ userId, nickname, age, text }) {
+      return storage.createGuildApplication({ guildId, userId, nickname, age, text });
+    },
+    findApplication(applicationId) {
+      return storage.findGuildApplication(guildId, applicationId);
+    },
+    listRecentApplications(limit) {
+      return storage.listGuildRecentApplications(guildId, limit);
+    },
+    listBlacklist() {
+      return storage.listGuildBlacklist(guildId);
+    },
+    getBlacklistEntry(userId) {
+      return storage.getGuildBlacklistEntry(guildId, userId);
+    },
+    isBlacklisted(userId) {
+      return storage.isGuildBlacklisted(guildId, userId);
+    },
+    addBlacklistEntry({ userId, moderatorId, reason }) {
+      return storage.addGuildBlacklistEntry({ guildId, userId, moderatorId, reason });
+    },
+    removeBlacklistEntry(userId) {
+      return storage.removeGuildBlacklistEntry(guildId, userId);
+    },
+    markAfkWarningSent(memberId, value) {
+      return storage.markGuildAfkWarningSent(guildId, memberId, value);
+    },
+    clearAfkWarningSent(memberId) {
+      return storage.clearGuildAfkWarningSent(guildId, memberId);
+    },
+    sanitizeApplicationInput: storage.sanitizeApplicationInput,
+    setApplicationStatus: storage.setApplicationStatus
+  };
+}
+
+function getRankService(guildId) {
+  return createRankService({
+    roles: resolveGuildSettings(guildId).roles,
+    storage: getGuildStorage(guildId),
+    autoRanks: AUTO_RANKS
+  });
 }
 
 function hasFamilyRole(member) {
-  const roleIds = new Set(getRoleIds());
+  const roleIds = new Set(getRoleIds(member.guild.id));
   return member.roles.cache.some(role => roleIds.has(role.id));
 }
 
@@ -93,28 +206,30 @@ function isPremiumGuild(guildId) {
 }
 
 function buildGuildSettingsSnapshot(guild) {
+  const settings = resolveGuildSettings(guild.id);
+
   return {
     guildName: guild.name,
     ownerId: guild.ownerId || '',
     settings: {
-      familyTitle: FAMILY_TITLE,
+      familyTitle: settings.familyTitle,
       channels: {
-        panel: CHANNEL_ID,
-        applications: APPLICATIONS_CHANNEL_ID,
-        logs: LOG_CHANNEL_ID,
-        disciplineLogs: DISCIPLINE_LOG_CHANNEL_ID
+        panel: settings.channels.panel,
+        applications: settings.channels.applications,
+        logs: settings.channels.logs,
+        disciplineLogs: settings.channels.disciplineLogs
       },
       roles: {
-        leader: ROLES.find(role => role.key === 'leader')?.id || '',
-        deputy: ROLES.find(role => role.key === 'deputy')?.id || '',
-        elder: ROLES.find(role => role.key === 'elder')?.id || '',
-        member: ROLES.find(role => role.key === 'member')?.id || '',
-        newbie: ROLES.find(role => role.key === 'newbie')?.id || ''
+        leader: settings.roles.find(role => role.key === 'leader')?.id || '',
+        deputy: settings.roles.find(role => role.key === 'deputy')?.id || '',
+        elder: settings.roles.find(role => role.key === 'elder')?.id || '',
+        member: settings.roles.find(role => role.key === 'member')?.id || '',
+        newbie: settings.roles.find(role => role.key === 'newbie')?.id || ''
       },
       access: {
-        applications: ACCESS_APPLICATIONS,
-        discipline: ACCESS_DISCIPLINE,
-        ranks: ACCESS_RANKS
+        applications: settings.access.applications,
+        discipline: settings.access.discipline,
+        ranks: settings.access.ranks
       },
       features: {
         aiEnabled: AI_ENABLED,
@@ -130,25 +245,42 @@ function formatVoiceHours(minutes) {
   return (Math.max(0, Number(minutes) || 0) / 60).toFixed(1);
 }
 
-function getLiveVoiceMinutes(memberId) {
-  const storedMinutes = storage.voiceMinutes(memberId);
-  const startedAt = voiceSessions.get(memberId);
+function formatTimeAgo(timestamp) {
+  const safeTimestamp = Number(timestamp) || 0;
+  if (!safeTimestamp) return 'нет данных';
+
+  const diff = Math.max(0, Date.now() - safeTimestamp);
+  const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+
+  if (days > 0) return `${days}д ${hours}ч назад`;
+  if (hours > 0) return `${hours}ч ${minutes}м назад`;
+  return `${minutes}м назад`;
+}
+
+function getLiveVoiceMinutes(member) {
+  const guildStorage = getGuildStorage(member.guild.id);
+  const storedMinutes = guildStorage.voiceMinutes(member.id);
+  const startedAt = voiceSessions.get(memberSessionKey(member.guild.id, member.id));
   if (!startedAt) return storedMinutes;
 
   return storedMinutes + Math.floor((Date.now() - startedAt) / 60000);
 }
 
 function getDisplayRankName(member) {
-  return rankService.getCurrentRole(member)?.name || copy.profile.noRoles;
+  return getRankService(member.guild.id).getCurrentRole(member)?.name || copy.profile.noRoles;
 }
 
 function buildLeaderboardLines(guild, limit = 10) {
+  const guildStorage = getGuildStorage(guild.id);
+
   return guild.members.cache
     .filter(member => !member.user.bot && hasFamilyRole(member))
     .map(member => ({
       member,
-      points: storage.pointsScore(member.id),
-      voiceHours: Number(formatVoiceHours(getLiveVoiceMinutes(member.id))),
+      points: guildStorage.pointsScore(member.id),
+      voiceHours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
       roleName: getDisplayRankName(member)
     }))
     .sort((left, right) => {
@@ -165,12 +297,14 @@ function buildLeaderboardLines(guild, limit = 10) {
 }
 
 function buildVoiceActivityLines(guild, limit = 10) {
+  const guildStorage = getGuildStorage(guild.id);
+
   return guild.members.cache
     .filter(member => !member.user.bot && hasFamilyRole(member))
     .map(member => ({
       member,
-      hours: Number(formatVoiceHours(getLiveVoiceMinutes(member.id))),
-      points: storage.pointsScore(member.id)
+      hours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
+      points: guildStorage.pointsScore(member.id)
     }))
     .sort((left, right) => {
       const byHours = right.hours - left.hours;
@@ -185,6 +319,58 @@ function buildVoiceActivityLines(guild, limit = 10) {
     .map((entry, index) => copy.stats.voiceLine(index, entry.member, entry.hours, entry.points));
 }
 
+function buildActivityReportEmbed(guild, targetMember = null) {
+  const guildStorage = getGuildStorage(guild.id);
+
+  if (targetMember) {
+    const data = guildStorage.ensureMember(targetMember.id);
+    return new EmbedBuilder()
+      .setColor(0x2563eb)
+      .setTitle(`Отчёт по участнику: ${targetMember.displayName}`)
+      .setDescription(`Сервер: **${guild.name}**`)
+      .addFields(
+        { name: 'Ранг', value: getDisplayRankName(targetMember), inline: true },
+        { name: 'Репутация', value: `${guildStorage.pointsScore(targetMember.id)}/100`, inline: true },
+        { name: 'Последняя активность', value: formatTimeAgo(data.lastSeenAt), inline: true },
+        {
+          name: 'Статистика',
+          value: [
+            `Сообщения: ${data.messageCount || 0}`,
+            `Похвалы: ${data.commends || 0}`,
+            `Преды: ${data.warns || 0}`,
+            `Голос: ${formatVoiceHours(getLiveVoiceMinutes(targetMember))} ч`
+          ].join('\n')
+        }
+      )
+      .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
+      .setTimestamp();
+  }
+
+  const lines = guild.members.cache
+    .filter(member => !member.user.bot && hasFamilyRole(member))
+    .map(member => {
+      const data = guildStorage.ensureMember(member.id);
+      return {
+        member,
+        line: `${getDisplayRankName(member)} • <@${member.id}> • ${guildStorage.pointsScore(member.id)}/100 • ${formatVoiceHours(getLiveVoiceMinutes(member))} ч • ${formatTimeAgo(data.lastSeenAt)}`
+      };
+    })
+    .sort((left, right) => left.member.displayName.localeCompare(right.member.displayName, 'ru'))
+    .slice(0, 25)
+    .map(item => item.line);
+
+  return new EmbedBuilder()
+    .setColor(0x7c3aed)
+    .setTitle('Отчёт по активности семьи')
+    .setDescription(`Сервер: **${guild.name}**\nУчастников с семейными ролями: ${lines.length}`)
+    .addFields({
+      name: 'Список',
+      value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
+    })
+    .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
+    .setTimestamp();
+}
+
 function getGuildRecord(guild) {
   return database.ensureGuild(guild.id, {
     guildName: guild.name,
@@ -192,28 +378,40 @@ function getGuildRecord(guild) {
   });
 }
 
+function getRoleLimit(guildId) {
+  return isPremiumGuild(guildId) ? Number.MAX_SAFE_INTEGER : 6;
+}
+
 function getHelpCatalog(guildId, userId) {
   const freeCommands = [
     { name: 'family', description: copy.commands.familyDescription },
     { name: 'apply', description: copy.commands.applyDescription },
+    { name: 'applypanel', description: copy.commands.applyPanelDescription },
     { name: 'applications', description: copy.commands.applicationsDescription },
     { name: 'profile', description: copy.commands.profileDescription },
-    { name: 'leaderboard', description: copy.commands.leaderboardDescription },
-    { name: 'voiceactivity', description: copy.commands.voiceActivityDescription },
     { name: 'help', description: copy.commands.helpDescription },
+    { name: 'setrole', description: copy.commands.setRoleDescription },
+    { name: 'setchannel', description: copy.commands.setChannelDescription },
+    { name: 'setfamilytitle', description: copy.commands.setFamilyTitleDescription },
     { name: 'setup', description: copy.commands.setupDescription },
     { name: 'adminpanel', description: copy.commands.adminPanelDescription },
     { name: 'warn', description: copy.commands.warnDescription },
     { name: 'commend', description: copy.commands.commendDescription },
+    { name: 'debugconfig', description: copy.commands.debugConfigDescription }
+  ];
+
+  const premiumCommands = [
+    { name: 'leaderboard', description: copy.commands.leaderboardDescription },
+    { name: 'voiceactivity', description: copy.commands.voiceActivityDescription },
+    { name: 'activityreport', description: copy.commands.activityReportDescription },
+    { name: 'ai', description: copy.commands.aiDescription },
     { name: 'blacklistadd', description: copy.commands.blacklistAddDescription },
     { name: 'blacklistremove', description: copy.commands.blacklistRemoveDescription },
     { name: 'blacklistlist', description: copy.commands.blacklistListDescription },
     { name: 'banlist', description: copy.commands.banListDescription },
     { name: 'unbanid', description: copy.commands.unbanIdDescription },
-    { name: 'debugconfig', description: copy.commands.debugConfigDescription }
+    { name: 'testaccept', description: copy.commands.testAcceptDescription }
   ];
-
-  const premiumCommands = [{ name: 'ai', description: copy.commands.aiDescription }];
 
   if (isOwner(userId)) {
     freeCommands.push({ name: 'subscription', description: copy.commands.subscriptionDescription });
@@ -229,22 +427,25 @@ function getHelpCatalog(guildId, userId) {
 function canApplications(member) {
   if (!member) return false;
   if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
-  if (!ACCESS_APPLICATIONS.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
-  return hasAnyRole(member, ACCESS_APPLICATIONS) || hasPermission(member, PermissionFlagsBits.ManageRoles);
+  const accessRoles = resolveGuildSettings(member.guild.id).access.applications;
+  if (!accessRoles.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
+  return hasAnyRole(member, accessRoles) || hasPermission(member, PermissionFlagsBits.ManageRoles);
 }
 
 function canDiscipline(member) {
   if (!member) return false;
   if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
-  if (!ACCESS_DISCIPLINE.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
-  return hasAnyRole(member, ACCESS_DISCIPLINE) || hasPermission(member, PermissionFlagsBits.ManageRoles);
+  const accessRoles = resolveGuildSettings(member.guild.id).access.discipline;
+  if (!accessRoles.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
+  return hasAnyRole(member, accessRoles) || hasPermission(member, PermissionFlagsBits.ManageRoles);
 }
 
 function canManageRanks(member) {
   if (!member) return false;
   if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
-  if (!ACCESS_RANKS.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
-  return hasAnyRole(member, ACCESS_RANKS) || hasPermission(member, PermissionFlagsBits.ManageRoles);
+  const accessRoles = resolveGuildSettings(member.guild.id).access.ranks;
+  if (!accessRoles.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
+  return hasAnyRole(member, accessRoles) || hasPermission(member, PermissionFlagsBits.ManageRoles);
 }
 
 function canDebugConfig(interaction) {
@@ -298,6 +499,97 @@ async function fetchTextChannel(guild, id) {
   return channel;
 }
 
+async function sendDirectNotification(user, { title, description, color = 0x7c3aed, footer = 'BRHD • Phoenix • Notify' }) {
+  if (!user) return false;
+
+  const channel = await user.createDM().catch(() => null);
+  if (!channel) return false;
+
+  const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: footer }).setTimestamp();
+  const sent = await channel.send({ embeds: [embed] }).then(() => true).catch(() => false);
+  return sent;
+}
+
+async function sendAcceptanceDm({ guild, member, moderatorUser, reason, rankName }) {
+  return sendDirectNotification(member.user, {
+    title: 'Заявка принята',
+    color: 0x10b981,
+    footer: 'BRHD • Phoenix • Family',
+    description: [
+      `Ты принят в семью **${resolveGuildSettings(guild.id).familyTitle}** на сервере **${guild.name}**.`,
+      '',
+      `Модератор: <@${moderatorUser.id}>`,
+      `Причина: ${reason}`,
+      `Выданный ранг: ${rankName}`
+    ].join('\n')
+  });
+}
+
+async function sendDisciplineDm(type, guild, targetUser, moderatorUser, reason) {
+  const isWarn = type === 'warn';
+  return sendDirectNotification(targetUser, {
+    title: isWarn ? 'Получен выговор' : 'Получена похвала',
+    color: isWarn ? 0xf97316 : 0x2563eb,
+    footer: 'BRHD • Phoenix • Discipline',
+    description: [
+      `Сервер: **${guild.name}**`,
+      `Модератор: <@${moderatorUser.id}>`,
+      `Причина: ${reason}`,
+      '',
+      isWarn ? 'Следи за активностью и дисциплиной, чтобы не получить дополнительные санкции.' : 'Так держать. Активность и вклад в семью замечены.'
+    ].join('\n')
+  });
+}
+
+async function sendRankDm(guild, member, result) {
+  if (!result?.ok) return false;
+
+  const isPromotion = result.code === 'promoted' || result.code === 'auto_applied';
+  const title = isPromotion ? 'Ранг повышен' : 'Ранг понижен';
+
+  return sendDirectNotification(member.user, {
+    title,
+    color: isPromotion ? 0x10b981 : 0xe11d48,
+    footer: 'BRHD • Phoenix • Ranks',
+    description: [
+      `Сервер: **${guild.name}**`,
+      `Было: ${result.fromRole?.name || '—'}`,
+      `Стало: ${result.toRole?.name || '—'}`,
+      result.score !== undefined ? `Текущие очки активности: ${result.score}` : null
+    ]
+      .filter(Boolean)
+      .join('\n')
+  });
+}
+
+async function sendBlacklistDm(user, guild, reason) {
+  return sendDirectNotification(user, {
+    title: 'Чёрный список',
+    color: 0xe11d48,
+    footer: 'BRHD • Phoenix • Security',
+    description: [
+      `Твой доступ на сервер **${guild.name}** ограничен.`,
+      `Причина: ${reason}`,
+      '',
+      'Если это ошибка, свяжись с администрацией сервера.'
+    ].join('\n')
+  });
+}
+
+async function sendAfkWarningDm(member) {
+  return sendDirectNotification(member.user, {
+    title: 'Предупреждение об AFK',
+    color: 0xf59e0b,
+    footer: 'BRHD • Phoenix • Activity',
+    description: [
+      `На сервере **${member.guild.name}** от тебя не было активности уже 3 дня.`,
+      'Если не проявишь активность, администрация может кикнуть тебя за AFK.',
+      '',
+      'Отправь сообщение, зайди в голосовой канал или просто прояви активность в Discord.'
+    ].join('\n')
+  });
+}
+
 async function sendAcceptLog(
   guild,
   member,
@@ -306,8 +598,9 @@ async function sendAcceptLog(
   rankName = copy.applications.acceptRank
 ) {
   if (!isPremiumGuild(guild.id)) return;
-  if (!LOG_CHANNEL_ID) return;
-  const channel = await fetchTextChannel(guild, LOG_CHANNEL_ID);
+  const { channels } = resolveGuildSettings(guild.id);
+  if (!channels.logs) return;
+  const channel = await fetchTextChannel(guild, channels.logs);
   if (!channel) return;
 
   await channel.send({
@@ -317,29 +610,48 @@ async function sendAcceptLog(
 
 async function sendDisciplineLog(guild, embed) {
   if (!isPremiumGuild(guild.id)) return;
-  if (!DISCIPLINE_LOG_CHANNEL_ID) return;
-  const channel = await fetchTextChannel(guild, DISCIPLINE_LOG_CHANNEL_ID);
+  const { channels } = resolveGuildSettings(guild.id);
+  if (!channels.disciplineLogs) return;
+  const channel = await fetchTextChannel(guild, channels.disciplineLogs);
   if (!channel) return;
   await channel.send({ embeds: [embed] });
 }
 
 async function sendSecurityLog(guild, content) {
   if (!isPremiumGuild(guild.id)) return;
-  if (!LOG_CHANNEL_ID) return;
-  const channel = await fetchTextChannel(guild, LOG_CHANNEL_ID);
+  const { channels } = resolveGuildSettings(guild.id);
+  if (!channels.logs) return;
+  const channel = await fetchTextChannel(guild, channels.logs);
   if (!channel) return;
   await channel.send({ content }).catch(() => {});
 }
 
 async function sendWelcomeInvite(member) {
-  const channel = (await fetchTextChannel(member.guild, APPLICATIONS_CHANNEL_ID)) || (await fetchTextChannel(member.guild, CHANNEL_ID));
+  const { channels, familyTitle } = resolveGuildSettings(member.guild.id);
+  const channel = (await fetchTextChannel(member.guild, channels.applications)) || (await fetchTextChannel(member.guild, channels.panel));
   if (!channel) return;
 
   await channel.send({
     content: `<@${member.id}>`,
-    embeds: [embeds.buildWelcomeEmbed(member, FAMILY_TITLE)],
+    embeds: [embeds.buildWelcomeEmbed(member, familyTitle)],
     components: embeds.buildApplicationsPanelButtons()
   }).catch(() => {});
+}
+
+function getApplicationsService(guildId) {
+  const settings = resolveGuildSettings(guildId);
+
+  return createApplicationsService({
+    storage: getGuildStorage(guildId),
+    fetchTextChannel,
+    applicationsChannelId: settings.channels.applications,
+    applicationDefaultRole: settings.applicationDefaultRole,
+    logChannelId: settings.channels.logs,
+    client,
+    embeds,
+    sendAcceptLog,
+    sendAcceptanceDm
+  });
 }
 
 async function refreshMember(member) {
@@ -348,7 +660,9 @@ async function refreshMember(member) {
 }
 
 function buildProfilePayload(member, allowRankButtons, content = '') {
-  const memberData = { ...storage.ensureMember(member.id), voiceMinutes: getLiveVoiceMinutes(member.id) };
+  const guildStorage = getGuildStorage(member.guild.id);
+  const rankService = getRankService(member.guild.id);
+  const memberData = { ...guildStorage.ensureMember(member.id), voiceMinutes: getLiveVoiceMinutes(member) };
   const rankInfo = {
     ...rankService.describeMember(member),
     autoEnabled: isPremiumGuild(member.guild.id) && AUTO_RANKS.enabled
@@ -356,9 +670,9 @@ function buildProfilePayload(member, allowRankButtons, content = '') {
   const payload = {
     embeds: [
       embeds.buildProfileEmbed(member, {
-        activityScore: storage.activityScore,
+        activityScore: guildStorage.activityScore,
         memberData,
-        familyRoleIds: getRoleIds(),
+        familyRoleIds: getRoleIds(member.guild.id),
         rankInfo
       })
     ],
@@ -410,10 +724,12 @@ function formatRankResult(userId, result) {
 }
 
 async function enforceBlacklist(member) {
-  const entry = storage.getBlacklistEntry(member.id);
+  const guildStorage = getGuildStorage(member.guild.id);
+  const entry = guildStorage.getBlacklistEntry(member.id);
   if (!entry) return false;
 
   const reason = copy.security.blacklistBanReason(entry.reason);
+  await sendBlacklistDm(member.user, member.guild, entry.reason).catch(() => {});
   const banned = await member.ban({ reason }).then(() => true).catch(() => false);
   if (banned) {
     await sendSecurityLog(member.guild, copy.security.blacklistAdded(member.id, entry.reason));
@@ -427,117 +743,141 @@ async function enforceBlacklist(member) {
   return kicked;
 }
 
-const applicationsService = createApplicationsService({
-  storage,
-  fetchTextChannel,
-  applicationsChannelId: APPLICATIONS_CHANNEL_ID,
-  applicationDefaultRole: APPLICATION_DEFAULT_ROLE,
-  logChannelId: LOG_CHANNEL_ID,
-  client,
-  embeds,
-  sendAcceptLog
-});
-
-let panelUpdateInProgress = false;
-let pendingPanelUpdate = false;
-let lastPanelUpdate = 0;
-let autoRankSyncInProgress = false;
+const panelUpdateStates = new Map();
+const autoRankSyncInProgress = new Set();
 const voiceSessions = new Map();
+
+function getPanelUpdateState(guildId) {
+  if (!panelUpdateStates.has(guildId)) {
+    panelUpdateStates.set(guildId, {
+      inProgress: false,
+      pending: false,
+      lastUpdate: 0
+    });
+  }
+
+  return panelUpdateStates.get(guildId);
+}
 
 function startVoiceSession(member) {
   if (!member?.id || !member.voice?.channelId || member.user?.bot) return;
-  if (!voiceSessions.has(member.id)) {
-    voiceSessions.set(member.id, Date.now());
+  const key = memberSessionKey(member.guild.id, member.id);
+  if (!voiceSessions.has(key)) {
+    voiceSessions.set(key, Date.now());
   }
 }
 
 function stopVoiceSession(member) {
   if (!member?.id) return 0;
-  const startedAt = voiceSessions.get(member.id);
+  const key = memberSessionKey(member.guild.id, member.id);
+  const startedAt = voiceSessions.get(key);
   if (!startedAt) return 0;
 
-  voiceSessions.delete(member.id);
+  voiceSessions.delete(key);
   const elapsedMs = Date.now() - startedAt;
   const minutes = Math.floor(elapsedMs / 60000);
   if (minutes <= 0) return 0;
 
-  return storage.addVoiceMinutes(member.id, minutes);
+  return getGuildStorage(member.guild.id).addVoiceMinutes(member.id, minutes);
 }
 
 function flushVoiceSessions() {
   for (const guild of client.guilds.cache.values()) {
     for (const member of guild.members.cache.values()) {
-      if (voiceSessions.has(member.id)) {
+      if (voiceSessions.has(memberSessionKey(guild.id, member.id))) {
         stopVoiceSession(member);
       }
     }
   }
 }
 
-async function doPanelUpdate(force = false) {
-  if (panelUpdateInProgress) {
-    pendingPanelUpdate = true;
+async function doPanelUpdate(guildId, force = false) {
+  const state = getPanelUpdateState(guildId);
+  if (state.inProgress) {
+    state.pending = true;
     return;
   }
 
   const now = Date.now();
-  if (!force && now - lastPanelUpdate < 15000) return;
+  if (!force && now - state.lastUpdate < 15000) return;
 
-  panelUpdateInProgress = true;
+  state.inProgress = true;
   try {
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
 
-    const channel = await fetchTextChannel(guild, CHANNEL_ID);
+    const settings = resolveGuildSettings(guild.id);
+    const guildStorage = getGuildStorage(guild.id);
+    const channel = await fetchTextChannel(guild, settings.channels.panel);
     if (!channel) return;
 
     const familyEmbeds = await embeds.buildFamilyEmbeds(guild, {
-      roles: ROLES,
-      familyTitle: FAMILY_TITLE,
+      roles: settings.roles,
+      familyTitle: settings.familyTitle,
       updateIntervalMs: UPDATE_INTERVAL_MS,
-      activityScore: storage.activityScore
+      activityScore: guildStorage.activityScore
     });
 
-    const panelMessageId = storage.getPanelMessageId(MESSAGE_ID);
+    const fixedMessageId = guild.id === GUILD_ID ? MESSAGE_ID : '';
+    const panelMessageId = storage.getGuildPanelMessageId(guild.id, fixedMessageId);
     if (panelMessageId) {
       try {
         const message = await channel.messages.fetch(panelMessageId);
         await message.edit({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
       } catch {
         const message = await channel.send({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
-        storage.setPanelMessageId(message.id, MESSAGE_ID);
+        storage.setGuildPanelMessageId(guild.id, message.id, fixedMessageId);
         console.log('Скопируй MESSAGE_ID:', message.id);
       }
     } else {
       const message = await channel.send({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
-      storage.setPanelMessageId(message.id, MESSAGE_ID);
+      storage.setGuildPanelMessageId(guild.id, message.id, fixedMessageId);
       console.log('Скопируй MESSAGE_ID:', message.id);
     }
 
-    lastPanelUpdate = Date.now();
+    state.lastUpdate = Date.now();
   } catch (error) {
     console.error('Ошибка обновления панели:', error);
   } finally {
-    panelUpdateInProgress = false;
-    if (pendingPanelUpdate) {
-      pendingPanelUpdate = false;
-      setTimeout(() => doPanelUpdate(false), 3000);
+    state.inProgress = false;
+    if (state.pending) {
+      state.pending = false;
+      setTimeout(() => doPanelUpdate(guildId, false), 3000);
     }
   }
 }
 
-async function syncAutoRanks(reason = 'interval') {
-  if (!AUTO_RANKS.enabled || !isPremiumGuild(GUILD_ID) || autoRankSyncInProgress) return;
+async function doPanelUpdateAll(force = false) {
+  for (const guild of client.guilds.cache.values()) {
+    await doPanelUpdate(guild.id, force);
+  }
+}
 
-  autoRankSyncInProgress = true;
+async function syncAutoRanks(guildId, reason = 'interval') {
+  if (!AUTO_RANKS.enabled || !isPremiumGuild(guildId) || autoRankSyncInProgress.has(guildId)) return;
+
+  autoRankSyncInProgress.add(guildId);
   try {
-    const guild = client.guilds.cache.get(GUILD_ID);
+    const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
 
+    const rankService = getRankService(guild.id);
     const result = await rankService.syncAutoRanks(guild);
     if (result.changes.length) {
       console.log(`[auto-ranks:${reason}] ${result.changes.length} change(s)`);
-      await doPanelUpdate(false);
+      for (const change of result.changes) {
+        const member = guild.members.cache.get(change.memberId) || (await guild.members.fetch(change.memberId).catch(() => null));
+        if (member) {
+          await sendRankDm(guild, member, {
+            ok: true,
+            code: 'auto_applied',
+            fromRole: change.fromRole,
+            toRole: change.toRole,
+            score: change.score
+          }).catch(() => {});
+        }
+      }
+      await doPanelUpdate(guild.id, false);
     }
 
     for (const failure of result.failures) {
@@ -546,8 +886,133 @@ async function syncAutoRanks(reason = 'interval') {
   } catch (error) {
     console.error('Ошибка авто-рангов:', error);
   } finally {
-    autoRankSyncInProgress = false;
+    autoRankSyncInProgress.delete(guildId);
   }
+}
+
+async function syncAutoRanksAll(reason = 'interval') {
+  for (const guild of client.guilds.cache.values()) {
+    await syncAutoRanks(guild.id, reason);
+  }
+}
+
+function buildMaintenanceEmbed({ title, description, color, fieldName, lines }) {
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
+    .setDescription(description)
+    .setFooter({ text: 'BRHD • Phoenix • Maintenance' })
+    .setTimestamp();
+
+  if (lines?.length) {
+    embed.addFields({
+      name: fieldName,
+      value: lines.join('\n').slice(0, 1024)
+    });
+  }
+
+  return embed;
+}
+
+async function runRolelessCleanup(guildId, reason = 'interval') {
+  if (!isPremiumGuild(guildId)) return;
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return;
+
+  const record = database.getGuild(guildId);
+  const lastRunAt = record.maintenance?.lastRolelessCleanupAt ? Date.parse(record.maintenance.lastRolelessCleanupAt) : 0;
+  if (lastRunAt && Date.now() - lastRunAt < ROLELESS_CLEANUP_INTERVAL_MS) {
+    return;
+  }
+
+  await guild.members.fetch().catch(() => {});
+
+  const kicked = [];
+  const failed = [];
+
+  for (const member of guild.members.cache.values()) {
+    if (member.user?.bot) continue;
+    if (member.id === guild.ownerId) continue;
+    if (hasPermission(member, PermissionFlagsBits.Administrator)) continue;
+
+    const nonEveryoneRoles = member.roles.cache.filter(role => role.id !== guild.id);
+    if (nonEveryoneRoles.size > 0) continue;
+
+    const ok = await member.kick('Еженедельная очистка участников без ролей').then(() => true).catch(() => false);
+    if (ok) {
+      kicked.push(member.user.username);
+    } else {
+      failed.push(`${member.user.username} (\`${member.id}\`)`);
+    }
+  }
+
+  database.updateGuildMaintenance(guildId, { lastRolelessCleanupAt: new Date().toISOString() });
+
+  const { channels } = resolveGuildSettings(guildId);
+  const logChannel = await fetchTextChannel(guild, channels.logs);
+  if (!logChannel) return;
+
+  await logChannel.send({
+    embeds: [
+      buildMaintenanceEmbed({
+        title: 'Еженедельная очистка без ролей',
+        description: [`Режим: ${reason}`, `Кикнуто: ${kicked.length}`, `Ошибок: ${failed.length}`].join('\n'),
+        color: 0xe11d48,
+        fieldName: 'Отчёт',
+        lines: [...kicked.slice(0, 15), ...failed.slice(0, 10)].length ? [...kicked.slice(0, 15), ...failed.slice(0, 10)] : ['Никого не пришлось кикать.']
+      })
+    ]
+  }).catch(() => {});
+}
+
+async function runAfkWarnings(guildId) {
+  if (!isPremiumGuild(guildId)) return;
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return;
+
+  await guild.members.fetch().catch(() => {});
+  const guildStorage = getGuildStorage(guildId);
+  const warned = [];
+
+  for (const member of guild.members.cache.values()) {
+    if (member.user?.bot || !hasFamilyRole(member)) continue;
+
+    const memberData = guildStorage.ensureMember(member.id);
+    const inactiveMs = Date.now() - Number(memberData.lastSeenAt || 0);
+
+    if (inactiveMs < AFK_WARNING_THRESHOLD_MS) {
+      guildStorage.clearAfkWarningSent(member.id);
+      continue;
+    }
+
+    if (memberData.afkWarningSentAt) {
+      continue;
+    }
+
+    await sendAfkWarningDm(member).catch(() => {});
+    guildStorage.markAfkWarningSent(member.id);
+    warned.push(`<@${member.id}>`);
+  }
+
+  if (!warned.length) return;
+
+  const { channels } = resolveGuildSettings(guildId);
+  const logChannel = await fetchTextChannel(guild, channels.logs);
+  if (!logChannel) return;
+
+  await logChannel.send({
+    embeds: [
+      buildMaintenanceEmbed({
+        title: 'AFK-предупреждения',
+        description: `Отправлены предупреждения за неактивность 3+ дня: ${warned.length}`,
+        color: 0xf59e0b,
+        fieldName: 'Участники',
+        lines: warned
+      })
+    ]
+  }).catch(() => {});
 }
 
 client.on('clientReady', async () => {
@@ -567,6 +1032,65 @@ client.on('clientReady', async () => {
         console.error(`Ошибка инициализации guild ${guildData.id}:`, error);
       }
     }
+
+    for (const guild of client.guilds.cache.values()) {
+      await guild.roles.fetch().catch(error => {
+        console.error(`Не удалось получить роли guild ${guild.id}:`, error);
+      });
+
+      await guild.members.fetch().catch(error => {
+        console.error(`Не удалось получить участников guild ${guild.id}:`, error);
+      });
+
+      for (const member of guild.members.cache.values()) {
+        if (member.voice?.channelId) {
+          startVoiceSession(member);
+        }
+      }
+
+      await syncAutoRanks(guild.id, 'startup').catch(error => {
+        console.error(`Ошибка стартовой синхронизации авто-рангов ${guild.id}:`, error);
+      });
+
+      await doPanelUpdate(guild.id, true).catch(error => {
+        console.error(`Ошибка стартового обновления панели ${guild.id}:`, error);
+      });
+
+      await runRolelessCleanup(guild.id, 'startup').catch(error => {
+        console.error(`Ошибка стартовой чистки ${guild.id}:`, error);
+      });
+
+      await runAfkWarnings(guild.id).catch(error => {
+        console.error(`Ошибка AFK-проверки ${guild.id}:`, error);
+      });
+    }
+
+    setInterval(() => {
+      doPanelUpdateAll(false).catch(error => {
+        console.error('Ошибка interval обновления панели:', error);
+      });
+    }, UPDATE_INTERVAL_MS);
+
+    if (AUTO_RANKS.enabled) {
+      setInterval(() => {
+        syncAutoRanksAll('interval').catch(error => {
+          console.error('Ошибка interval авто-рангов:', error);
+        });
+      }, AUTO_RANKS.intervalMs);
+    }
+
+    setInterval(() => {
+      for (const guild of client.guilds.cache.values()) {
+        runRolelessCleanup(guild.id, 'interval').catch(error => {
+          console.error(`Ошибка interval очистки ${guild.id}:`, error);
+        });
+        runAfkWarnings(guild.id).catch(error => {
+          console.error(`Ошибка interval AFK-проверки ${guild.id}:`, error);
+        });
+      }
+    }, AFK_WARNING_CHECK_INTERVAL_MS);
+
+    return;
 
     const guild = await client.guilds.fetch(GUILD_ID).catch(error => {
       console.error(`Не удалось получить основной guild ${GUILD_ID}:`, error);
@@ -620,7 +1144,7 @@ client.on('clientReady', async () => {
 client.on('messageCreate', async message => {
   if (!message.guild || message.author.bot || !message.member) return;
 
-  if (LEAK_GUARD.enabled && containsDiscordInvite(message.content) && !canBypassLeakGuard(message.member)) {
+  if (isPremiumGuild(message.guild.id) && LEAK_GUARD.enabled && containsDiscordInvite(message.content) && !canBypassLeakGuard(message.member)) {
     await message.delete().catch(() => {});
     const notice = await message.channel.send({ content: copy.security.inviteGuardNotice(message.author.id) }).catch(() => null);
     if (notice) {
@@ -631,13 +1155,13 @@ client.on('messageCreate', async message => {
   }
 
   if (!hasFamilyRole(message.member)) return;
-  storage.trackMessage(message.member.id);
+  getGuildStorage(message.guild.id).trackMessage(message.member.id);
 });
 
 client.on('presenceUpdate', (_, presence) => {
   const member = presence?.member;
   if (!member || !hasFamilyRole(member)) return;
-  storage.trackPresence(member.id);
+  getGuildStorage(member.guild.id).trackPresence(member.id);
 });
 
 client.on('voiceStateUpdate', (oldState, newState) => {
@@ -674,11 +1198,11 @@ client.on('guildMemberAdd', async member => {
 client.on('guildMemberUpdate', (oldMember, newMember) => {
   const before = hasFamilyRole(oldMember);
   const after = hasFamilyRole(newMember);
-  if (before !== after) setTimeout(() => doPanelUpdate(false), 2000);
+  if (before !== after) setTimeout(() => doPanelUpdate(newMember.guild.id, false), 2000);
 });
 
 client.on('channelDelete', async channel => {
-  if (!CHANNEL_GUARD.enabled || !channel?.guild) return;
+  if (!CHANNEL_GUARD.enabled || !channel?.guild || !isPremiumGuild(channel.guild.id)) return;
 
   try {
     const executor = await fetchDeletedChannelExecutor(channel.guild, channel.id);
@@ -729,84 +1253,171 @@ process.on('uncaughtException', error => {
 client.on('interactionCreate', async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
+      const guildId = interaction.guild.id;
+      const guildStorage = getGuildStorage(guildId);
+      const applicationsService = getApplicationsService(guildId);
+      const rankService = getRankService(guildId);
+
       if (interaction.commandName === 'family') {
-        return interaction.reply({
+        return interaction.reply(ephemeral({
           embeds: [embeds.buildFamilyMenuEmbed()],
-          components: embeds.panelButtons(),
-          ephemeral: true
-        });
+          components: embeds.panelButtons()
+        }));
       }
 
       if (interaction.commandName === 'apply') {
         const secondsLeft = applicationsService.getCooldownSecondsLeft(interaction.user.id, APPLICATION_COOLDOWN_MS);
         if (secondsLeft > 0) {
-          return interaction.reply({ content: copy.common.cooldown(secondsLeft), ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.cooldown(secondsLeft) }));
         }
 
         return interaction.showModal(embeds.buildApplyModal());
       }
 
       if (interaction.commandName === 'applypanel') {
+        if (!canApplications(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
         return applicationsService.sendApplyPanel(interaction);
       }
 
       if (interaction.commandName === 'applications') {
-        return interaction.reply({
-          embeds: [embeds.buildApplicationsListEmbed(storage.listRecentApplications(10))],
-          ephemeral: true
-        });
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildApplicationsListEmbed(guildStorage.listRecentApplications(10))]
+        }));
       }
 
       if (interaction.commandName === 'setup') {
         if (!canDebugConfig(interaction)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const record = database.markSetupComplete(interaction.guild.id, buildGuildSettingsSnapshot(interaction.guild));
-        return interaction.reply({
+        return interaction.reply(ephemeral({
           content: copy.admin.setupSaved,
-          embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })],
-          ephemeral: true
-        });
+          embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+        }));
       }
 
       if (interaction.commandName === 'adminpanel') {
         if (!canDebugConfig(interaction)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const record = getGuildRecord(interaction.guild);
-        return interaction.reply({
-          embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })],
-          ephemeral: true
-        });
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+        }));
       }
 
       if (interaction.commandName === 'help') {
         const catalog = getHelpCatalog(interaction.guild.id, interaction.user.id);
-        return interaction.reply({
-          embeds: [embeds.buildHelpEmbed(catalog)],
-          ephemeral: true
-        });
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildHelpEmbed(catalog)]
+        }));
+      }
+
+      if (interaction.commandName === 'setrole') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const key = interaction.options.getString(copy.commands.roleTargetOptionName, true);
+        const role = interaction.options.getRole(copy.commands.roleValueOptionName, true);
+        database.updateGuildSettings(guildId, { roles: { [key]: role.id } });
+        const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
+        await doPanelUpdate(guildId, true);
+        return interaction.reply(
+          ephemeral({
+            content: `Роль **${key}** сохранена: <@&${role.id}>`,
+            embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+          })
+        );
+      }
+
+      if (interaction.commandName === 'setchannel') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const key = interaction.options.getString(copy.commands.channelTargetOptionName, true);
+        const channel = interaction.options.getChannel(copy.commands.channelValueOptionName, true);
+        database.updateGuildSettings(guildId, { channels: { [key]: channel.id } });
+        const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
+        if (key === 'panel') {
+          await doPanelUpdate(guildId, true);
+        }
+        return interaction.reply(
+          ephemeral({
+            content: `Канал **${key}** сохранён: <#${channel.id}>`,
+            embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+          })
+        );
+      }
+
+      if (interaction.commandName === 'setfamilytitle') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const familyTitle = interaction.options.getString(copy.commands.familyTitleOptionName, true).trim().slice(0, 80);
+        database.updateGuildSettings(guildId, { familyTitle });
+        const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
+        await doPanelUpdate(guildId, true);
+        return interaction.reply(
+          ephemeral({
+            content: `Название семьи обновлено: **${familyTitle}**`,
+            embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+          })
+        );
       }
 
       if (interaction.commandName === 'leaderboard') {
-        return interaction.reply({
-          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15))],
-          ephemeral: true
-        });
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15))]
+        }));
       }
 
       if (interaction.commandName === 'voiceactivity') {
-        return interaction.reply({
-          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15))],
-          ephemeral: true
-        });
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15))]
+        }));
+      }
+
+      if (interaction.commandName === 'activityreport') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const user = interaction.options.getUser(copy.commands.userOptionName);
+        if (user) {
+          const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+          if (!member) {
+            return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+          }
+
+          return interaction.reply(ephemeral({ embeds: [buildActivityReportEmbed(interaction.guild, member)] }));
+        }
+
+        return interaction.reply(ephemeral({ embeds: [buildActivityReportEmbed(interaction.guild)] }));
       }
 
       if (interaction.commandName === 'subscription') {
         if (!isOwner(interaction.user.id)) {
-          return interaction.reply({ content: copy.admin.noOwnerAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.admin.noOwnerAccess }));
         }
 
         const plan = interaction.options.getString(copy.commands.planOptionName, true);
@@ -815,22 +1426,25 @@ client.on('interactionCreate', async interaction => {
           assignedBy: interaction.user.id
         });
 
-        return interaction.reply({
+        return interaction.reply(ephemeral({
           content: copy.admin.subscriptionUpdated(plan),
-          embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })],
-          ephemeral: true
-        });
+          embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+        }));
       }
 
       if (interaction.commandName === 'blacklistadd') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
         if (!canUseSecurity(interaction.member)) {
-          return interaction.reply({ content: copy.security.noSecurityAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.security.noSecurityAccess }));
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
         const reason = interaction.options.getString(copy.commands.reasonOptionName, true);
-        const existed = storage.isBlacklisted(user.id);
-        storage.addBlacklistEntry({
+        const existed = guildStorage.isBlacklisted(user.id);
+        guildStorage.addBlacklistEntry({
           userId: user.id,
           moderatorId: interaction.user.id,
           reason
@@ -840,124 +1454,136 @@ client.on('interactionCreate', async interaction => {
         if (member) {
           await enforceBlacklist(member);
         } else {
+          await sendBlacklistDm(user, interaction.guild, reason).catch(() => {});
           await interaction.guild.bans.create(user.id, { reason: copy.security.blacklistBanReason(reason) }).catch(() => {});
         }
 
-        return interaction.reply({
-          content: existed ? copy.security.blacklistUpdated(user.id, reason) : copy.security.blacklistAdded(user.id, reason),
-          ephemeral: true
-        });
+        return interaction.reply(
+          ephemeral({
+            content: existed ? copy.security.blacklistUpdated(user.id, reason) : copy.security.blacklistAdded(user.id, reason)
+          })
+        );
       }
 
       if (interaction.commandName === 'blacklistremove') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
         if (!canUseSecurity(interaction.member)) {
-          return interaction.reply({ content: copy.security.noSecurityAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.security.noSecurityAccess }));
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
-        const removed = storage.removeBlacklistEntry(user.id);
+        const removed = guildStorage.removeBlacklistEntry(user.id);
         if (!removed) {
-          return interaction.reply({ content: copy.security.blacklistNotFound, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.security.blacklistNotFound }));
         }
 
         await interaction.guild.bans.remove(user.id).catch(() => {});
-        return interaction.reply({ content: copy.security.blacklistRemoved(user.id), ephemeral: true });
+        return interaction.reply(ephemeral({ content: copy.security.blacklistRemoved(user.id) }));
       }
 
       if (interaction.commandName === 'blacklistlist') {
-        if (!canUseSecurity(interaction.member)) {
-          return interaction.reply({ content: copy.security.noSecurityAccess, ephemeral: true });
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
         }
 
-        return interaction.reply({
-          embeds: [embeds.buildBlacklistEmbed(storage.listBlacklist().slice(0, 25))],
-          ephemeral: true
-        });
+        if (!canUseSecurity(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.security.noSecurityAccess }));
+        }
+
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildBlacklistEmbed(guildStorage.listBlacklist().slice(0, 25))]
+        }));
       }
 
       if (interaction.commandName === 'banlist') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
         if (!canUseSecurity(interaction.member)) {
-          return interaction.reply({ content: copy.security.noSecurityAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.security.noSecurityAccess }));
         }
 
         const bans = await interaction.guild.bans.fetch().catch(() => null);
         const entries = bans ? [...bans.values()].slice(0, 25) : [];
 
-        return interaction.reply({
-          embeds: [embeds.buildBanListEmbed(entries)],
-          ephemeral: true
-        });
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildBanListEmbed(entries)]
+        }));
       }
 
       if (interaction.commandName === 'unbanid') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
         if (!canUseSecurity(interaction.member)) {
-          return interaction.reply({ content: copy.security.noSecurityAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.security.noSecurityAccess }));
         }
 
         const userId = interaction.options.getString(copy.commands.userIdOptionName, true).trim();
         if (!/^\d{5,25}$/.test(userId)) {
-          return interaction.reply({ content: copy.security.unbanFailed(userId), ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.security.unbanFailed(userId) }));
         }
 
-        const removedFromBlacklist = storage.removeBlacklistEntry(userId);
+        const removedFromBlacklist = guildStorage.removeBlacklistEntry(userId);
         const unbanned = await interaction.guild.bans.remove(userId).then(() => true).catch(() => false);
 
         if (!unbanned && !removedFromBlacklist) {
-          return interaction.reply({ content: copy.security.unbanFailed(userId), ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.security.unbanFailed(userId) }));
         }
 
-        return interaction.reply({ content: copy.security.unbanSuccess(userId), ephemeral: true });
+        return interaction.reply(ephemeral({ content: copy.security.unbanSuccess(userId) }));
       }
 
       if (interaction.commandName === 'debugconfig') {
         if (!canDebugConfig(interaction)) {
-          return interaction.reply({ content: copy.common.noDebugAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noDebugAccess }));
         }
 
         const liveConfig = createConfig(process.env);
         const liveDiagnostics = validateConfig(liveConfig);
 
-        return interaction.reply({
+        return interaction.reply(ephemeral({
           embeds: [
             embeds.buildDebugConfigEmbed({
               summaryLines: summarizeConfig(liveConfig),
               validation: liveDiagnostics
             })
-          ],
-          ephemeral: true
-        });
+          ]
+        }));
       }
 
       if (interaction.commandName === 'testaccept') {
-        if (!LOG_CHANNEL_ID) {
-          return interaction.reply({ content: copy.logs.missingLogChannel, ephemeral: true });
+        if (!resolveGuildSettings(guildId).channels.logs) {
+          return interaction.reply(ephemeral({ content: copy.logs.missingLogChannel }));
         }
 
         await sendAcceptLog(interaction.guild, interaction.member, interaction.user);
-        return interaction.reply({ content: copy.logs.testAcceptSent, ephemeral: true });
+        return interaction.reply(ephemeral({ content: copy.logs.testAcceptSent }));
       }
 
       if (interaction.commandName === 'profile') {
         const user = interaction.options.getUser(copy.commands.userOptionName) || interaction.user;
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
         if (!member) {
-          return interaction.reply({ content: copy.profile.notFound, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
         }
 
-        return interaction.reply({
-          ...buildProfilePayload(member, canManageRanks(interaction.member)),
-          ephemeral: true
-        });
+        return interaction.reply(ephemeral(buildProfilePayload(member, canManageRanks(interaction.member))));
       }
 
       if (interaction.commandName === 'warn') {
         if (!canDiscipline(interaction.member)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
         const reason = interaction.options.getString(copy.commands.reasonOptionName, true);
-        storage.addWarn({ userId: user.id, moderatorId: interaction.user.id, reason });
+        guildStorage.addWarn({ userId: user.id, moderatorId: interaction.user.id, reason });
 
         await sendDisciplineLog(
           interaction.guild,
@@ -967,24 +1593,28 @@ client.on('interactionCreate', async interaction => {
             reason
           })
         );
+        await sendDisciplineDm('warn', interaction.guild, user, interaction.user, reason).catch(() => {});
 
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
         if (member && AUTO_RANKS.enabled && isPremiumGuild(interaction.guild.id)) {
-          await rankService.applyAutoRank(member).catch(() => {});
-          await doPanelUpdate(false);
+          const autoRankResult = await rankService.applyAutoRank(member).catch(() => null);
+          if (autoRankResult?.ok) {
+            await sendRankDm(interaction.guild, member, autoRankResult).catch(() => {});
+          }
+          await doPanelUpdate(guildId, false);
         }
 
-        return interaction.reply({ content: copy.discipline.warnReply(user.id), ephemeral: true });
+        return interaction.reply(ephemeral({ content: copy.discipline.warnReply(user.id) }));
       }
 
       if (interaction.commandName === 'commend') {
         if (!canDiscipline(interaction.member)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
         const reason = interaction.options.getString(copy.commands.reasonOptionName, true);
-        storage.addCommend({ userId: user.id, moderatorId: interaction.user.id, reason });
+        guildStorage.addCommend({ userId: user.id, moderatorId: interaction.user.id, reason });
 
         await sendDisciplineLog(
           interaction.guild,
@@ -994,23 +1624,27 @@ client.on('interactionCreate', async interaction => {
             reason
           })
         );
+        await sendDisciplineDm('commend', interaction.guild, user, interaction.user, reason).catch(() => {});
 
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
         if (member && AUTO_RANKS.enabled && isPremiumGuild(interaction.guild.id)) {
-          await rankService.applyAutoRank(member).catch(() => {});
-          await doPanelUpdate(false);
+          const autoRankResult = await rankService.applyAutoRank(member).catch(() => null);
+          if (autoRankResult?.ok) {
+            await sendRankDm(interaction.guild, member, autoRankResult).catch(() => {});
+          }
+          await doPanelUpdate(guildId, false);
         }
 
-        return interaction.reply({ content: copy.discipline.commendReply(user.id), ephemeral: true });
+        return interaction.reply(ephemeral({ content: copy.discipline.commendReply(user.id) }));
       }
 
       if (interaction.commandName === 'ai') {
         if (!isPremiumGuild(interaction.guild.id)) {
-          return interaction.reply({ content: copy.admin.premiumOnly, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
         }
 
         const query = interaction.options.getString(copy.commands.queryOptionName, true);
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
           const answer = await aiService.aiText(copy.ai.assistantPrompt, query);
@@ -1022,10 +1656,15 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.isButton()) {
+      const guildId = interaction.guild.id;
+      const guildStorage = getGuildStorage(guildId);
+      const applicationsService = getApplicationsService(guildId);
+      const rankService = getRankService(guildId);
+
       if (interaction.customId === 'family_refresh') {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        await syncAutoRanks('manual-refresh');
-        await doPanelUpdate(true);
+        await syncAutoRanks(guildId, 'manual-refresh');
+        await doPanelUpdate(guildId, true);
         await interaction.editReply({ content: copy.family.panelUpdated });
         setTimeout(() => {
           interaction.deleteReply().catch(() => {});
@@ -1036,7 +1675,7 @@ client.on('interactionCreate', async interaction => {
       if (interaction.customId === 'family_apply') {
         const secondsLeft = applicationsService.getCooldownSecondsLeft(interaction.user.id, APPLICATION_COOLDOWN_MS);
         if (secondsLeft > 0) {
-          return interaction.reply({ content: copy.common.cooldown(secondsLeft), ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.cooldown(secondsLeft) }));
         }
 
         return interaction.showModal(embeds.buildApplyModal());
@@ -1044,13 +1683,13 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.customId.startsWith('rank_')) {
         if (!canManageRanks(interaction.member)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const [action, userId] = interaction.customId.split(':');
         const member = await interaction.guild.members.fetch(userId).catch(() => null);
         if (!member) {
-          return interaction.reply({ content: copy.profile.notFound, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
         }
 
         let result;
@@ -1061,48 +1700,49 @@ client.on('interactionCreate', async interaction => {
             result = await rankService.demote(member);
           } else {
             if (!isPremiumGuild(interaction.guild.id)) {
-              return interaction.reply({ content: copy.admin.premiumOnly, ephemeral: true });
+              return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
             }
             result = await rankService.applyAutoRank(member);
           }
         } catch (error) {
           console.error('Ошибка изменения ранга:', error);
-          return interaction.reply({ content: copy.ranks.permissionFailed, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.ranks.permissionFailed }));
         }
 
         const refreshedMember = await refreshMember(member);
+        await sendRankDm(interaction.guild, refreshedMember, result).catch(() => {});
         await interaction.update(buildProfilePayload(refreshedMember, true, formatRankResult(userId, result)));
-        await doPanelUpdate(false);
+        await doPanelUpdate(guildId, false);
         return;
       }
 
       if (interaction.customId.startsWith('app_accept:')) {
         if (!canApplications(interaction.member)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const [, applicationId, userId] = interaction.customId.split(':');
         const response = await applicationsService.accept(interaction, applicationId, userId);
-        await doPanelUpdate(false);
+        await doPanelUpdate(guildId, false);
         return response;
       }
 
       if (interaction.customId.startsWith('app_ai:')) {
         if (!canApplications(interaction.member)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         if (!isPremiumGuild(interaction.guild.id)) {
-          return interaction.reply({ content: copy.admin.premiumOnly, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
         }
 
         const [, applicationId] = interaction.customId.split(':');
-        const application = storage.findApplication(applicationId);
+        const application = guildStorage.findApplication(applicationId);
         if (!application) {
-          return interaction.reply({ content: copy.applications.notFound, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.applications.notFound }));
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
           const analysis = await aiService.analyzeApplication(application);
           const embed = new EmbedBuilder()
@@ -1120,7 +1760,7 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.customId.startsWith('app_review:')) {
         if (!canApplications(interaction.member)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const [, applicationId, userId] = interaction.customId.split(':');
@@ -1129,7 +1769,7 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.customId.startsWith('app_reject:')) {
         if (!canApplications(interaction.member)) {
-          return interaction.reply({ content: copy.common.noAccess, ephemeral: true });
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
         }
 
         const [, applicationId, userId] = interaction.customId.split(':');
@@ -1138,12 +1778,12 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.isModalSubmit() && interaction.customId === 'family_apply_modal') {
-      return applicationsService.submitApplication(interaction);
+      return getApplicationsService(interaction.guild.id).submitApplication(interaction);
     }
   } catch (error) {
     console.error('Ошибка interactionCreate:', error);
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: copy.common.unknownError, ephemeral: true }).catch(() => {});
+      await interaction.reply(ephemeral({ content: copy.common.unknownError })).catch(() => {});
     }
   }
 });

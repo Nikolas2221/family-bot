@@ -73,12 +73,14 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
         warns: 0,
         commends: 0,
         points: 0,
-        voiceMinutes: 0
+        voiceMinutes: 0,
+        afkWarningSentAt: ''
       };
     }
 
     store.members[key].points = clampPoints(store.members[key].points);
     store.members[key].voiceMinutes = Math.max(0, Number(store.members[key].voiceMinutes) || 0);
+    store.members[key].afkWarningSentAt = store.members[key].afkWarningSentAt || '';
     return store.members[key];
   }
 
@@ -90,13 +92,21 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
         warns: 0,
         commends: 0,
         points: 0,
-        voiceMinutes: 0
+        voiceMinutes: 0,
+        afkWarningSentAt: ''
       };
     }
 
     store.members[memberId].points = clampPoints(store.members[memberId].points);
     store.members[memberId].voiceMinutes = Math.max(0, Number(store.members[memberId].voiceMinutes) || 0);
+    store.members[memberId].afkWarningSentAt = store.members[memberId].afkWarningSentAt || '';
     return store.members[memberId];
+  }
+
+  function clearAfkWarning(member) {
+    if (member.afkWarningSentAt) {
+      member.afkWarningSentAt = '';
+    }
   }
 
   function guildActivityScore(guildId, memberId) {
@@ -178,6 +188,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     const member = ensureMember(memberId);
     member.messageCount += 1;
     member.lastSeenAt = Date.now();
+    clearAfkWarning(member);
     save();
   }
 
@@ -185,18 +196,21 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     const member = ensureGuildMember(guildId, memberId);
     member.messageCount += 1;
     member.lastSeenAt = Date.now();
+    clearAfkWarning(member);
     save();
   }
 
   function trackPresence(memberId) {
     const member = ensureMember(memberId);
     member.lastSeenAt = Date.now();
+    clearAfkWarning(member);
     save();
   }
 
   function trackGuildPresence(guildId, memberId) {
     const member = ensureGuildMember(guildId, memberId);
     member.lastSeenAt = Date.now();
+    clearAfkWarning(member);
     save();
   }
 
@@ -243,6 +257,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     const member = ensureMember(memberId);
     member.voiceMinutes = (member.voiceMinutes || 0) + safeMinutes;
     member.lastSeenAt = Date.now();
+    clearAfkWarning(member);
     save();
     return safeMinutes;
   }
@@ -254,8 +269,27 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     const member = ensureGuildMember(guildId, memberId);
     member.voiceMinutes = (member.voiceMinutes || 0) + safeMinutes;
     member.lastSeenAt = Date.now();
+    clearAfkWarning(member);
     save();
     return safeMinutes;
+  }
+
+  function markGuildAfkWarningSent(guildId, memberId, value = new Date().toISOString()) {
+    const member = ensureGuildMember(guildId, memberId);
+    member.afkWarningSentAt = value;
+    save();
+    return member.afkWarningSentAt;
+  }
+
+  function clearGuildAfkWarningSent(guildId, memberId) {
+    const member = ensureGuildMember(guildId, memberId);
+    if (!member.afkWarningSentAt) {
+      return false;
+    }
+
+    member.afkWarningSentAt = '';
+    save();
+    return true;
   }
 
   function getCooldown(userId) {
@@ -448,6 +482,8 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     addGuildCommend,
     addVoiceMinutes,
     addGuildVoiceMinutes,
+    markGuildAfkWarningSent,
+    clearGuildAfkWarningSent,
     getCooldown,
     getGuildCooldown,
     setCooldown,

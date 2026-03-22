@@ -19,6 +19,9 @@ function normalizeGuildRecord(guildId, guild = {}) {
     setupCompletedAt: guild.setupCompletedAt || '',
     subscriptionAssignedBy: guild.subscriptionAssignedBy || '',
     subscriptionAssignedAt: guild.subscriptionAssignedAt || '',
+    maintenance: {
+      lastRolelessCleanupAt: guild.maintenance?.lastRolelessCleanupAt || ''
+    },
     settings: {
       familyTitle: guild.settings?.familyTitle || '',
       channels: {
@@ -107,6 +110,34 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
     return guild;
   }
 
+  function updateGuildSettings(guildId, patch) {
+    const guild = ensureGuild(guildId);
+    guild.settings = normalizeGuildRecord(guildId, {
+      settings: {
+        ...guild.settings,
+        ...patch,
+        channels: {
+          ...(guild.settings?.channels || {}),
+          ...(patch?.channels || {})
+        },
+        roles: {
+          ...(guild.settings?.roles || {}),
+          ...(patch?.roles || {})
+        },
+        access: {
+          ...(guild.settings?.access || {}),
+          ...(patch?.access || {})
+        },
+        features: {
+          ...(guild.settings?.features || {}),
+          ...(patch?.features || {})
+        }
+      }
+    }).settings;
+    save();
+    return guild;
+  }
+
   function markSetupComplete(guildId, snapshot) {
     const guild = ensureGuild(guildId, {
       guildName: snapshot.guildName,
@@ -118,6 +149,16 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
     guild.settings = normalizeGuildRecord(guildId, { settings: snapshot.settings }).settings;
     guild.setupCompleted = true;
     guild.setupCompletedAt = new Date().toISOString();
+    save();
+    return guild;
+  }
+
+  function updateGuildMaintenance(guildId, patch) {
+    const guild = ensureGuild(guildId);
+    guild.maintenance = {
+      ...(guild.maintenance || {}),
+      ...(patch || {})
+    };
     save();
     return guild;
   }
@@ -149,6 +190,8 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
     markSetupComplete,
     save,
     setGuildSettings,
+    updateGuildMaintenance,
+    updateGuildSettings,
     setSubscription
   };
 }

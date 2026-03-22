@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { ChannelType, SlashCommandBuilder } = require('discord.js');
 const copy = require('./copy');
 
 async function registerCommands(guild) {
@@ -10,8 +10,64 @@ async function registerCommands(guild) {
     new SlashCommandBuilder().setName('setup').setDescription(copy.commands.setupDescription),
     new SlashCommandBuilder().setName('adminpanel').setDescription(copy.commands.adminPanelDescription),
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
+    new SlashCommandBuilder()
+      .setName('setrole')
+      .setDescription(copy.commands.setRoleDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.roleTargetOptionName)
+          .setDescription(copy.commands.roleTargetDescription)
+          .setRequired(true)
+          .addChoices(
+            { name: copy.commands.roleTargetLeader, value: 'leader' },
+            { name: copy.commands.roleTargetDeputy, value: 'deputy' },
+            { name: copy.commands.roleTargetElder, value: 'elder' },
+            { name: copy.commands.roleTargetMember, value: 'member' },
+            { name: copy.commands.roleTargetNewbie, value: 'newbie' }
+          )
+      )
+      .addRoleOption(option =>
+        option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('setchannel')
+      .setDescription(copy.commands.setChannelDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.channelTargetOptionName)
+          .setDescription(copy.commands.channelTargetDescription)
+          .setRequired(true)
+          .addChoices(
+            { name: copy.commands.channelTargetPanel, value: 'panel' },
+            { name: copy.commands.channelTargetApplications, value: 'applications' },
+            { name: copy.commands.channelTargetLogs, value: 'logs' },
+            { name: copy.commands.channelTargetDiscipline, value: 'disciplineLogs' }
+          )
+      )
+      .addChannelOption(option =>
+        option
+          .setName(copy.commands.channelValueOptionName)
+          .setDescription(copy.commands.channelValueDescription)
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('setfamilytitle')
+      .setDescription(copy.commands.setFamilyTitleDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.familyTitleOptionName)
+          .setDescription(copy.commands.familyTitleOptionDescription)
+          .setRequired(true)
+      ),
     new SlashCommandBuilder().setName('leaderboard').setDescription(copy.commands.leaderboardDescription),
     new SlashCommandBuilder().setName('voiceactivity').setDescription(copy.commands.voiceActivityDescription),
+    new SlashCommandBuilder()
+      .setName('activityreport')
+      .setDescription(copy.commands.activityReportDescription)
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.profileUserDescription).setRequired(false)
+      ),
     new SlashCommandBuilder()
       .setName('subscription')
       .setDescription(copy.commands.subscriptionDescription)
