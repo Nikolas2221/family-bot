@@ -22,6 +22,7 @@ const copy = {
     setRoleDescription: 'Назначить семейную роль через Discord',
     setChannelDescription: 'Назначить канал бота через Discord',
     setFamilyTitleDescription: 'Изменить название семьи через Discord',
+    setArtDescription: 'Назначить баннер для карточек бота',
     blacklistAddDescription: 'Добавить пользователя в чёрный список',
     blacklistRemoveDescription: 'Убрать пользователя из чёрного списка',
     blacklistListDescription: 'Показать чёрный список',
@@ -49,7 +50,13 @@ const copy = {
     channelValueOptionName: 'значение',
     channelValueDescription: 'Какой текстовый канал использовать',
     familyTitleOptionName: 'название',
-    familyTitleOptionDescription: 'Новое название семьи'
+    familyTitleOptionDescription: 'Новое название семьи',
+    artTargetOptionName: 'блок',
+    artTargetDescription: 'Для какой карточки настроить баннер',
+    artUrlOptionName: 'url',
+    artUrlDescription: 'Ссылка на изображение или off для удаления',
+    artTargetFamily: 'Панель семьи',
+    artTargetApplications: 'Подача заявки'
   },
   roles: {
     leader: '🕴 Лидер',
@@ -316,6 +323,7 @@ const copy = {
     panelFieldFeatures: 'Функции',
     panelFieldChannels: 'Каналы',
     panelFieldRoles: 'Роли',
+    panelFieldVisuals: 'Баннеры',
     panelSetupDone: 'Настроен',
     panelSetupPending: 'Не настроен',
     panelFeatures(plan) {
@@ -347,6 +355,9 @@ const copy = {
     },
     roleLine(label, value) {
       return `${label}: ${value || 'не задана'}`;
+    },
+    visualLine(label, value) {
+      return `${label}: ${value || 'не задан'}`;
     },
     subscriptionUpdated(plan) {
       return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}.`;

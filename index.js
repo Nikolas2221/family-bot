@@ -94,6 +94,10 @@ function resolveGuildSettings(guildId) {
       discipline: settings.access?.discipline?.length ? settings.access.discipline : ACCESS_DISCIPLINE,
       ranks: settings.access?.ranks?.length ? settings.access.ranks : ACCESS_RANKS
     },
+    visuals: {
+      familyBanner: settings.visuals?.familyBanner || '',
+      applicationsBanner: settings.visuals?.applicationsBanner || ''
+    },
     applicationDefaultRole: settings.roles?.newbie || APPLICATION_DEFAULT_ROLE
   };
 }
@@ -230,6 +234,10 @@ function buildGuildSettingsSnapshot(guild) {
         applications: settings.access.applications,
         discipline: settings.access.discipline,
         ranks: settings.access.ranks
+      },
+      visuals: {
+        familyBanner: settings.visuals.familyBanner,
+        applicationsBanner: settings.visuals.applicationsBanner
       },
       features: {
         aiEnabled: AI_ENABLED,
@@ -393,6 +401,7 @@ function getHelpCatalog(guildId, userId) {
     { name: 'setrole', description: copy.commands.setRoleDescription },
     { name: 'setchannel', description: copy.commands.setChannelDescription },
     { name: 'setfamilytitle', description: copy.commands.setFamilyTitleDescription },
+    { name: 'setart', description: copy.commands.setArtDescription },
     { name: 'setup', description: copy.commands.setupDescription },
     { name: 'adminpanel', description: copy.commands.adminPanelDescription },
     { name: 'warn', description: copy.commands.warnDescription },
@@ -628,13 +637,13 @@ async function sendSecurityLog(guild, content) {
 }
 
 async function sendWelcomeInvite(member) {
-  const { channels, familyTitle } = resolveGuildSettings(member.guild.id);
+  const { channels, familyTitle, visuals } = resolveGuildSettings(member.guild.id);
   const channel = (await fetchTextChannel(member.guild, channels.applications)) || (await fetchTextChannel(member.guild, channels.panel));
   if (!channel) return;
 
   await channel.send({
     content: `<@${member.id}>`,
-    embeds: [embeds.buildWelcomeEmbed(member, familyTitle)],
+    embeds: [embeds.buildWelcomeEmbed(member, familyTitle, visuals.applicationsBanner)],
     components: embeds.buildApplicationsPanelButtons()
   }).catch(() => {});
 }
@@ -648,6 +657,7 @@ function getApplicationsService(guildId) {
     applicationsChannelId: settings.channels.applications,
     applicationDefaultRole: settings.applicationDefaultRole,
     logChannelId: settings.channels.logs,
+    applicationsBanner: settings.visuals.applicationsBanner,
     client,
     embeds,
     sendAcceptLog,
@@ -1322,8 +1332,9 @@ client.on('interactionCreate', async interaction => {
       const rankService = getRankService(guildId);
 
       if (interaction.commandName === 'family') {
+        const settings = resolveGuildSettings(guildId);
         return interaction.reply(ephemeral({
-          embeds: [embeds.buildFamilyMenuEmbed()],
+          embeds: [embeds.buildFamilyMenuEmbed({ imageUrl: settings.visuals.familyBanner })],
           components: embeds.panelButtons()
         }));
       }
@@ -1431,6 +1442,31 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply(
           ephemeral({
             content: `Название семьи обновлено: **${familyTitle}**`,
+            embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+          })
+        );
+      }
+
+      if (interaction.commandName === 'setart') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const key = interaction.options.getString(copy.commands.artTargetOptionName, true);
+        const rawValue = interaction.options.getString(copy.commands.artUrlOptionName, true).trim();
+        const clearValues = new Set(['off', 'none', 'clear', 'remove']);
+        const value = clearValues.has(rawValue.toLowerCase()) ? '' : rawValue;
+
+        if (value && !/^https?:\/\/\S+/i.test(value)) {
+          return interaction.reply(ephemeral({ content: 'Укажи прямую ссылку на изображение через http/https или напиши `off`.' }));
+        }
+
+        database.updateGuildSettings(guildId, { visuals: { [key]: value } });
+        const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
+        await doPanelUpdate(guildId, true);
+        return interaction.reply(
+          ephemeral({
+            content: value ? `Баннер **${key}** сохранён.` : `Баннер **${key}** отключён.`,
             embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
           })
         );

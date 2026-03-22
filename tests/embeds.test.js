@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 
 const { createConfig, summarizeConfig, validateConfig } = require('../config');
 const copy = require('../copy');
-const { buildDebugConfigEmbed, buildFamilyEmbeds, buildWelcomeEmbed } = require('../embeds');
+const { buildApplicationsPanelEmbed, buildDebugConfigEmbed, buildFamilyEmbeds, buildFamilyMenuEmbed, buildWelcomeEmbed } = require('../embeds');
 
 async function runTest(name, fn) {
   try {
@@ -155,10 +155,19 @@ async function testFamilyPanelDoesNotDuplicateMemberAcrossRoles() {
   assert.match(serialized, /Без ролей:\*\* 1/);
 }
 
+async function testMenuAndApplicationsEmbedsExposeConfiguredImages() {
+  const familyEmbed = buildFamilyMenuEmbed({ imageUrl: 'https://example.com/family-banner.png' }).toJSON();
+  const applicationsEmbed = buildApplicationsPanelEmbed({ imageUrl: 'https://example.com/apply-banner.png' }).toJSON();
+
+  assert.equal(familyEmbed.image.url, 'https://example.com/family-banner.png');
+  assert.equal(applicationsEmbed.image.url, 'https://example.com/apply-banner.png');
+}
+
 async function main() {
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
   await runTest('welcome embed shows join flow', testWelcomeEmbedShowsJoinFlow);
+  await runTest('menu and applications embeds expose configured images', testMenuAndApplicationsEmbedsExposeConfiguredImages);
   await runTest('family panel does not duplicate member across roles', testFamilyPanelDoesNotDuplicateMemberAcrossRoles);
   console.log('ALL EMBEDS TESTS PASSED');
 }

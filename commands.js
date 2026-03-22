@@ -60,6 +60,25 @@ async function registerCommands(guild) {
           .setDescription(copy.commands.familyTitleOptionDescription)
           .setRequired(true)
       ),
+    new SlashCommandBuilder()
+      .setName('setart')
+      .setDescription(copy.commands.setArtDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.artTargetOptionName)
+          .setDescription(copy.commands.artTargetDescription)
+          .setRequired(true)
+          .addChoices(
+            { name: copy.commands.artTargetFamily, value: 'familyBanner' },
+            { name: copy.commands.artTargetApplications, value: 'applicationsBanner' }
+          )
+      )
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.artUrlOptionName)
+          .setDescription(copy.commands.artUrlDescription)
+          .setRequired(true)
+      ),
     new SlashCommandBuilder().setName('leaderboard').setDescription(copy.commands.leaderboardDescription),
     new SlashCommandBuilder().setName('voiceactivity').setDescription(copy.commands.voiceActivityDescription),
     new SlashCommandBuilder()

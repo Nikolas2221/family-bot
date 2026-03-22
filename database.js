@@ -42,6 +42,10 @@ function normalizeGuildRecord(guildId, guild = {}) {
         discipline: [...(guild.settings?.access?.discipline || [])],
         ranks: [...(guild.settings?.access?.ranks || [])]
       },
+      visuals: {
+        familyBanner: guild.settings?.visuals?.familyBanner || '',
+        applicationsBanner: guild.settings?.visuals?.applicationsBanner || ''
+      },
       features: {
         aiEnabled: Boolean(guild.settings?.features?.aiEnabled),
         autoRanksEnabled: Boolean(guild.settings?.features?.autoRanksEnabled),
@@ -127,6 +131,10 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
         access: {
           ...(guild.settings?.access || {}),
           ...(patch?.access || {})
+        },
+        visuals: {
+          ...(guild.settings?.visuals || {}),
+          ...(patch?.visuals || {})
         },
         features: {
           ...(guild.settings?.features || {}),

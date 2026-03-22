@@ -11,6 +11,7 @@ function createApplicationsService({
   applicationsChannelId,
   applicationDefaultRole,
   logChannelId,
+  applicationsBanner,
   client,
   embeds,
   sendAcceptLog,
@@ -38,7 +39,7 @@ function createApplicationsService({
     }
 
     await channel.send({
-      embeds: [embeds.buildApplicationsPanelEmbed()],
+      embeds: [embeds.buildApplicationsPanelEmbed({ imageUrl: applicationsBanner })],
       components: embeds.buildApplicationsPanelButtons()
     });
 

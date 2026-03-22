@@ -32,6 +32,7 @@ async function testSetupCreatesGuildRecord() {
       channels: { panel: '1', applications: '2', logs: '3', disciplineLogs: '4' },
       roles: { leader: '10', deputy: '11', elder: '12', member: '13', newbie: '14' },
       access: { applications: ['21'], discipline: ['22'], ranks: ['23'] },
+      visuals: { familyBanner: 'https://example.com/family.png', applicationsBanner: 'https://example.com/apply.png' },
       features: { aiEnabled: true, autoRanksEnabled: true, leakGuardEnabled: true, channelGuardEnabled: true }
     }
   });
@@ -39,6 +40,7 @@ async function testSetupCreatesGuildRecord() {
   assert.equal(record.setupCompleted, true);
   assert.equal(record.guildName, 'Test Guild');
   assert.equal(record.settings.channels.panel, '1');
+  assert.equal(record.settings.visuals.familyBanner, 'https://example.com/family.png');
 }
 
 async function testSubscriptionCanBeUpdated() {

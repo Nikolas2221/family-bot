@@ -80,13 +80,14 @@ function avatarUrl(user) {
   return typeof user?.displayAvatarURL === 'function' ? user.displayAvatarURL() : null;
 }
 
-function card({ title, description, color, footer, thumbnail, author }) {
+function card({ title, description, color, footer, thumbnail, author, image }) {
   const embed = new EmbedBuilder().setColor(color).setTitle(title).setTimestamp();
 
   if (description) embed.setDescription(description);
   embed.setFooter({ text: footer || BRAND_FOOTER });
   if (thumbnail) embed.setThumbnail(thumbnail);
   if (author) embed.setAuthor(author);
+  if (image) embed.setImage(image);
 
   return embed;
 }
@@ -116,7 +117,7 @@ function panelButtons() {
   ];
 }
 
-function buildFamilyMenuEmbed() {
+function buildFamilyMenuEmbed({ imageUrl } = {}) {
   return card({
     title: copy.family.menuTitle,
     color: THEME.brand,
@@ -126,11 +127,12 @@ function buildFamilyMenuEmbed() {
       `• ${copy.family.refreshButton} — обновить состав, активность и ранги`,
       `• ${copy.family.applyButton} — открыть фирменную анкету кандидата`
     ].join('\n'),
-    footer: 'BRHD • Phoenix • Family Control'
+    footer: 'BRHD • Phoenix • Family Control',
+    image: imageUrl
   });
 }
 
-function buildWelcomeEmbed(member, familyTitle) {
+function buildWelcomeEmbed(member, familyTitle, imageUrl = '') {
   return card({
     title: 'Добро пожаловать в Phoenix',
     color: THEME.brand,
@@ -141,7 +143,8 @@ function buildWelcomeEmbed(member, familyTitle) {
       'Карточка сразу уйдёт руководству на рассмотрение.'
     ].join('\n'),
     footer: 'BRHD • Phoenix • Welcome',
-    thumbnail: avatarUrl(member.user)
+    thumbnail: avatarUrl(member.user),
+    image: imageUrl
   }).addFields(
     section('Что дальше', ['1. Открой анкету', '2. Заполни данные', '3. Дождись решения руководства'].join('\n'), false)
   );
@@ -194,7 +197,7 @@ function buildAcceptModal(applicationId, userId, messageId) {
   return modal;
 }
 
-function buildApplicationsPanelEmbed() {
+function buildApplicationsPanelEmbed({ imageUrl } = {}) {
   return card({
     title: copy.applications.panelTitle,
     color: THEME.brand,
@@ -208,7 +211,8 @@ function buildApplicationsPanelEmbed() {
       '2. Заполни анкету кандидата',
       '3. Руководство получит красивую карточку на рассмотрение'
     ].join('\n'),
-    footer: 'BRHD • Phoenix • Applications'
+    footer: 'BRHD • Phoenix • Applications',
+    image: imageUrl
   });
 }
 
@@ -463,6 +467,14 @@ function buildAdminPanelEmbed({ guildName, record }) {
         roleLine('Старший', record.settings.roles.elder),
         roleLine('Участник', record.settings.roles.member),
         roleLine('Новичок', record.settings.roles.newbie)
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldVisuals,
+      [
+        copy.admin.visualLine('Панель семьи', record.settings.visuals?.familyBanner),
+        copy.admin.visualLine('Подача заявки', record.settings.visuals?.applicationsBanner)
       ].join('\n'),
       false
     )
