@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 
 const { createConfig, summarizeConfig, validateConfig } = require('../config');
 const copy = require('../copy');
-const { buildDebugConfigEmbed, buildWelcomeEmbed } = require('../embeds');
+const { buildDebugConfigEmbed, buildFamilyEmbeds, buildWelcomeEmbed } = require('../embeds');
 
 async function runTest(name, fn) {
   try {
@@ -82,10 +82,84 @@ async function testWelcomeEmbedShowsJoinFlow() {
   assert.equal(embed.fields[0].name, 'Что дальше');
 }
 
+async function testFamilyPanelDoesNotDuplicateMemberAcrossRoles() {
+  const familyMember = {
+    id: 'user-1',
+    displayName: 'Nikolas',
+    user: { bot: false },
+    presence: { status: 'online' }
+  };
+  const outsider = {
+    id: 'user-2',
+    displayName: 'Visitor',
+    user: { bot: false },
+    presence: { status: 'offline' }
+  };
+
+  const roles = new Map([
+    [
+      'role-leader',
+      {
+        id: 'role-leader',
+        name: 'Leader',
+        position: 20,
+        members: new Map([[familyMember.id, familyMember]])
+      }
+    ],
+    [
+      'role-newbie',
+      {
+        id: 'role-newbie',
+        name: 'Newbie',
+        position: 10,
+        members: new Map([[familyMember.id, familyMember]])
+      }
+    ]
+  ]);
+
+  const embeds = await buildFamilyEmbeds(
+    {
+      roles: {
+        cache: {
+          get(roleId) {
+            return roles.get(roleId);
+          }
+        }
+      },
+      members: {
+        cache: new Map([
+          [familyMember.id, familyMember],
+          [outsider.id, outsider]
+        ])
+      }
+    },
+    {
+      roles: [
+        { id: 'role-leader', name: 'Leader' },
+        { id: 'role-newbie', name: 'Newbie' }
+      ],
+      familyTitle: 'Test Family',
+      updateIntervalMs: 60000,
+      activityScore() {
+        return 0;
+      }
+    }
+  );
+
+  const serialized = JSON.stringify(embeds.map(embed => embed.toJSON()));
+  const mentions = serialized.match(/<@user-1>/g) || [];
+
+  assert.equal(mentions.length, 1);
+  assert.match(serialized, /Всего участников:\*\* 2/);
+  assert.match(serialized, /С ролями:\*\* 1/);
+  assert.match(serialized, /Без ролей:\*\* 1/);
+}
+
 async function main() {
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
   await runTest('welcome embed shows join flow', testWelcomeEmbedShowsJoinFlow);
+  await runTest('family panel does not duplicate member across roles', testFamilyPanelDoesNotDuplicateMemberAcrossRoles);
   console.log('ALL EMBEDS TESTS PASSED');
 }
 

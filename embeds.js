@@ -511,12 +511,27 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
     .filter(item => item.role)
     .sort((a, b) => b.role.position - a.role.position);
 
-  const roleSnapshots = configuredRoles.map(item => ({
-    ...item,
-    members: sortMembers(item.role.members.map(member => member), activityScore)
-  }));
+  const assignedMemberIds = new Set();
+  const roleSnapshots = configuredRoles.map(item => {
+    const uniqueMembers = Array.from(item.role.members.values())
+      .filter(member => {
+        if (assignedMemberIds.has(member.id)) {
+          return false;
+        }
 
-  const totalMembers = roleSnapshots.reduce((sum, item) => sum + item.members.length, 0);
+        assignedMemberIds.add(member.id);
+        return true;
+      });
+
+    return {
+      ...item,
+      members: sortMembers(uniqueMembers, activityScore)
+    };
+  });
+
+  const totalMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot).length;
+  const membersWithFamilyRoles = assignedMemberIds.size;
+  const membersWithoutFamilyRoles = Math.max(0, totalMembers - membersWithFamilyRoles);
   const activeRoles = roleSnapshots.filter(item => item.members.length);
   const embeds = [];
   let currentEmbed = card({
@@ -524,6 +539,8 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
     color: THEME.brand,
     description: [
       `**Всего участников:** ${totalMembers}`,
+      `**С ролями:** ${membersWithFamilyRoles}`,
+      `**Без ролей:** ${membersWithoutFamilyRoles}`,
       `**Активных секций:** ${activeRoles.length}`,
       `**Обновление:** каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
       '',
