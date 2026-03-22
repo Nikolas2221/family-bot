@@ -1,0 +1,79 @@
+const assert = require('node:assert/strict');
+
+const { createConfig, summarizeConfig, validateConfig } = require('../config');
+const copy = require('../copy');
+const { buildDebugConfigEmbed } = require('../embeds');
+
+async function runTest(name, fn) {
+  try {
+    await fn();
+    console.log(`PASS ${name}`);
+  } catch (error) {
+    console.error(`FAIL ${name}`);
+    throw error;
+  }
+}
+
+async function testDebugConfigEmbedShowsHealthyState() {
+  const config = createConfig({
+    TOKEN: 'token',
+    GUILD_ID: '123456789012345678',
+    CHANNEL_ID: '123456789012345679',
+    APPLICATIONS_CHANNEL_ID: '123456789012345680',
+    LOG_CHANNEL_ID: '123456789012345681',
+    DISCIPLINE_LOG_CHANNEL_ID: '123456789012345682',
+    MESSAGE_ID: '123456789012345683',
+    APPLICATION_DEFAULT_ROLE: '123456789012345684',
+    ACCESS_APPLICATIONS: '123456789012345685',
+    ACCESS_DISCIPLINE: '123456789012345686',
+    ACCESS_RANKS: '123456789012345692',
+    BOT_OWNER_IDS: '123456789012345693',
+    ROLE_LEADER: '123456789012345687',
+    ROLE_DEPUTY: '123456789012345688',
+    ROLE_ELDER: '123456789012345689',
+    ROLE_MEMBER: '123456789012345690',
+    ROLE_NEWBIE: '123456789012345691',
+    FAMILY_TITLE: 'Test Family',
+    AI_ENABLED: 'false'
+  });
+  const validation = validateConfig(config);
+  const embed = buildDebugConfigEmbed({
+    summaryLines: summarizeConfig(config),
+    validation
+  }).toJSON();
+
+  assert.equal(embed.title, copy.debugConfig.titleOk);
+  assert.equal(embed.fields[0].name, copy.debugConfig.summaryField);
+  assert.match(embed.fields[0].value, /Config summary:/);
+  assert.match(embed.fields[0].value, /Test Family/);
+  assert.equal(embed.fields[2].value, copy.debugConfig.none);
+  assert.equal(embed.fields[3].value, copy.debugConfig.none);
+}
+
+async function testDebugConfigEmbedShowsErrors() {
+  const config = createConfig({});
+  const validation = validateConfig(config);
+  const embed = buildDebugConfigEmbed({
+    summaryLines: summarizeConfig(config),
+    validation
+  }).toJSON();
+
+  assert.equal(embed.title, copy.debugConfig.titleError);
+  assert.match(embed.fields[3].value, /TOKEN/);
+  assert.match(embed.fields[3].value, /CHANNEL_ID/);
+}
+
+async function main() {
+  await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
+  await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
+  console.log('ALL EMBEDS TESTS PASSED');
+}
+
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = { main };

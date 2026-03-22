@@ -1,0 +1,23 @@
+async function main() {
+  const { main: runApplicationsTests } = require('./applications.test');
+  const { main: runDatabaseTests } = require('./database.test');
+  const { main: runConfigTests } = require('./config.test');
+  const { main: runEmbedsTests } = require('./embeds.test');
+  const { main: runRanksTests } = require('./ranks.test');
+
+  await runApplicationsTests();
+  await runDatabaseTests();
+  await runConfigTests();
+  await runEmbedsTests();
+  await runRanksTests();
+  console.log('ALL TEST SUITES PASSED');
+}
+
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = { main };

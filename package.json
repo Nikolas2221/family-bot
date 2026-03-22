@@ -4,11 +4,11 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node tests/applications.test.js"
+    "test": "node tests/run.js",
+    "check": "node scripts/check.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "dotenv": "^16.4.5",
-    "openai": "^5.23.2"
+    "dotenv": "^16.4.5"
   }
 }

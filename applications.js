@@ -1,3 +1,5 @@
+const copy = require('./copy');
+
 function createApplicationsService({
   storage,
   fetchTextChannel,
@@ -8,24 +10,8 @@ function createApplicationsService({
   embeds,
   sendAcceptLog
 }) {
-  const STATUS_LABELS = {
-    pending: 'На рассмотрении',
-    review: 'На рассмотрении',
-    accepted: 'Принята',
-    rejected: 'Отклонена'
-  };
-
-  const TEXT = {
-    applicationNotFound: 'Заявка не найдена.',
-    applicationsChannelMissing: 'Канал заявок не найден.',
-    applicationsPanelSent: 'Панель заявок отправлена в канал заявок.',
-    applicationSent: 'Заявка отправлена. Ожидай решения руководства.',
-    memberNotFound: 'Пользователь не найден на сервере.',
-    roleAssignFailed: 'Не удалось выдать роль. Проверь права бота и позицию роли.'
-  };
-
   function formatStatus(status) {
-    return STATUS_LABELS[status] || status;
+    return copy.applications.statusLabel(status);
   }
 
   function getCooldownSecondsLeft(userId, cooldownMs) {
@@ -42,7 +28,7 @@ function createApplicationsService({
   async function sendApplyPanel(interaction) {
     const channel = await fetchTextChannel(interaction.guild, applicationsChannelId);
     if (!channel) {
-      return interaction.reply({ content: TEXT.applicationsChannelMissing, ephemeral: true });
+      return interaction.reply({ content: copy.applications.channelMissing, ephemeral: true });
     }
 
     await channel.send({
@@ -50,7 +36,7 @@ function createApplicationsService({
       components: embeds.buildApplicationsPanelButtons()
     });
 
-    return interaction.reply({ content: TEXT.applicationsPanelSent, ephemeral: true });
+    return interaction.reply({ content: copy.applications.panelSent, ephemeral: true });
   }
 
   async function submitApplication(interaction) {
@@ -81,22 +67,22 @@ function createApplicationsService({
       });
     }
 
-    return interaction.reply({ content: TEXT.applicationSent, ephemeral: true });
+    return interaction.reply({ content: copy.applications.sent, ephemeral: true });
   }
 
   async function accept(interaction, applicationId, userId) {
     const application = storage.findApplication(applicationId);
     if (!application) {
-      return interaction.reply({ content: TEXT.applicationNotFound, ephemeral: true });
+      return interaction.reply({ content: copy.applications.notFound, ephemeral: true });
     }
 
     if (isTerminalApplicationStatus(application.status)) {
-      return interaction.reply({ content: `Заявка уже закрыта: ${formatStatus(application.status)}.`, ephemeral: true });
+      return interaction.reply({ content: copy.applications.closed(formatStatus(application.status)), ephemeral: true });
     }
 
     const member = await interaction.guild.members.fetch(userId).catch(() => null);
     if (!member) {
-      return interaction.reply({ content: TEXT.memberNotFound, ephemeral: true });
+      return interaction.reply({ content: copy.applications.memberNotFound, ephemeral: true });
     }
 
     if (applicationDefaultRole) {
@@ -105,7 +91,7 @@ function createApplicationsService({
         const added = await member.roles.add(role).then(() => true).catch(() => false);
         if (!added) {
           return interaction.reply({
-            content: TEXT.roleAssignFailed,
+            content: copy.applications.roleAssignFailed,
             ephemeral: true
           });
         }
@@ -120,29 +106,29 @@ function createApplicationsService({
       age: application.age,
       text: application.text,
       applicationId,
-      source: 'Заявка'
+      source: copy.applications.source
     });
 
     accepted
       .setColor(0x16a34a)
-      .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **Принята**`)
-      .setFooter({ text: `Принял: ${interaction.user.username}` });
+      .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('accepted')))
+      .setFooter({ text: copy.applications.acceptedFooter(interaction.user.username) });
 
     await interaction.message.edit({ embeds: [accepted], components: [] });
-    await sendAcceptLog(interaction.guild, member, interaction.user, 'Собеседование', '1 ранг');
+    await sendAcceptLog(interaction.guild, member, interaction.user, copy.applications.acceptReason, copy.applications.acceptRank);
 
-    return interaction.reply({ content: `✅ <@${userId}> принят в семью.`, ephemeral: true });
+    return interaction.reply({ content: copy.applications.acceptedReply(userId), ephemeral: true });
   }
 
   async function moveToReview(interaction, applicationId, userId) {
     const application = storage.findApplication(applicationId);
     if (!application) {
-      return interaction.reply({ content: TEXT.applicationNotFound, ephemeral: true });
+      return interaction.reply({ content: copy.applications.notFound, ephemeral: true });
     }
 
     if (isTerminalApplicationStatus(application.status)) {
       return interaction.reply({
-        content: `Нельзя вернуть закрытую заявку в рассмотрение. Текущий статус: ${formatStatus(application.status)}.`,
+        content: copy.applications.closedForReview(formatStatus(application.status)),
         ephemeral: true
       });
     }
@@ -155,26 +141,26 @@ function createApplicationsService({
       age: application.age,
       text: application.text,
       applicationId,
-      source: 'Заявка'
+      source: copy.applications.source
     });
 
     review
       .setColor(0x64748b)
-      .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **На рассмотрении**`)
-      .setFooter({ text: `Рассматривает: ${interaction.user.username}` });
+      .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('review')))
+      .setFooter({ text: copy.applications.reviewFooter(interaction.user.username) });
 
     await interaction.message.edit({ embeds: [review], components: interaction.message.components });
-    return interaction.reply({ content: '🕒 Заявка переведена в статус "На рассмотрении".', ephemeral: true });
+    return interaction.reply({ content: copy.applications.reviewReply, ephemeral: true });
   }
 
   async function reject(interaction, applicationId, userId) {
     const application = storage.findApplication(applicationId);
     if (!application) {
-      return interaction.reply({ content: TEXT.applicationNotFound, ephemeral: true });
+      return interaction.reply({ content: copy.applications.notFound, ephemeral: true });
     }
 
     if (isTerminalApplicationStatus(application.status)) {
-      return interaction.reply({ content: `Заявка уже закрыта: ${formatStatus(application.status)}.`, ephemeral: true });
+      return interaction.reply({ content: copy.applications.closed(formatStatus(application.status)), ephemeral: true });
     }
 
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);
@@ -185,13 +171,13 @@ function createApplicationsService({
       age: application.age,
       text: application.text,
       applicationId,
-      source: 'Заявка'
+      source: copy.applications.source
     });
 
     rejected
       .setColor(0xef4444)
-      .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **Отклонена**`)
-      .setFooter({ text: `Отклонил: ${interaction.user.username}` });
+      .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('rejected')))
+      .setFooter({ text: copy.applications.rejectedFooter(interaction.user.username) });
 
     await interaction.message.edit({ embeds: [rejected], components: [] });
 
@@ -204,14 +190,14 @@ function createApplicationsService({
             embeds.buildRejectLogEmbed({
               user,
               moderatorUser: interaction.user,
-              reason: 'Отказ по решению руководства'
+              reason: copy.applications.rejectReason
             })
           ]
         });
       }
     }
 
-    return interaction.reply({ content: `❌ <@${userId}> отклонён.`, ephemeral: true });
+    return interaction.reply({ content: copy.applications.rejectedReply(userId), ephemeral: true });
   }
 
   return {
