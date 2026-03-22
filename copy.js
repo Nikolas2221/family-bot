@@ -378,6 +378,7 @@ const copy = {
 copy.commands.leaderboardDescription = 'Показать таблицу участников по очкам';
 copy.commands.voiceActivityDescription = 'Показать активность в голосовых каналах';
 copy.commands.activityReportDescription = 'Админ-отчёт по активности семьи';
+copy.commands.aiAdvisorDescription = 'AI-советник по участнику семьи';
 copy.commands.unbanIdDescription = 'Разбанить пользователя по Discord ID';
 copy.commands.banListDescription = 'Показать список банов сервера';
 copy.commands.roleTargetLeader = 'Лидер';
@@ -416,6 +417,12 @@ copy.stats = {
     return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
   }
 };
+
+copy.ai.advisorTitle = function advisorTitle(displayName) {
+  return `🤖 AI-советник: ${displayName}`;
+};
+copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
+copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
 
 copy.security.banListTitle = '🔨 Список банов';
 copy.security.banListEmpty = 'На сервере сейчас нет активных банов.';

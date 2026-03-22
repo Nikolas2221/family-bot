@@ -404,6 +404,7 @@ function getHelpCatalog(guildId, userId) {
     { name: 'leaderboard', description: copy.commands.leaderboardDescription },
     { name: 'voiceactivity', description: copy.commands.voiceActivityDescription },
     { name: 'activityreport', description: copy.commands.activityReportDescription },
+    { name: 'aiadvisor', description: copy.commands.aiAdvisorDescription },
     { name: 'ai', description: copy.commands.aiDescription },
     { name: 'blacklistadd', description: copy.commands.blacklistAddDescription },
     { name: 'blacklistremove', description: copy.commands.blacklistRemoveDescription },
@@ -1475,6 +1476,53 @@ client.on('interactionCreate', async interaction => {
         }
 
         return interaction.reply(ephemeral({ embeds: [buildActivityReportEmbed(interaction.guild)] }));
+      }
+
+      if (interaction.commandName === 'aiadvisor') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const user = interaction.options.getUser(copy.commands.userOptionName) || interaction.user;
+        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (!member) {
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+          const guildStorage = getGuildStorage(interaction.guild.id);
+          const memberData = guildStorage.ensureMember(member.id);
+          const rankInfo = getRankService(interaction.guild.id).describeMember(member);
+          const analysis = await aiService.analyzeMember({
+            displayName: member.displayName,
+            currentRoleName: rankInfo.currentRole?.name || copy.profile.noRoles,
+            autoTargetRoleName: rankInfo.autoTargetRole?.name || '',
+            activityScore: guildStorage.activityScore(member.id),
+            points: guildStorage.pointsScore(member.id),
+            warns: memberData.warns || 0,
+            commends: memberData.commends || 0,
+            messageCount: memberData.messageCount || 0,
+            voiceMinutes: getLiveVoiceMinutes(member),
+            lastSeenAt: memberData.lastSeenAt || 0
+          });
+
+          const embed = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle(copy.ai.advisorTitle(member.displayName))
+            .setDescription(analysis.slice(0, 3900))
+            .setFooter({ text: copy.ai.advisorFooter })
+            .setTimestamp();
+
+          return interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+          return interaction.editReply({ content: copy.ai.unavailable(error?.message || copy.ai.advisorUnavailable) });
+        }
       }
 
       if (interaction.commandName === 'subscription') {

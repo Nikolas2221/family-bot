@@ -69,6 +69,12 @@ async function registerCommands(guild) {
         option.setName(copy.commands.userOptionName).setDescription(copy.commands.profileUserDescription).setRequired(false)
       ),
     new SlashCommandBuilder()
+      .setName('aiadvisor')
+      .setDescription(copy.commands.aiAdvisorDescription)
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.profileUserDescription).setRequired(false)
+      ),
+    new SlashCommandBuilder()
       .setName('subscription')
       .setDescription(copy.commands.subscriptionDescription)
       .addStringOption(option =>
