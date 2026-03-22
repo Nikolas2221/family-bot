@@ -52,7 +52,8 @@ function defaultStore() {
     applications: [],
     cooldowns: {},
     warns: [],
-    commends: []
+    commends: [],
+    panelMessageId: ''
   };
 }
 
@@ -67,8 +68,63 @@ function loadStore() {
 
 let store = loadStore();
 
-function saveStore() {
+let saveTimer = null;
+
+function flushStore() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
   fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf8');
+}
+
+function saveStore() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    flushStore();
+  }, 500);
+}
+
+function trimText(value, maxLength) {
+  return String(value || '').trim().slice(0, maxLength);
+}
+
+function sanitizeApplicationInput(fields) {
+  const nickname = trimText(fields.nickname, 64);
+  const age = trimText(fields.age, 32);
+  const text = trimText(fields.text, 1000);
+
+  if (!nickname || !age || !text) {
+    return { error: 'Все поля заявки должны быть заполнены.' };
+  }
+
+  if (text.length < 10) {
+    return { error: 'Текст заявки слишком короткий. Напиши хотя бы 10 символов.' };
+  }
+
+  return { nickname, age, text };
+}
+
+function getPanelMessageId() {
+  return MESSAGE_ID || store.panelMessageId || '';
+}
+
+function setPanelMessageId(messageId) {
+  if (!MESSAGE_ID && messageId && store.panelMessageId !== messageId) {
+    store.panelMessageId = messageId;
+    saveStore();
+  }
+}
+
+function isTerminalApplicationStatus(status) {
+  return status === 'accepted' || status === 'rejected';
+}
+
+function setApplicationStatus(app, status, reviewerId) {
+  app.status = status;
+  app.reviewedBy = reviewerId;
+  app.reviewedAt = new Date().toISOString();
+  saveStore();
 }
 
 function ensureMember(id) {
@@ -423,17 +479,20 @@ async function doPanelUpdate(force = false) {
     if (!channel) return;
 
     const embeds = await buildFamilyEmbeds(guild);
+    const panelMessageId = getPanelMessageId();
 
-    if (MESSAGE_ID) {
+    if (panelMessageId) {
       try {
-        const message = await channel.messages.fetch(MESSAGE_ID);
+        const message = await channel.messages.fetch(panelMessageId);
         await message.edit({ embeds, components: panelButtons(), content: '' });
       } catch {
         const message = await channel.send({ embeds, components: panelButtons(), content: '' });
+        setPanelMessageId(message.id);
         console.log('Скопируй MESSAGE_ID:', message.id);
       }
     } else {
       const message = await channel.send({ embeds, components: panelButtons(), content: '' });
+      setPanelMessageId(message.id);
       console.log('Скопируй MESSAGE_ID:', message.id);
     }
 
@@ -505,6 +564,20 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   const before = hasFamilyRole(oldMember);
   const after = hasFamilyRole(newMember);
   if (before !== after) setTimeout(() => doPanelUpdate(false), 2000);
+});
+
+process.on('SIGINT', () => {
+  flushStore();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  flushStore();
+  process.exit(0);
+});
+
+process.on('beforeExit', () => {
+  flushStore();
 });
 
 client.on('interactionCreate', async interaction => {
@@ -634,36 +707,40 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.customId.startsWith('app_accept:')) {
-        if (!canApplications(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        if (!canApplications(interaction.member)) return interaction.reply({ content: 'No access.', ephemeral: true });
 
         const [, applicationId, userId] = interaction.customId.split(':');
         const app = store.applications.find(x => x.id === applicationId);
-        if (!app) return interaction.reply({ content: 'Заявка не найдена.', ephemeral: true });
-        if (app.status === 'accepted') return interaction.reply({ content: 'Заявка уже принята.', ephemeral: true });
+        if (!app) return interaction.reply({ content: 'Application not found.', ephemeral: true });
+        if (isTerminalApplicationStatus(app.status)) {
+          return interaction.reply({ content: `Application is already closed with status: ${app.status}.`, ephemeral: true });
+        }
 
         const member = await interaction.guild.members.fetch(userId).catch(() => null);
-        if (!member) return interaction.reply({ content: 'Пользователь не найден на сервере.', ephemeral: true });
+        if (!member) return interaction.reply({ content: 'User was not found on the server.', ephemeral: true });
 
         if (APPLICATION_DEFAULT_ROLE) {
           const role = interaction.guild.roles.cache.get(APPLICATION_DEFAULT_ROLE);
-          if (role) await member.roles.add(role).catch(() => {});
+          if (role) {
+            const added = await member.roles.add(role).then(() => true).catch(() => false);
+            if (!added) {
+              return interaction.reply({ content: 'Failed to assign the role. Check bot permissions and role position.', ephemeral: true });
+            }
+          }
         }
 
-        app.status = 'accepted';
-        app.reviewedBy = interaction.user.id;
-        app.reviewedAt = new Date().toISOString();
-        saveStore();
+        setApplicationStatus(app, 'accepted', interaction.user.id);
 
         const accepted = EmbedBuilder.from(interaction.message.embeds[0])
           .setColor(0x16a34a)
-          .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **Принята**`)
-          .setFooter({ text: `Принял: ${interaction.user.username}` });
+          .setDescription(`> **Application from <@${userId}>**\n> Status: **Accepted**`)
+          .setFooter({ text: `Accepted by: ${interaction.user.username}` });
 
         await interaction.message.edit({ embeds: [accepted], components: [] });
-        await sendAcceptLog(interaction.guild, member, interaction.user, 'Собеседование', '1 ранг');
+        await sendAcceptLog(interaction.guild, member, interaction.user, 'Interview', 'Rank 1');
         await doPanelUpdate(false);
 
-        return interaction.reply({ content: `✅ <@${userId}> принят в семью.`, ephemeral: true });
+        return interaction.reply({ content: `Accepted: <@${userId}> joined the family.`, ephemeral: true });
       }
 
       if (interaction.customId.startsWith('app_ai:')) {
@@ -690,42 +767,42 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.customId.startsWith('app_review:')) {
-        if (!canApplications(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        if (!canApplications(interaction.member)) return interaction.reply({ content: 'No access.', ephemeral: true });
 
         const [, applicationId, userId] = interaction.customId.split(':');
         const app = store.applications.find(x => x.id === applicationId);
-        if (!app) return interaction.reply({ content: 'Заявка не найдена.', ephemeral: true });
+        if (!app) return interaction.reply({ content: 'Application not found.', ephemeral: true });
+        if (isTerminalApplicationStatus(app.status)) {
+          return interaction.reply({ content: `Cannot move a closed application back to review. Current status: ${app.status}.`, ephemeral: true });
+        }
 
-        app.status = 'review';
-        app.reviewedBy = interaction.user.id;
-        app.reviewedAt = new Date().toISOString();
-        saveStore();
+        setApplicationStatus(app, 'review', interaction.user.id);
 
         const review = EmbedBuilder.from(interaction.message.embeds[0])
           .setColor(0x64748b)
-          .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **На рассмотрении**`)
-          .setFooter({ text: `Рассматривает: ${interaction.user.username}` });
+          .setDescription(`> **Application from <@${userId}>**\n> Status: **In review**`)
+          .setFooter({ text: `Reviewed by: ${interaction.user.username}` });
 
         await interaction.message.edit({ embeds: [review], components: interaction.message.components });
-        return interaction.reply({ content: '🕒 Заявка переведена в статус "На рассмотрении".', ephemeral: true });
+        return interaction.reply({ content: 'Application moved to in-review status.', ephemeral: true });
       }
 
       if (interaction.customId.startsWith('app_reject:')) {
-        if (!canApplications(interaction.member)) return interaction.reply({ content: 'Нет доступа.', ephemeral: true });
+        if (!canApplications(interaction.member)) return interaction.reply({ content: 'No access.', ephemeral: true });
 
         const [, applicationId, userId] = interaction.customId.split(':');
         const app = store.applications.find(x => x.id === applicationId);
-        if (!app) return interaction.reply({ content: 'Заявка не найдена.', ephemeral: true });
+        if (!app) return interaction.reply({ content: 'Application not found.', ephemeral: true });
+        if (isTerminalApplicationStatus(app.status)) {
+          return interaction.reply({ content: `Application is already closed with status: ${app.status}.`, ephemeral: true });
+        }
 
-        app.status = 'rejected';
-        app.reviewedBy = interaction.user.id;
-        app.reviewedAt = new Date().toISOString();
-        saveStore();
+        setApplicationStatus(app, 'rejected', interaction.user.id);
 
         const rejected = EmbedBuilder.from(interaction.message.embeds[0])
           .setColor(0xEF4444)
-          .setDescription(`> **Заявка от <@${userId}>**\n> Статус: **Отклонена**`)
-          .setFooter({ text: `Отклонил: ${interaction.user.username}` });
+          .setDescription(`> **Application from <@${userId}>**\n> Status: **Rejected**`)
+          .setFooter({ text: `Rejected by: ${interaction.user.username}` });
 
         await interaction.message.edit({ embeds: [rejected], components: [] });
 
@@ -734,19 +811,26 @@ client.on('interactionCreate', async interaction => {
           const channel = await fetchTextChannel(interaction.guild, LOG_CHANNEL_ID);
           if (channel) {
             await channel.send({
-              embeds: [buildRejectLogEmbed({ user, moderatorUser: interaction.user, reason: 'Отказ по решению руководства' })]
+              embeds: [buildRejectLogEmbed({ user, moderatorUser: interaction.user, reason: 'Rejected by leadership decision' })]
             });
           }
         }
 
-        return interaction.reply({ content: `❌ <@${userId}> отклонён.`, ephemeral: true });
+        return interaction.reply({ content: `Rejected: <@${userId}>.`, ephemeral: true });
       }
     }
 
     if (interaction.isModalSubmit() && interaction.customId === 'family_apply_modal') {
-      const nickname = interaction.fields.getTextInputValue('nickname');
-      const age = interaction.fields.getTextInputValue('age');
-      const text = interaction.fields.getTextInputValue('text');
+      const sanitized = sanitizeApplicationInput({
+        nickname: interaction.fields.getTextInputValue('nickname'),
+        age: interaction.fields.getTextInputValue('age'),
+        text: interaction.fields.getTextInputValue('text')
+      });
+      if (sanitized.error) {
+        return interaction.reply({ content: sanitized.error, ephemeral: true });
+      }
+
+      const { nickname, age, text } = sanitized;
 
       store.cooldowns[interaction.user.id] = Date.now();
       const applicationId = `${Date.now()}_${interaction.user.id}`;
