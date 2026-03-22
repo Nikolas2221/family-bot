@@ -43,6 +43,7 @@ function createConfig(env = process.env) {
   return {
     raw: { ...env },
     databaseFile: trim(env.DATABASE_FILE),
+    storageFile: trim(env.STORAGE_FILE),
     token: trim(env.TOKEN),
     guildId: trim(env.GUILD_ID),
     channelId,
@@ -142,6 +143,10 @@ function validateConfig(config) {
     notes.push('MESSAGE_ID не задан. Бот создаст панель и сохранит её ID в storage.json.');
   }
 
+  if (!config.storageFile) {
+    notes.push('STORAGE_FILE не задан. Активность и очки сохраняются в локальный storage.json бота.');
+  }
+
   if (!config.accessApplications.length) {
     warnings.push('ACCESS_APPLICATIONS не задан. Доступ к заявкам будет определяться по ManageRoles.');
   }
@@ -205,6 +210,8 @@ function summarizeConfig(config) {
     `- rank managers: ${rankManagers}`,
     `- bot owners: ${ownersSummary}`,
     `- panel message id: ${config.messageId || 'auto-create'}`,
+    `- storage file: ${config.storageFile || 'local ./storage.json'}`,
+    `- database file: ${config.databaseFile || 'local ./database.json'}`,
     `- AI: ${config.aiEnabled ? 'offline helper enabled' : 'disabled'}`,
     `- auto ranks: ${autoRanksSummary}`,
     `- leak guard: ${leakGuardSummary}`,

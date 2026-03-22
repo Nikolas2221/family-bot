@@ -5,6 +5,13 @@ function ephemeral(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
 
+function normalizeRankToken(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/<@&(\d+)>/g, '$1')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
 function createApplicationsService({
   storage,
   fetchTextChannel,
@@ -12,6 +19,7 @@ function createApplicationsService({
   applicationDefaultRole,
   logChannelId,
   applicationsBanner,
+  familyRoles = [],
   client,
   embeds,
   sendAcceptLog,
@@ -30,6 +38,47 @@ function createApplicationsService({
 
   function isTerminalApplicationStatus(status) {
     return status === 'accepted' || status === 'rejected';
+  }
+
+  function resolveAcceptedRoleId(rankName) {
+    const fallbackRoleId = applicationDefaultRole || familyRoles.find(role => role.key === 'newbie')?.id || '';
+    const normalized = normalizeRankToken(rankName);
+    if (!normalized) return fallbackRoleId;
+
+    const ordinalAliases = new Map([
+      ['1', 'newbie'],
+      ['1ранг', 'newbie'],
+      ['ранг1', 'newbie'],
+      ['2', 'member'],
+      ['2ранг', 'member'],
+      ['ранг2', 'member'],
+      ['3', 'elder'],
+      ['3ранг', 'elder'],
+      ['ранг3', 'elder'],
+      ['4', 'deputy'],
+      ['4ранг', 'deputy'],
+      ['ранг4', 'deputy'],
+      ['5', 'leader'],
+      ['5ранг', 'leader'],
+      ['ранг5', 'leader']
+    ]);
+
+    const directRole = familyRoles.find(role => {
+      const aliases = new Set([
+        normalizeRankToken(role.id),
+        normalizeRankToken(role.key),
+        normalizeRankToken(role.name)
+      ]);
+      return aliases.has(normalized);
+    });
+    if (directRole?.id) return directRole.id;
+
+    const ordinalKey = ordinalAliases.get(normalized);
+    if (ordinalKey) {
+      return familyRoles.find(role => role.key === ordinalKey)?.id || fallbackRoleId;
+    }
+
+    return fallbackRoleId;
   }
 
   async function sendApplyPanel(interaction) {
@@ -92,8 +141,9 @@ function createApplicationsService({
       return interaction.reply(ephemeral({ content: copy.applications.memberNotFound }));
     }
 
-    if (applicationDefaultRole) {
-      const role = interaction.guild.roles.cache.get(applicationDefaultRole);
+    const acceptedRoleId = resolveAcceptedRoleId(details.rankName);
+    if (acceptedRoleId) {
+      const role = interaction.guild.roles.cache.get(acceptedRoleId);
       if (role) {
         const added = await member.roles.add(role).then(() => true).catch(() => false);
         if (!added) {
@@ -101,6 +151,13 @@ function createApplicationsService({
             content: copy.applications.roleAssignFailed,
             flags: MessageFlags.Ephemeral
           });
+        }
+
+        const removableRoleIds = familyRoles
+          .filter(item => item.id && item.id !== acceptedRoleId && member.roles.cache.has(item.id))
+          .map(item => item.id);
+        if (removableRoleIds.length) {
+          await member.roles.remove(removableRoleIds).catch(() => {});
         }
       }
     }

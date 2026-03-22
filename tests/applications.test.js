@@ -54,6 +54,16 @@ function createEmbedsStub() {
   };
 }
 
+function buildFamilyRoles() {
+  return [
+    { key: 'leader', id: 'role-leader', name: 'Leader' },
+    { key: 'deputy', id: 'role-deputy', name: 'Deputy' },
+    { key: 'elder', id: 'role-elder', name: 'Elder' },
+    { key: 'member', id: 'role-member', name: 'Member' },
+    { key: 'newbie', id: 'role-newbie', name: 'Newbie' }
+  ];
+}
+
 async function runTest(name, fn) {
   try {
     await fn();
@@ -80,6 +90,7 @@ async function testSubmitApplication() {
     applicationsChannelId: 'applications',
     applicationDefaultRole: '',
     logChannelId: '',
+    familyRoles: buildFamilyRoles(),
     client: {},
     embeds: createEmbedsStub(),
     sendAcceptLog: async () => {}
@@ -109,7 +120,7 @@ async function testSubmitApplication() {
   assert.equal(storage.listRecentApplications(1).length, 1);
   assert.equal(storage.getCooldown('user-1') > 0, true);
   assert.equal(channel.sent.length, 1);
-  assert.match(replies[0].content, /Заявка отправлена/);
+  assert.match(replies[0].content, /Заявка отправлена/i);
 }
 
 async function testAcceptApplication() {
@@ -123,11 +134,19 @@ async function testAcceptApplication() {
 
   const edits = [];
   let acceptLogPayload = null;
+  let addedRoleId = null;
+  let removedRoleIds = null;
   const member = {
     id: 'user-2',
     displayName: 'Applicant',
     roles: {
-      async add() {
+      cache: new Map(),
+      async add(role) {
+        addedRoleId = typeof role === 'string' ? role : role.id;
+        return true;
+      },
+      async remove(roleIds) {
+        removedRoleIds = roleIds;
         return true;
       }
     }
@@ -137,8 +156,9 @@ async function testAcceptApplication() {
     storage,
     fetchTextChannel: async () => null,
     applicationsChannelId: 'applications',
-    applicationDefaultRole: 'role-1',
+    applicationDefaultRole: 'role-newbie',
     logChannelId: '',
+    familyRoles: buildFamilyRoles(),
     client: {},
     embeds: createEmbedsStub(),
     sendAcceptLog: async (_guild, _member, _moderatorUser, reason, rankName) => {
@@ -157,8 +177,8 @@ async function testAcceptApplication() {
       },
       roles: {
         cache: {
-          get() {
-            return { id: 'role-1' };
+          get(roleId) {
+            return { id: roleId };
           }
         }
       }
@@ -181,11 +201,88 @@ async function testAcceptApplication() {
 
   assert.equal(storage.findApplication(applicationId).status, 'accepted');
   assert.equal(edits.length, 1);
+  assert.equal(addedRoleId, 'role-newbie');
+  assert.equal(removedRoleIds, null);
   assert.deepEqual(acceptLogPayload, {
     reason: 'Прошёл собеседование',
     rankName: '1 ранг'
   });
   assert.match(replies[0].content, /принят в семью/i);
+}
+
+async function testAcceptApplicationAssignsResolvedFamilyRole() {
+  const storage = createTempStorage();
+  const applicationId = storage.createApplication({
+    userId: 'user-22',
+    nickname: 'Applicant 2',
+    age: '22',
+    text: 'Хочу вступить и показать активный онлайн.'
+  });
+
+  let addedRoleId = null;
+  let removedRoleIds = null;
+  const member = {
+    id: 'user-22',
+    displayName: 'Applicant 2',
+    roles: {
+      cache: new Map([
+        ['role-newbie', { id: 'role-newbie' }],
+        ['role-member', { id: 'role-member' }]
+      ]),
+      async add(role) {
+        addedRoleId = typeof role === 'string' ? role : role.id;
+        return true;
+      },
+      async remove(roleIds) {
+        removedRoleIds = roleIds;
+        return true;
+      }
+    }
+  };
+
+  const service = createApplicationsService({
+    storage,
+    fetchTextChannel: async () => null,
+    applicationsChannelId: 'applications',
+    applicationDefaultRole: 'role-newbie',
+    logChannelId: '',
+    familyRoles: buildFamilyRoles(),
+    client: {},
+    embeds: createEmbedsStub(),
+    sendAcceptLog: async () => {}
+  });
+
+  const interaction = {
+    user: { id: 'moderator-1', username: 'Boss' },
+    guild: {
+      members: {
+        async fetch() {
+          return member;
+        }
+      },
+      roles: {
+        cache: {
+          get(roleId) {
+            return { id: roleId };
+          }
+        }
+      }
+    },
+    message: {
+      async edit() {}
+    },
+    async reply(payload) {
+      return payload;
+    }
+  };
+
+  await service.accept(interaction, applicationId, 'user-22', {
+    reason: 'Собеседование',
+    rankName: 'elder'
+  });
+
+  assert.equal(addedRoleId, 'role-elder');
+  assert.deepEqual(removedRoleIds, ['role-member', 'role-newbie']);
 }
 
 async function testRejectApplication() {
@@ -211,6 +308,7 @@ async function testRejectApplication() {
     applicationsChannelId: 'applications',
     applicationDefaultRole: '',
     logChannelId: 'log-channel',
+    familyRoles: buildFamilyRoles(),
     client: {
       users: {
         async fetch() {
@@ -245,6 +343,7 @@ async function testRejectApplication() {
 async function main() {
   await runTest('submitApplication stores data and sends application message', testSubmitApplication);
   await runTest('accept updates status and logs admission', testAcceptApplication);
+  await runTest('accept assigns resolved family role', testAcceptApplicationAssignsResolvedFamilyRole);
   await runTest('reject updates status and sends reject log', testRejectApplication);
   console.log('ALL TESTS PASSED');
 }

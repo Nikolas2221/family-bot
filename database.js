@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 
 function defaultDatabase() {
   return {
@@ -88,6 +89,7 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+    fs.mkdirSync(path.dirname(dataFile), { recursive: true });
     fs.writeFileSync(dataFile, JSON.stringify(database, null, 2), 'utf8');
   }
 

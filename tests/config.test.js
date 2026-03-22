@@ -40,14 +40,29 @@ async function testSummaryContainsSafeHumanReadableFields() {
     GUILD_ID: '123456789012345678',
     CHANNEL_ID: '123456789012345679',
     AI_ENABLED: 'true',
-    ROLE_MEMBER: '123456789012345680'
+    ROLE_MEMBER: '123456789012345680',
+    STORAGE_FILE: '/data/storage.json',
+    DATABASE_FILE: '/data/database.json'
   });
 
   const lines = summarizeConfig(config).join('\n');
 
   assert.match(lines, /Config summary/);
   assert.match(lines, /offline helper enabled/);
+  assert.match(lines, /storage file: \/data\/storage\.json/);
+  assert.match(lines, /database file: \/data\/database\.json/);
   assert.doesNotMatch(lines, /super-secret-token/);
+}
+
+async function testStorageFileEnvIsReadFromConfig() {
+  const config = createConfig({
+    TOKEN: 'token',
+    GUILD_ID: '123456789012345678',
+    CHANNEL_ID: '123456789012345679',
+    STORAGE_FILE: '/data/storage.json'
+  });
+
+  assert.equal(config.storageFile, '/data/storage.json');
 }
 
 async function testAutoRanksThresholdValidation() {
@@ -68,6 +83,7 @@ async function main() {
   await runTest('config validation fails when required env is missing', testMissingRequiredEnv);
   await runTest('config validation allows offline AI without API key', testAiEnabledWorksInOfflineModeWithoutKey);
   await runTest('config summary stays safe and readable', testSummaryContainsSafeHumanReadableFields);
+  await runTest('config reads storage file path from env', testStorageFileEnvIsReadFromConfig);
   await runTest('config validation catches invalid auto rank thresholds', testAutoRanksThresholdValidation);
   console.log('ALL CONFIG TESTS PASSED');
 }

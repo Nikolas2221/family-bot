@@ -16,7 +16,7 @@ const { createStorage } = require('./storage');
 
 const config = createConfig(process.env);
 const diagnostics = validateConfig(config);
-const DATA_FILE = path.join(__dirname, 'storage.json');
+const DATA_FILE = config.storageFile || path.join(__dirname, 'storage.json');
 const DATABASE_FILE = config.databaseFile || path.join(__dirname, 'database.json');
 
 printStartupDiagnostics(config, diagnostics);
@@ -622,26 +622,30 @@ function normalizeMemberQuery(value) {
 async function resolveMemberQuery(guild, query, fallbackUserId = '') {
   const rawQuery = String(query || '').trim();
   if (!rawQuery) {
-    return fallbackUserId ? guild.members.fetch(fallbackUserId).catch(() => null) : null;
+    return fallbackUserId ? fetchMemberFast(guild, fallbackUserId) : null;
   }
 
   const mentionMatch = rawQuery.match(/^<@!?(\d+)>$/);
   const directId = mentionMatch?.[1] || (/^\d{5,25}$/.test(rawQuery) ? rawQuery : '');
   if (directId) {
-    return guild.members.fetch(directId).catch(() => null);
+    return fetchMemberFast(guild, directId);
   }
 
-  await guild.members.fetch().catch(() => {});
   const lookup = normalizeMemberQuery(rawQuery);
-  const members = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot);
-
-  return (
+  const findIn = members =>
     members.find(member => normalizeMemberQuery(member.displayName) === lookup) ||
     members.find(member => normalizeMemberQuery(member.user.username) === lookup) ||
     members.find(member => normalizeMemberQuery(member.displayName).includes(lookup)) ||
     members.find(member => normalizeMemberQuery(member.user.username).includes(lookup)) ||
-    null
-  );
+    null;
+
+  const cachedMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot);
+  const cachedMatch = findIn(cachedMembers);
+  if (cachedMatch) return cachedMatch;
+
+  await guild.members.fetch().catch(() => {});
+  const fetchedMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot);
+  return findIn(fetchedMembers);
 }
 
 async function buildAiAdvisorEmbed(guild, member) {
@@ -799,6 +803,10 @@ async function fetchTextChannel(guild, id) {
   return channel;
 }
 
+async function fetchMemberFast(guild, userId) {
+  return guild.members.cache.get(userId) || guild.members.fetch(userId).catch(() => null);
+}
+
 async function sendDirectNotification(user, { title, description, color = 0x7c3aed, footer = 'BRHD • Phoenix • Notify' }) {
   if (!user) return false;
 
@@ -948,6 +956,7 @@ function getApplicationsService(guildId) {
     applicationDefaultRole: settings.applicationDefaultRole,
     logChannelId: settings.channels.logs,
     applicationsBanner: settings.visuals.applicationsBanner,
+    familyRoles: settings.roles,
     client,
     embeds,
     sendAcceptLog,
@@ -1797,7 +1806,7 @@ client.on('interactionCreate', async interaction => {
 
         const user = interaction.options.getUser(copy.commands.userOptionName);
         if (user) {
-          const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+          const member = await fetchMemberFast(interaction.guild, user.id);
           if (!member) {
             return interaction.reply(ephemeral({ content: copy.profile.notFound }));
           }
@@ -1818,7 +1827,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName) || interaction.user;
-        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        const member = await fetchMemberFast(interaction.guild, user.id);
         if (!member) {
           return interaction.reply(ephemeral({ content: copy.profile.notFound }));
         }
@@ -1868,7 +1877,7 @@ client.on('interactionCreate', async interaction => {
           reason
         });
 
-        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        const member = await fetchMemberFast(interaction.guild, user.id);
         if (member) {
           await enforceBlacklist(member);
         } else {
@@ -1986,7 +1995,7 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'profile') {
         const user = interaction.options.getUser(copy.commands.userOptionName) || interaction.user;
-        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        const member = await fetchMemberFast(interaction.guild, user.id);
         if (!member) {
           return interaction.reply(ephemeral({ content: copy.profile.notFound }));
         }
@@ -2013,7 +2022,7 @@ client.on('interactionCreate', async interaction => {
         );
         await sendDisciplineDm('warn', interaction.guild, user, interaction.user, reason).catch(() => {});
 
-        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        const member = await fetchMemberFast(interaction.guild, user.id);
         if (member && AUTO_RANKS.enabled && isPremiumGuild(interaction.guild.id)) {
           const autoRankResult = await rankService.applyAutoRank(member).catch(() => null);
           if (autoRankResult?.ok) {
@@ -2044,7 +2053,7 @@ client.on('interactionCreate', async interaction => {
         );
         await sendDisciplineDm('commend', interaction.guild, user, interaction.user, reason).catch(() => {});
 
-        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        const member = await fetchMemberFast(interaction.guild, user.id);
         if (member && AUTO_RANKS.enabled && isPremiumGuild(interaction.guild.id)) {
           const autoRankResult = await rankService.applyAutoRank(member).catch(() => null);
           if (autoRankResult?.ok) {
@@ -2189,7 +2198,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         const [action, userId] = interaction.customId.split(':');
-        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        const member = await fetchMemberFast(interaction.guild, userId);
         if (!member) {
           return interaction.reply(ephemeral({ content: copy.profile.notFound }));
         }

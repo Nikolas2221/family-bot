@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const copy = require('./copy');
 
 function defaultStore() {
@@ -40,6 +41,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+    fs.mkdirSync(path.dirname(dataFile), { recursive: true });
     fs.writeFileSync(dataFile, JSON.stringify(store, null, 2), 'utf8');
   }
 

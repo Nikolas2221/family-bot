@@ -144,6 +144,39 @@ async function testLegacyMemberDataMergesIntoExistingGuildRecord() {
   assert.equal(storage.getStore().members['user-merge'], undefined);
 }
 
+async function testGuildActivityPersistsAcrossRestart() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-storage-persist-'));
+  const dataFile = path.join(tempDir, 'storage.json');
+  const storage = createStorage({ dataFile, saveDelayMs: 1 });
+
+  storage.trackGuildMessage('guild-persist', 'user-persist');
+  storage.addGuildCommend({
+    guildId: 'guild-persist',
+    userId: 'user-persist',
+    moderatorId: 'mod-1',
+    reason: 'good'
+  });
+  storage.addGuildVoiceMinutes('guild-persist', 'user-persist', 75);
+  storage.flush();
+
+  const restartedStorage = createStorage({ dataFile, saveDelayMs: 1 });
+
+  assert.equal(restartedStorage.ensureGuildMember('guild-persist', 'user-persist').messageCount, 1);
+  assert.equal(restartedStorage.guildPointsScore('guild-persist', 'user-persist'), 1);
+  assert.equal(restartedStorage.guildVoiceMinutes('guild-persist', 'user-persist'), 75);
+}
+
+async function testStorageCreatesNestedDirectoryOnFlush() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-storage-nested-'));
+  const dataFile = path.join(tempDir, 'nested', 'storage.json');
+  const storage = createStorage({ dataFile, saveDelayMs: 1 });
+
+  storage.trackGuildMessage('guild-nested', 'user-nested');
+  storage.flush();
+
+  assert.equal(fs.existsSync(dataFile), true);
+}
+
 async function main() {
   await runTest('commends increase points up to 100', testCommendsIncreasePointsUpToHundred);
   await runTest('warns do not drop points below zero', testWarnsDoNotDropPointsBelowZero);
@@ -151,6 +184,8 @@ async function main() {
   await runTest('stored guild panel id overrides legacy fixed id', testStoredGuildPanelMessageIdOverridesLegacyFixedId);
   await runTest('legacy member data migrates into guild record', testLegacyMemberDataMigratesIntoGuildRecord);
   await runTest('legacy member data merges into existing guild record', testLegacyMemberDataMergesIntoExistingGuildRecord);
+  await runTest('guild activity persists across restart', testGuildActivityPersistsAcrossRestart);
+  await runTest('storage creates nested directory on flush', testStorageCreatesNestedDirectoryOnFlush);
   console.log('ALL STORAGE TESTS PASSED');
 }
 

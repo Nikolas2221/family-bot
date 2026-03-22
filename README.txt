@@ -22,8 +22,9 @@ Family Bot for Discord
    `AI_ENABLED=true`
 6. Если хочешь owner-доступ к тарифам, укажи:
    `BOT_OWNER_IDS=твой_discord_id`
-7. Для Railway лучше укажи путь к постоянному файлу:
+7. Для Railway лучше укажи пути к постоянным файлам:
    `DATABASE_FILE=/data/database.json`
+   `STORAGE_FILE=/data/storage.json`
 8. Если нужен AI-анализ заявок, задай:
    `ACCESS_APPLICATIONS`
 9. Запусти проверки:
