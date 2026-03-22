@@ -394,6 +394,77 @@ function buildVoiceActivityLines(guild, limit = 10) {
     .map((entry, index) => copy.stats.voiceLine(index, entry.member, entry.hours, entry.points));
 }
 
+function buildLeaderboardSummary(guild) {
+  const guildStorage = getGuildStorage(guild.id);
+  const settings = resolveGuildSettings(guild.id);
+  const members = getFamilyMembers(guild);
+  const ranked = members
+    .map(member => ({
+      member,
+      points: guildStorage.pointsScore(member.id),
+      voiceHours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
+      roleName: getDisplayRankName(member)
+    }))
+    .sort((left, right) => {
+      const byPoints = right.points - left.points;
+      if (byPoints !== 0) return byPoints;
+
+      const byVoice = right.voiceHours - left.voiceHours;
+      if (byVoice !== 0) return byVoice;
+
+      return left.member.displayName.localeCompare(right.member.displayName, 'ru');
+    });
+
+  const totalPoints = ranked.reduce((sum, item) => sum + item.points, 0);
+  const totalVoiceHours = ranked.reduce((sum, item) => sum + item.voiceHours, 0);
+  const topEntry = ranked[0];
+
+  return {
+    memberCount: ranked.length,
+    planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
+    topLine: topEntry ? `<@${topEntry.member.id}> • ${topEntry.roleName} • ${topEntry.points}/100` : '',
+    averagePoints: ranked.length ? (totalPoints / ranked.length).toFixed(1) : '0.0',
+    totalPoints,
+    totalVoiceHours: totalVoiceHours.toFixed(1),
+    imageUrl: settings.visuals.familyBanner || ''
+  };
+}
+
+function buildVoiceActivitySummary(guild) {
+  const guildStorage = getGuildStorage(guild.id);
+  const settings = resolveGuildSettings(guild.id);
+  const members = getFamilyMembers(guild);
+  const ranked = members
+    .map(member => ({
+      member,
+      hours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
+      points: guildStorage.pointsScore(member.id)
+    }))
+    .sort((left, right) => {
+      const byHours = right.hours - left.hours;
+      if (byHours !== 0) return byHours;
+
+      const byPoints = right.points - left.points;
+      if (byPoints !== 0) return byPoints;
+
+      return left.member.displayName.localeCompare(right.member.displayName, 'ru');
+    });
+
+  const totalHours = ranked.reduce((sum, item) => sum + item.hours, 0);
+  const totalPoints = ranked.reduce((sum, item) => sum + item.points, 0);
+  const topEntry = ranked[0];
+
+  return {
+    memberCount: ranked.length,
+    planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
+    topLine: topEntry ? `<@${topEntry.member.id}> • ${topEntry.hours.toFixed(1)} ч • ${topEntry.points}/100` : '',
+    totalHours: totalHours.toFixed(1),
+    averageHours: ranked.length ? (totalHours / ranked.length).toFixed(1) : '0.0',
+    totalPoints,
+    imageUrl: settings.visuals.familyBanner || ''
+  };
+}
+
 function buildActivityReportEmbed(guild, targetMember = null) {
   const guildStorage = getGuildStorage(guild.id);
 
@@ -442,6 +513,105 @@ function buildActivityReportEmbed(guild, targetMember = null) {
       value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
     })
     .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
+    .setTimestamp();
+}
+
+function buildPremiumActivityReportEmbed(guild, targetMember = null) {
+  const guildStorage = getGuildStorage(guild.id);
+  const settings = resolveGuildSettings(guild.id);
+
+  if (targetMember) {
+    const data = guildStorage.ensureMember(targetMember.id);
+    const reputation = guildStorage.pointsScore(targetMember.id);
+    const voiceHours = formatVoiceHours(getLiveVoiceMinutes(targetMember));
+
+    return new EmbedBuilder()
+      .setColor(0x2563eb)
+      .setTitle(`Отчёт по участнику • ${targetMember.displayName}`)
+      .setDescription(
+        [
+          `Сервер: **${guild.name}**`,
+          `Ранг: **${getDisplayRankName(targetMember)}**`,
+          `Статус: ${targetMember.presence?.status || 'offline'}`,
+          `Последняя активность: **${formatTimeAgo(data.lastSeenAt)}**`
+        ].join('\n')
+      )
+      .setImage(settings.visuals.familyBanner || null)
+      .addFields(
+        {
+          name: 'Сводка',
+          value: [
+            `Репутация: ${reputation}/100`,
+            `Голос: ${voiceHours} ч`,
+            `Сообщения: ${data.messageCount || 0}`
+          ].join('\n'),
+          inline: true
+        },
+        {
+          name: 'Дисциплина',
+          value: [
+            `Похвалы: ${data.commends || 0}`,
+            `Преды: ${data.warns || 0}`,
+            `Актив-очки: ${guildStorage.activityScore(targetMember.id)}`
+          ].join('\n'),
+          inline: true
+        },
+        {
+          name: 'Рекомендация',
+          value: [
+            reputation >= 70 ? 'Участник держит сильную репутацию.' : 'Репутация требует внимания.',
+            (data.warns || 0) >= 3 ? 'Есть дисциплинарный риск.' : 'Критичных дисциплинарных рисков нет.',
+            Number(voiceHours) >= 3 || (data.messageCount || 0) >= 25 ? 'Активность выше среднего.' : 'Есть запас по активности.'
+          ].join('\n')
+        }
+      )
+      .setFooter({ text: 'BRHD • Phoenix • Premium Activity' })
+      .setTimestamp();
+  }
+
+  const members = getFamilyMembers(guild);
+  const lines = members
+    .map(member => {
+      const data = guildStorage.ensureMember(member.id);
+      return `${getDisplayRankName(member)} • <@${member.id}> • ${guildStorage.pointsScore(member.id)}/100 • ${formatVoiceHours(getLiveVoiceMinutes(member))} ч • ${formatTimeAgo(data.lastSeenAt)}`;
+    })
+    .sort((left, right) => left.localeCompare(right, 'ru'))
+    .slice(0, 25);
+
+  const totalPoints = members.reduce((sum, member) => sum + guildStorage.pointsScore(member.id), 0);
+  const totalVoiceHours = members.reduce((sum, member) => sum + Number(formatVoiceHours(getLiveVoiceMinutes(member))), 0);
+  const afkRiskCount = members.filter(member => {
+    const data = guildStorage.ensureMember(member.id);
+    return Date.now() - Number(data.lastSeenAt || 0) >= AFK_WARNING_THRESHOLD_MS;
+  }).length;
+
+  return new EmbedBuilder()
+    .setColor(0x7c3aed)
+    .setTitle('Отчёт по активности семьи • Phoenix')
+    .setDescription(
+      [
+        `Сервер: **${guild.name}**`,
+        `Участников с семейными ролями: **${members.length}**`,
+        `AFK-рисков: **${afkRiskCount}**`
+      ].join('\n')
+    )
+    .setImage(settings.visuals.familyBanner || null)
+    .addFields(
+      {
+        name: 'Сводка',
+        value: [
+          `Средняя репутация: ${members.length ? (totalPoints / members.length).toFixed(1) : '0.0'}/100`,
+          `Суммарная репутация: ${totalPoints}`,
+          `Суммарный голос: ${totalVoiceHours.toFixed(1)} ч`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: 'Список',
+        value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
+      }
+    )
+    .setFooter({ text: 'BRHD • Phoenix • Premium Activity' })
     .setTimestamp();
 }
 
@@ -1602,7 +1772,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         return interaction.reply(ephemeral({
-          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15))]
+          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15), buildLeaderboardSummary(interaction.guild))]
         }));
       }
 
@@ -1612,7 +1782,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         return interaction.reply(ephemeral({
-          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15))]
+          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15), buildVoiceActivitySummary(interaction.guild))]
         }));
       }
 
@@ -1632,10 +1802,10 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(ephemeral({ content: copy.profile.notFound }));
           }
 
-          return interaction.reply(ephemeral({ embeds: [buildActivityReportEmbed(interaction.guild, member)] }));
+          return interaction.reply(ephemeral({ embeds: [buildPremiumActivityReportEmbed(interaction.guild, member)] }));
         }
 
-        return interaction.reply(ephemeral({ embeds: [buildActivityReportEmbed(interaction.guild)] }));
+        return interaction.reply(ephemeral({ embeds: [buildPremiumActivityReportEmbed(interaction.guild)] }));
       }
 
       if (interaction.commandName === 'aiadvisor') {
@@ -1930,7 +2100,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         return interaction.reply(ephemeral({
-          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15))]
+          embeds: [embeds.buildLeaderboardEmbed(buildLeaderboardLines(interaction.guild, 15), buildLeaderboardSummary(interaction.guild))]
         }));
       }
 
@@ -1940,7 +2110,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         return interaction.reply(ephemeral({
-          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15))]
+          embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15), buildVoiceActivitySummary(interaction.guild))]
         }));
       }
 
@@ -2009,7 +2179,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         return interaction.reply(ephemeral({
-          embeds: [buildActivityReportEmbed(interaction.guild)]
+          embeds: [buildPremiumActivityReportEmbed(interaction.guild)]
         }));
       }
 

@@ -642,6 +642,64 @@ async function buildFamilyEmbeds(guild, { roles, familyTitle, updateIntervalMs, 
   return embeds;
 }
 
+function buildLeaderboardEmbed(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : copy.stats.leaderboardEmpty;
+
+  return card({
+    title: `${copy.stats.leaderboardTitle} • Phoenix`,
+    color: THEME.gold,
+    description: [
+      'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+      '',
+      `**Участников в рейтинге:** ${summary.memberCount ?? entries.length}`,
+      `**Тариф:** ${summary.planLabel || 'Premium — 5$'}`,
+      `**Топ-игрок:** ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Leaderboard',
+    image: summary.imageUrl
+  }).addFields(
+    section(
+      'Сводка',
+      [
+        `Средняя репутация: ${summary.averagePoints ?? 0}/100`,
+        `Суммарная репутация: ${summary.totalPoints ?? 0}`,
+        `Голос семьи: ${summary.totalVoiceHours ?? 0} ч`
+      ].join('\n'),
+      true
+    ),
+    section('Рейтинг', content, false)
+  );
+}
+
+function buildVoiceActivityEmbed(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : copy.stats.voiceEmpty;
+
+  return card({
+    title: `${copy.stats.voiceTitle} • Phoenix`,
+    color: THEME.royal,
+    description: [
+      'Премиальный мониторинг голосовой активности семьи.',
+      '',
+      `**Участников в голосовом рейтинге:** ${summary.memberCount ?? entries.length}`,
+      `**Тариф:** ${summary.planLabel || 'Premium — 5$'}`,
+      `**Лидер голоса:** ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Voice',
+    image: summary.imageUrl
+  }).addFields(
+    section(
+      'Сводка',
+      [
+        `Суммарно часов: ${summary.totalHours ?? 0} ч`,
+        `Среднее на участника: ${summary.averageHours ?? 0} ч`,
+        `Репутация ядра: ${summary.totalPoints ?? 0}`
+      ].join('\n'),
+      true
+    ),
+    section('Топ по голосу', content, false)
+  );
+}
+
 module.exports = {
   buildAcceptLogEmbed,
   buildApplicationButtons,

@@ -62,6 +62,28 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return `${guildId}:${userId}`;
   }
 
+  function migrateLegacyMemberIfNeeded(guildId, memberId, existingMember = null) {
+    const legacyMember = store.members[memberId];
+    if (!legacyMember) return null;
+
+    const migrated = {
+      guildId,
+      userId: memberId,
+      messageCount: Math.max(Number(existingMember?.messageCount) || 0, Number(legacyMember.messageCount) || 0),
+      lastSeenAt: Math.max(Number(existingMember?.lastSeenAt) || 0, Number(legacyMember.lastSeenAt) || 0, Date.now()),
+      warns: Math.max(Number(existingMember?.warns) || 0, Number(legacyMember.warns) || 0),
+      commends: Math.max(Number(existingMember?.commends) || 0, Number(legacyMember.commends) || 0),
+      points: clampPoints(Math.max(Number(existingMember?.points) || 0, Number(legacyMember.points) || 0)),
+      voiceMinutes: Math.max(Number(existingMember?.voiceMinutes) || 0, Number(legacyMember.voiceMinutes) || 0),
+      afkWarningSentAt: existingMember?.afkWarningSentAt || legacyMember.afkWarningSentAt || ''
+    };
+
+    store.members[memberKey(guildId, memberId)] = migrated;
+    delete store.members[memberId];
+    save();
+    return migrated;
+  }
+
   function ensureGuildMember(guildId, memberId) {
     const key = memberKey(guildId, memberId);
     if (!store.members[key]) {
@@ -77,6 +99,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
         afkWarningSentAt: ''
       };
     }
+    store.members[key] = migrateLegacyMemberIfNeeded(guildId, memberId, store.members[key]) || store.members[key];
 
     store.members[key].points = clampPoints(store.members[key].points);
     store.members[key].voiceMinutes = Math.max(0, Number(store.members[key].voiceMinutes) || 0);
