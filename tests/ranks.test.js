@@ -32,6 +32,32 @@ function createFakeMember(id, roleIds) {
   };
 }
 
+function createFailingPromoteMember(id, roleIds, blockedRoleId) {
+  const assignedRoleIds = new Set(roleIds);
+
+  return {
+    id,
+    roles: {
+      cache: createRoleCache(assignedRoleIds),
+      async add(roleId) {
+        const resolved = typeof roleId === 'string' ? roleId : roleId.id;
+        if (resolved === blockedRoleId) {
+          throw new Error('Missing Permissions');
+        }
+        assignedRoleIds.add(resolved);
+      },
+      async remove(roleIdsToRemove) {
+        for (const roleId of roleIdsToRemove) {
+          assignedRoleIds.delete(typeof roleId === 'string' ? roleId : roleId.id);
+        }
+      }
+    },
+    getAssignedRoleIds() {
+      return [...assignedRoleIds];
+    }
+  };
+}
+
 function createRankServiceForTest(scoreByUserId = {}) {
   return createRankService({
     roles: [
@@ -118,12 +144,21 @@ async function testAutoRankDoesNotDemoteOnLowActivity() {
   assert.deepEqual(member.getAssignedRoleIds(), ['role-member']);
 }
 
+async function testPromoteKeepsOldRoleWhenTargetAssignmentFails() {
+  const rankService = createRankServiceForTest();
+  const member = createFailingPromoteMember('user-6', ['role-member'], 'role-elder');
+
+  await assert.rejects(() => rankService.promote(member), /Missing Permissions/);
+  assert.deepEqual(member.getAssignedRoleIds(), ['role-member']);
+}
+
 async function main() {
   await runTest('rank promote moves member one step up', testPromoteMovesMemberOneStepUp);
   await runTest('rank demote moves member one step down', testDemoteMovesMemberOneStepDown);
   await runTest('auto rank promotes by activity score', testAutoRankPromotesByActivity);
   await runTest('auto rank skips leadership roles', testAutoRankSkipsManualLeadershipRoles);
   await runTest('auto rank does not demote on low activity', testAutoRankDoesNotDemoteOnLowActivity);
+  await runTest('rank promote keeps old role when target assignment fails', testPromoteKeepsOldRoleWhenTargetAssignmentFails);
   console.log('ALL RANK TESTS PASSED');
 }
 

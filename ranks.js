@@ -54,12 +54,12 @@ function createRankService({ roles, storage, autoRanks }) {
   async function assignRole(member, targetRole, scopeRoles = familyRoles) {
     const removableRoleIds = scopeRoles.filter(role => role.id !== targetRole.id && member.roles.cache.has(role.id)).map(role => role.id);
 
-    if (removableRoleIds.length) {
-      await member.roles.remove(removableRoleIds);
-    }
-
     if (!member.roles.cache.has(targetRole.id)) {
       await member.roles.add(targetRole.id);
+    }
+
+    if (removableRoleIds.length) {
+      await member.roles.remove(removableRoleIds);
     }
   }
 
