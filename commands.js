@@ -42,7 +42,8 @@ async function registerCommands(guild) {
             { name: copy.commands.channelTargetPanel, value: 'panel' },
             { name: copy.commands.channelTargetApplications, value: 'applications' },
             { name: copy.commands.channelTargetLogs, value: 'logs' },
-            { name: copy.commands.channelTargetDiscipline, value: 'disciplineLogs' }
+            { name: copy.commands.channelTargetDiscipline, value: 'disciplineLogs' },
+            { name: copy.commands.channelTargetUpdates, value: 'updates' }
           )
       )
       .addChannelOption(option =>
@@ -60,6 +61,136 @@ async function registerCommands(guild) {
           .setName(copy.commands.familyTitleOptionName)
           .setDescription(copy.commands.familyTitleOptionDescription)
           .setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('setmode')
+      .setDescription(copy.commands.setModeDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.modeOptionName)
+          .setDescription(copy.commands.modeOptionDescription)
+          .setRequired(true)
+          .addChoices(
+            { name: copy.commands.modeFamily, value: 'family' },
+            { name: copy.commands.modeHybrid, value: 'hybrid' },
+            { name: copy.commands.modeServer, value: 'server' }
+          )
+      ),
+    new SlashCommandBuilder()
+      .setName('setmodule')
+      .setDescription(copy.commands.setModuleDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.moduleOptionName)
+          .setDescription(copy.commands.moduleOptionDescription)
+          .setRequired(true)
+          .addChoices(
+            { name: copy.commands.moduleFamily, value: 'family' },
+            { name: copy.commands.moduleApplications, value: 'applications' },
+            { name: copy.commands.moduleModeration, value: 'moderation' },
+            { name: copy.commands.moduleSecurity, value: 'security' },
+            { name: copy.commands.moduleAnalytics, value: 'analytics' },
+            { name: copy.commands.moduleAi, value: 'ai' },
+            { name: copy.commands.moduleWelcome, value: 'welcome' },
+            { name: copy.commands.moduleAutomod, value: 'automod' },
+            { name: copy.commands.moduleSubscriptions, value: 'subscriptions' },
+            { name: copy.commands.moduleCustomCommands, value: 'customCommands' },
+            { name: copy.commands.moduleMusic, value: 'music' }
+          )
+      )
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.stateOptionName)
+          .setDescription(copy.commands.stateOptionDescription)
+          .setRequired(true)
+          .addChoices(
+            { name: copy.commands.stateOn, value: 'on' },
+            { name: copy.commands.stateOff, value: 'off' }
+          )
+      ),
+    new SlashCommandBuilder()
+      .setName('automod')
+      .setDescription(copy.commands.automodDescription)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.automodStatusSubcommand)
+          .setDescription(copy.commands.automodStatusDescription)
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.automodToggleSubcommand)
+          .setDescription(copy.commands.automodToggleDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.automodRuleOptionName)
+              .setDescription(copy.commands.automodRuleOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.automodRuleInvites, value: 'invites' },
+                { name: copy.commands.automodRuleLinks, value: 'links' },
+                { name: copy.commands.automodRuleCaps, value: 'caps' },
+                { name: copy.commands.automodRuleMentions, value: 'mentions' },
+                { name: copy.commands.automodRuleSpam, value: 'spam' },
+                { name: copy.commands.automodRuleBadWords, value: 'badWords' }
+              )
+          )
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.stateOptionName)
+              .setDescription(copy.commands.stateOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.stateOn, value: 'on' },
+                { name: copy.commands.stateOff, value: 'off' }
+              )
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.automodLimitSubcommand)
+          .setDescription(copy.commands.automodLimitDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.automodTargetOptionName)
+              .setDescription(copy.commands.automodTargetOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.automodTargetCapsPercent, value: 'capsPercent' },
+                { name: copy.commands.automodTargetCapsMinLength, value: 'capsMinLength' },
+                { name: copy.commands.automodTargetMentionLimit, value: 'mentionLimit' },
+                { name: copy.commands.automodTargetSpamCount, value: 'spamCount' },
+                { name: copy.commands.automodTargetSpamWindow, value: 'spamWindowSeconds' }
+              )
+          )
+          .addIntegerOption(option =>
+            option
+              .setName(copy.commands.valueOptionName)
+              .setDescription(copy.commands.valueOptionDescription)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.automodWordsSubcommand)
+          .setDescription(copy.commands.automodWordsDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.actionOptionName)
+              .setDescription(copy.commands.actionOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.automodWordAddAction, value: 'add' },
+                { name: copy.commands.automodWordRemoveAction, value: 'remove' },
+                { name: copy.commands.automodWordListAction, value: 'list' },
+                { name: copy.commands.automodWordClearAction, value: 'clear' }
+              )
+          )
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.wordOptionName)
+              .setDescription(copy.commands.wordOptionDescription)
+              .setRequired(false)
+          )
       ),
     new SlashCommandBuilder()
       .setName('setart')
@@ -87,6 +218,19 @@ async function registerCommands(guild) {
       .setDescription(copy.commands.activityReportDescription)
       .addUserOption(option =>
         option.setName(copy.commands.userOptionName).setDescription(copy.commands.profileUserDescription).setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('serverreport')
+      .setDescription(copy.commands.serverReportDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.periodOptionName)
+          .setDescription(copy.commands.periodOptionDescription)
+          .setRequired(true)
+          .addChoices(
+            { name: copy.commands.periodWeekly, value: 'weekly' },
+            { name: copy.commands.periodMonthly, value: 'monthly' }
+          )
       ),
     new SlashCommandBuilder()
       .setName('aiadvisor')

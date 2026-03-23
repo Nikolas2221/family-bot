@@ -617,5 +617,113 @@ copy.help.adminSection = 'Команды администрации';
 copy.help.premiumRegularSection = 'Обычные команды в Premium';
 copy.help.premiumAdminSection = 'Админ-команды в Premium';
 copy.help.none = 'Нет доступных команд для этого раздела.';
+copy.common.moduleDisabled = 'Этот модуль сервера сейчас отключён.';
+copy.commands.setModeDescription = 'Переключить продуктовый режим сервера';
+copy.commands.setModuleDescription = 'Включить или выключить модуль сервера';
+copy.commands.modeOptionName = 'mode';
+copy.commands.modeOptionDescription = 'Какой режим продукта включить';
+copy.commands.moduleOptionName = 'module';
+copy.commands.moduleOptionDescription = 'Какой модуль переключить';
+copy.commands.stateOptionName = 'state';
+copy.commands.stateOptionDescription = 'Включить или выключить модуль';
+copy.commands.modeFamily = 'Family Mode';
+copy.commands.modeHybrid = 'Hybrid Mode';
+copy.commands.modeServer = 'Server Mode';
+copy.commands.stateOn = 'On';
+copy.commands.stateOff = 'Off';
+copy.commands.moduleFamily = 'Family';
+copy.commands.moduleApplications = 'Applications';
+copy.commands.moduleModeration = 'Moderation';
+copy.commands.moduleSecurity = 'Security';
+copy.commands.moduleAnalytics = 'Analytics';
+copy.commands.moduleAi = 'AI';
+copy.commands.moduleWelcome = 'Welcome';
+copy.commands.moduleAutomod = 'Automod';
+copy.commands.moduleSubscriptions = 'Subscriptions';
+copy.commands.moduleCustomCommands = 'Custom Commands';
+copy.commands.moduleMusic = 'Music';
+
+copy.commands.channelTargetUpdates = 'Апдейты бота';
+copy.commands.automodDescription = 'Настроить автомодерацию сервера';
+copy.commands.automodStatusSubcommand = 'status';
+copy.commands.automodStatusDescription = 'Показать текущие настройки automod';
+copy.commands.automodToggleSubcommand = 'toggle';
+copy.commands.automodToggleDescription = 'Включить или выключить правило automod';
+copy.commands.automodLimitSubcommand = 'limit';
+copy.commands.automodLimitDescription = 'Изменить числовой порог automod';
+copy.commands.automodWordsSubcommand = 'words';
+copy.commands.automodWordsDescription = 'Управлять списком стоп-слов automod';
+copy.commands.automodRuleOptionName = 'rule';
+copy.commands.automodRuleOptionDescription = 'Какое правило automod изменить';
+copy.commands.automodRuleInvites = 'Инвайты';
+copy.commands.automodRuleLinks = 'Ссылки';
+copy.commands.automodRuleCaps = 'Капс';
+copy.commands.automodRuleMentions = 'Много упоминаний';
+copy.commands.automodRuleSpam = 'Флуд';
+copy.commands.automodRuleBadWords = 'Стоп-слова';
+copy.commands.automodTargetOptionName = 'target';
+copy.commands.automodTargetOptionDescription = 'Какой порог изменить';
+copy.commands.automodTargetCapsPercent = 'Порог капса %';
+copy.commands.automodTargetCapsMinLength = 'Мин. длина капса';
+copy.commands.automodTargetMentionLimit = 'Лимит упоминаний';
+copy.commands.automodTargetSpamCount = 'Лимит флуда';
+copy.commands.automodTargetSpamWindow = 'Окно флуда';
+copy.commands.valueOptionName = 'value';
+copy.commands.valueOptionDescription = 'Новое значение для порога';
+copy.commands.actionOptionName = 'action';
+copy.commands.actionOptionDescription = 'Что сделать со списком слов';
+copy.commands.wordOptionName = 'word';
+copy.commands.wordOptionDescription = 'Слово для списка automod';
+copy.commands.automodWordAddAction = 'Добавить';
+copy.commands.automodWordRemoveAction = 'Удалить';
+copy.commands.automodWordListAction = 'Показать';
+copy.commands.automodWordClearAction = 'Очистить';
+copy.commands.serverReportDescription = 'Показать недельный или месячный отчёт по серверу';
+copy.commands.periodOptionName = 'period';
+copy.commands.periodOptionDescription = 'За какой период собрать статистику';
+copy.commands.periodWeekly = 'Weekly';
+copy.commands.periodMonthly = 'Monthly';
+
+copy.automod = copy.automod || {};
+copy.automod.ruleLabel = function ruleLabel(rule) {
+  const labels = {
+    invites: 'Инвайты',
+    links: 'Ссылки',
+    caps: 'Капс',
+    mentions: 'Упоминания',
+    spam: 'Флуд',
+    badWords: 'Стоп-слова'
+  };
+
+  return labels[rule] || rule;
+};
+copy.automod.targetLabel = function targetLabel(target) {
+  const labels = {
+    capsPercent: 'Порог капса',
+    capsMinLength: 'Мин. длина капса',
+    mentionLimit: 'Лимит упоминаний',
+    spamCount: 'Лимит флуда',
+    spamWindowSeconds: 'Окно флуда'
+  };
+
+  return labels[target] || target;
+};
+copy.automod.notice = function notice(userId, rule, detail = '') {
+  return `<@${userId}>, automod удалил сообщение по правилу **${rule}**${detail ? ` (${detail})` : ''}.`;
+};
+copy.automod.toggleDone = function toggleDone(rule, enabled) {
+  return `Правило automod **${rule}** теперь **${enabled ? 'включено' : 'выключено'}**.`;
+};
+copy.automod.limitDone = function limitDone(target, value) {
+  return `Порог automod **${target}** обновлён: **${value}**.`;
+};
+copy.automod.wordAdded = function wordAdded(word) {
+  return `Слово **${word}** добавлено в стоп-лист automod.`;
+};
+copy.automod.wordRemoved = function wordRemoved(word) {
+  return `Слово **${word}** удалено из стоп-листа automod.`;
+};
+copy.automod.wordsCleared = 'Список стоп-слов automod очищен.';
+copy.automod.wordMissing = 'Укажи слово для этой операции.';
 
 module.exports = copy;

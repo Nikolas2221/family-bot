@@ -57,9 +57,22 @@ async function testClearAllChannelConfirmationStaysRequiredAndFirst() {
   assert.equal(clearAll.options[1].required, false);
 }
 
+async function testAutomodAndServerReportCommandsAreRegistered() {
+  const commands = await collectCommands();
+  const automod = commands.find(command => command.name === 'automod');
+  const serverReport = commands.find(command => command.name === 'serverreport');
+  const setChannel = commands.find(command => command.name === 'setchannel');
+
+  assert.ok(automod);
+  assert.ok(serverReport);
+  assert.ok(setChannel);
+  assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'updates'), true);
+}
+
 async function main() {
   await runTest('commands keep required options before optional ones', testRequiredOptionsPrecedeOptionalOptions);
   await runTest('clearallchannel keeps confirmation as the first required option', testClearAllChannelConfirmationStaysRequiredAndFirst);
+  await runTest('automod and serverreport commands are registered', testAutomodAndServerReportCommandsAreRegistered);
   console.log('ALL COMMAND TESTS PASSED');
 }
 

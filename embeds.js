@@ -900,6 +900,136 @@ function buildHelpEmbed({ plan, regularCommands = [], adminCommands = [], premiu
   );
 }
 
+function buildAdminPanelEmbed({ guildName, record }) {
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? copy.admin.panelPremium : copy.admin.panelFree;
+  const modules = record.settings.modules || {};
+  const mode = record.settings.mode || 'hybrid';
+  const automod = record.settings.automod || {};
+  const moduleLines = [
+    `Family: ${modules.family ? 'ON' : 'OFF'}`,
+    `Applications: ${modules.applications ? 'ON' : 'OFF'}`,
+    `Moderation: ${modules.moderation ? 'ON' : 'OFF'}`,
+    `Security: ${modules.security ? 'ON' : 'OFF'}`,
+    `Analytics: ${modules.analytics ? 'ON' : 'OFF'}`,
+    `AI: ${modules.ai ? 'ON' : 'OFF'}`,
+    `Welcome: ${modules.welcome ? 'ON' : 'OFF'}`,
+    `Automod: ${modules.automod ? 'ON' : 'OFF'}`,
+    `Subscriptions: ${modules.subscriptions ? 'ON' : 'OFF'}`,
+    `Custom Commands: ${modules.customCommands ? 'ON' : 'OFF'}`,
+    `Music: ${modules.music ? 'ON' : 'OFF'}`
+  ];
+
+  return card({
+    title: copy.admin.panelTitle,
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `Сервер: **${guildName}**`,
+    footer: 'BRHD • Phoenix • Administration'
+  }).addFields(
+    section('Статус', [`План: ${planLabel}`, `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`, `Режим: ${mode}`].join('\n'), true),
+    section('Возможности', copy.admin.panelFeatures(record.plan), true),
+    section(
+      copy.admin.panelFieldChannels,
+      [
+        channelLine('Панель', record.settings.channels.panel),
+        channelLine('Подача заявки', record.settings.channels.applications),
+        channelLine('Логи', record.settings.channels.logs),
+        channelLine('Дисциплина', record.settings.channels.disciplineLogs),
+        channelLine('Апдейты', record.settings.channels.updates)
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldRoles,
+      [
+        roleLine('Лидер', record.settings.roles.leader),
+        roleLine('Зам', record.settings.roles.deputy),
+        roleLine('Старший', record.settings.roles.elder),
+        roleLine('Участник', record.settings.roles.member),
+        roleLine('Новичок', record.settings.roles.newbie),
+        roleLine('Мут', record.settings.roles.mute)
+      ].join('\n'),
+      false
+    ),
+    section('Модули', moduleLines.join('\n'), false),
+    section(
+      'Automod',
+      [
+        `Инвайты: ${automod.invitesEnabled ? 'ON' : 'OFF'}`,
+        `Ссылки: ${automod.linksEnabled ? 'ON' : 'OFF'}`,
+        `Капс: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+ букв)` : 'OFF'}`,
+        `Упоминания: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`,
+        `Флуд: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}с)` : 'OFF'}`,
+        `Стоп-слова: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldVisuals,
+      [
+        copy.admin.visualLine('Панель семьи', record.settings.visuals?.familyBanner),
+        copy.admin.visualLine('Подача заявки', record.settings.visuals?.applicationsBanner)
+      ].join('\n'),
+      false
+    )
+  );
+}
+
+function buildAutomodStatusEmbed(config = {}) {
+  const settings = config || {};
+  return card({
+    title: '🛡️ Automod',
+    color: THEME.ruby,
+    description: 'Настройки автоматической модерации сервера.',
+    footer: 'BRHD • Phoenix • Automod'
+  }).addFields(
+    section('Базовые правила', [
+      `Инвайты: ${settings.invitesEnabled ? 'ON' : 'OFF'}`,
+      `Ссылки: ${settings.linksEnabled ? 'ON' : 'OFF'}`,
+      `Капс: ${settings.capsEnabled ? 'ON' : 'OFF'}`,
+      `Упоминания: ${settings.mentionsEnabled ? 'ON' : 'OFF'}`
+    ].join('\n'), true),
+    section('Расширенные правила', [
+      `Флуд: ${settings.spamEnabled ? 'ON' : 'OFF'}`,
+      `Стоп-слова: ${settings.badWordsEnabled ? 'ON' : 'OFF'}`,
+      `Слов в списке: ${(settings.badWords || []).length}`
+    ].join('\n'), true),
+    section('Пороги', [
+      `Капс: ${settings.capsPercent || 75}% / ${settings.capsMinLength || 12}+ букв`,
+      `Упоминания: ${settings.mentionLimit || 5}`,
+      `Флуд: ${settings.spamCount || 6} сообщений / ${settings.spamWindowSeconds || 8}с`
+    ].join('\n')),
+    section('Стоп-слова', (settings.badWords || []).length ? settings.badWords.join(', ').slice(0, 1024) : 'Список пуст')
+  );
+}
+
+function buildAutomodActionEmbed({ member, rule, detail, channelId, content }) {
+  return card({
+    title: '🚫 Automod сработал',
+    color: THEME.ruby,
+    description: `Сообщение участника ${member ? `<@${member.id}>` : 'неизвестно'} было удалено автоматически.`,
+    footer: 'BRHD • Phoenix • Automod',
+    thumbnail: member?.displayAvatarURL?.()
+  }).addFields(
+    section('Правило', `${copy.automod?.ruleLabel ? copy.automod.ruleLabel(rule) : rule}${detail ? ` • ${detail}` : ''}`, true),
+    section('Канал', channelId ? `<#${channelId}>` : 'не задан', true),
+    section('Сообщение', trimValue(content, 1000))
+  );
+}
+
+function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMessage = '', changeLines = [] }) {
+  return card({
+    title: '🚀 Бот получил обновление',
+    color: THEME.gold,
+    description: `${versionLabel}\nСборка успешно развернута на сервере.`,
+    footer: 'BRHD • Phoenix • Updates'
+  }).addFields(
+    section('Версия', [`Лейбл: ${versionLabel}`, `Semver: ${semver}`, `Build: ${buildId}`].join('\n'), true),
+    section('Коммит', commitMessage || 'Нет commit message в окружении Railway.', true),
+    section('Что изменилось', (changeLines || []).length ? changeLines.map(line => `• ${line}`).join('\n') : '• Список изменений не передан')
+  );
+}
+
 module.exports = {
   buildAcceptLogEmbed,
   buildApplicationButtons,
@@ -918,10 +1048,13 @@ module.exports = {
   buildFamilyEmbeds,
   buildFamilyMenuEmbed,
   buildHelpEmbed,
+  buildAutomodActionEmbed,
+  buildAutomodStatusEmbed,
   buildLeaderboardEmbed,
   buildProfileEmbed,
   buildRankButtons,
   buildRejectLogEmbed,
+  buildUpdateAnnouncementEmbed,
   buildVoiceActivityEmbed,
   buildWelcomeEmbed,
   buildWarnLogEmbed,

@@ -252,6 +252,30 @@ async function testStoragePrefersBackupWhenPrimaryLooksEmpty() {
   assert.equal(storage.guildPointsScore('guild-pref', 'user-pref'), 4);
 }
 
+async function testGuildPeriodAnalyticsAggregateMessagesVoiceReactionsAndMembers() {
+  const storage = createTempStorage();
+
+  storage.trackGuildAnalyticsMessage('guild-stats', 'user-1', 'channel-text');
+  storage.trackGuildAnalyticsMessage('guild-stats', 'user-1', 'channel-text');
+  storage.addGuildReaction('guild-stats', 'user-1');
+  storage.addGuildVoiceMinutes('guild-stats', 'user-1', 45, 'channel-voice');
+  storage.trackGuildJoin('guild-stats');
+  storage.trackGuildLeave('guild-stats');
+
+  const analytics = storage.getGuildPeriodAnalytics('guild-stats', 7);
+
+  assert.equal(analytics.messagesTotal, 2);
+  assert.equal(analytics.reactionsTotal, 1);
+  assert.equal(analytics.voiceMinutesTotal, 45);
+  assert.equal(analytics.joins, 1);
+  assert.equal(analytics.leaves, 1);
+  assert.equal(analytics.channels['channel-text'], 2);
+  assert.equal(analytics.voiceChannels['channel-voice'], 45);
+  assert.equal(analytics.members['user-1'].messages, 2);
+  assert.equal(analytics.members['user-1'].reactions, 1);
+  assert.equal(analytics.members['user-1'].voiceMinutes, 45);
+}
+
 async function main() {
   await runTest('commends increase points up to 100', testCommendsIncreasePointsUpToHundred);
   await runTest('warns do not drop points below zero', testWarnsDoNotDropPointsBelowZero);
@@ -263,6 +287,7 @@ async function main() {
   await runTest('storage creates nested directory on flush', testStorageCreatesNestedDirectoryOnFlush);
   await runTest('storage restores from backup when primary is invalid', testStorageRestoresFromBackupWhenPrimaryIsInvalid);
   await runTest('storage prefers backup when primary looks empty', testStoragePrefersBackupWhenPrimaryLooksEmpty);
+  await runTest('guild period analytics aggregate messages voice reactions and joins', testGuildPeriodAnalyticsAggregateMessagesVoiceReactionsAndMembers);
   console.log('ALL STORAGE TESTS PASSED');
 }
 

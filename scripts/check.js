@@ -5,6 +5,7 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const files = [
   'ai.js',
+  'automod.js',
   'applications.js',
   'commands.js',
   'config.js',
@@ -16,6 +17,7 @@ const files = [
   'roles.js',
   'storage.js',
   path.join('tests', 'applications.test.js'),
+  path.join('tests', 'automod.test.js'),
   path.join('tests', 'commands.test.js'),
   path.join('tests', 'database.test.js'),
   path.join('tests', 'config.test.js'),

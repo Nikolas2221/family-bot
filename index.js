@@ -1,13 +1,15 @@
 require('dotenv').config();
 
 const path = require('path');
+const packageMeta = require('./package.json');
 const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { createAIService } = require('./ai');
+const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('./automod');
 const { createApplicationsService } = require('./applications');
 const { registerCommands } = require('./commands');
 const { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } = require('./config');
 const copy = require('./copy');
-const { createDatabase } = require('./database');
+const { createDatabase, defaultModulesForMode } = require('./database');
 const embeds = require('./embeds');
 const { createRankService } = require('./ranks');
 const ROLES = require('./roles');
@@ -45,6 +47,12 @@ const CHANNEL_GUARD = config.channelGuard;
 const ROLELESS_CLEANUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const PRODUCT_VERSION_LABEL = 'BRHD/PHOENIX 0.1 BETA';
+const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.1';
+const DEPLOY_COMMIT_SHA = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || '').trim();
+const DEPLOY_COMMIT_MESSAGE = (process.env.RAILWAY_GIT_COMMIT_MESSAGE || process.env.GIT_COMMIT_MESSAGE || '').trim();
+const DEPLOY_BUILD_ID = (DEPLOY_COMMIT_SHA ? DEPLOY_COMMIT_SHA.slice(0, 7) : (process.env.RAILWAY_DEPLOYMENT_ID || PRODUCT_VERSION_SEMVER));
+const CURRENT_BUILD_SIGNATURE = `${PRODUCT_VERSION_SEMVER}:${DEPLOY_BUILD_ID}`;
 
 const client = new Client({
   intents: [
@@ -53,6 +61,7 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildPresences,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.MessageContent
   ]
 });
@@ -61,6 +70,7 @@ const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
 const ROLE_TEMPLATES = ROLES.map(role => ({ ...role }));
+const automodState = new Map();
 
 function ephemeral(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -102,6 +112,8 @@ function memberSessionKey(guildId, memberId) {
 function resolveGuildSettings(guildId) {
   const guild = database.getGuild(guildId);
   const settings = guild.settings || {};
+  const mode = settings.mode || 'hybrid';
+  const defaultModules = defaultModulesForMode(mode);
   const roles = ROLE_TEMPLATES.map(role => ({
     ...role,
     id: settings.roles?.[role.key] || role.id || ''
@@ -110,12 +122,14 @@ function resolveGuildSettings(guildId) {
   const logs = settings.channels?.logs || LOG_CHANNEL_ID;
 
   return {
+    mode,
     familyTitle: settings.familyTitle || FAMILY_TITLE,
     channels: {
       panel,
       applications: settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
       logs,
-      disciplineLogs: settings.channels?.disciplineLogs || DISCIPLINE_LOG_CHANNEL_ID || logs || ''
+      disciplineLogs: settings.channels?.disciplineLogs || DISCIPLINE_LOG_CHANNEL_ID || logs || '',
+      updates: settings.channels?.updates || ''
     },
     roles,
     access: {
@@ -127,6 +141,20 @@ function resolveGuildSettings(guildId) {
     visuals: {
       familyBanner: settings.visuals?.familyBanner || '',
       applicationsBanner: settings.visuals?.applicationsBanner || ''
+    },
+    automod: normalizeAutomodConfig(settings.automod),
+    modules: {
+      family: settings.modules?.family ?? defaultModules.family,
+      applications: settings.modules?.applications ?? defaultModules.applications,
+      moderation: settings.modules?.moderation ?? defaultModules.moderation,
+      security: settings.modules?.security ?? defaultModules.security,
+      analytics: settings.modules?.analytics ?? defaultModules.analytics,
+      ai: settings.modules?.ai ?? defaultModules.ai,
+      welcome: settings.modules?.welcome ?? defaultModules.welcome,
+      automod: settings.modules?.automod ?? defaultModules.automod,
+      subscriptions: settings.modules?.subscriptions ?? defaultModules.subscriptions,
+      customCommands: settings.modules?.customCommands ?? defaultModules.customCommands,
+      music: settings.modules?.music ?? defaultModules.music
     },
     applicationDefaultRole: settings.roles?.newbie || APPLICATION_DEFAULT_ROLE
   };
@@ -153,11 +181,23 @@ function getGuildStorage(guildId) {
     addVoiceMinutes(memberId, minutes) {
       return storage.addGuildVoiceMinutes(guildId, memberId, minutes);
     },
+    addVoiceMinutesInChannel(memberId, minutes, channelId) {
+      return storage.addGuildVoiceMinutes(guildId, memberId, minutes, channelId);
+    },
     trackMessage(memberId) {
       return storage.trackGuildMessage(guildId, memberId);
     },
+    trackMessageInChannel(memberId, channelId) {
+      return storage.trackGuildMessage(guildId, memberId, channelId);
+    },
+    trackAnalyticsMessage(memberId, channelId) {
+      return storage.trackGuildAnalyticsMessage(guildId, memberId, channelId);
+    },
     trackPresence(memberId) {
       return storage.trackGuildPresence(guildId, memberId);
+    },
+    addReaction(memberId) {
+      return storage.addGuildReaction(guildId, memberId);
     },
     addWarn({ userId, moderatorId, reason }) {
       return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
@@ -220,6 +260,21 @@ function getGuildStorage(guildId) {
     clearAfkWarningSent(memberId) {
       return storage.clearGuildAfkWarningSent(guildId, memberId);
     },
+    trackJoin() {
+      return storage.trackGuildJoin(guildId);
+    },
+    trackLeave() {
+      return storage.trackGuildLeave(guildId);
+    },
+    getPeriodAnalytics(days, now) {
+      return storage.getGuildPeriodAnalytics(guildId, days, now);
+    },
+    getReportMarker(markerKey) {
+      return storage.getGuildReportMarker(guildId, markerKey);
+    },
+    setReportMarker(markerKey, value) {
+      return storage.setGuildReportMarker(guildId, markerKey, value);
+    },
     sanitizeApplicationInput: storage.sanitizeApplicationInput,
     setApplicationStatus: storage.setApplicationStatus
   };
@@ -266,11 +321,13 @@ function buildGuildSettingsSnapshot(guild) {
     ownerId: guild.ownerId || '',
     settings: {
       familyTitle: settings.familyTitle,
+      mode: settings.mode,
       channels: {
         panel: settings.channels.panel,
         applications: settings.channels.applications,
         logs: settings.channels.logs,
-        disciplineLogs: settings.channels.disciplineLogs
+        disciplineLogs: settings.channels.disciplineLogs,
+        updates: settings.channels.updates
       },
       roles: {
         leader: settings.roles.find(role => role.key === 'leader')?.id || '',
@@ -288,6 +345,10 @@ function buildGuildSettingsSnapshot(guild) {
       visuals: {
         familyBanner: settings.visuals.familyBanner,
         applicationsBanner: settings.visuals.applicationsBanner
+      },
+      automod: settings.automod,
+      modules: {
+        ...settings.modules
       },
       features: {
         aiEnabled: AI_ENABLED,
@@ -320,10 +381,10 @@ function formatTimeAgo(timestamp) {
 function getLiveVoiceMinutes(member) {
   const guildStorage = getGuildStorage(member.guild.id);
   const storedMinutes = guildStorage.voiceMinutes(member.id);
-  const startedAt = voiceSessions.get(memberSessionKey(member.guild.id, member.id));
-  if (!startedAt) return storedMinutes;
+  const session = voiceSessions.get(memberSessionKey(member.guild.id, member.id));
+  if (!session?.startedAt) return storedMinutes;
 
-  return storedMinutes + Math.floor((Date.now() - startedAt) / 60000);
+  return storedMinutes + Math.floor((Date.now() - session.startedAt) / 60000);
 }
 
 function getDisplayRankName(member) {
@@ -665,6 +726,140 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
     .setTimestamp();
 }
 
+function formatPeriodLabel(period) {
+  return period === 'monthly' ? 'Ежемесячный статистический отчёт' : 'Еженедельный статистический отчёт';
+}
+
+function formatPeriodRangeLabel(analytics) {
+  return analytics.dayCount >= 30
+    ? `Отчёт за период с ${analytics.fromDayKey}`
+    : `Отчёт за период: ${analytics.fromDayKey} — ${analytics.toDayKey}`;
+}
+
+function medal(index) {
+  if (index === 0) return '🥇';
+  if (index === 1) return '🥈';
+  if (index === 2) return '🥉';
+  return `${index + 1}.`;
+}
+
+function formatMinutesLong(totalMinutes) {
+  const safe = Math.max(0, Math.floor(Number(totalMinutes) || 0));
+  const hours = Math.floor(safe / 60);
+  const minutes = safe % 60;
+  return `${hours}ч ${minutes}м`;
+}
+
+function getMemberLabel(guild, memberId) {
+  const member = guild.members.cache.get(memberId);
+  if (member) {
+    return `<@${memberId}> | ${member.displayName}`;
+  }
+
+  return `<@${memberId}>`;
+}
+
+function getChannelLabel(guild, channelId) {
+  const channel = guild.channels.cache.get(channelId);
+  return channel ? `<#${channelId}>` : `#${channelId}`;
+}
+
+function buildRankedLines(entries, formatter, limit = 5) {
+  return entries.slice(0, limit).map((entry, index) => `${medal(index)} ${formatter(entry)}`);
+}
+
+function buildServerStatsReportEmbed(guild, period = 'weekly') {
+  const guildStorage = getGuildStorage(guild.id);
+  const settings = resolveGuildSettings(guild.id);
+  const analytics = guildStorage.getPeriodAnalytics(period === 'monthly' ? 30 : 7);
+  const memberEntries = Object.entries(analytics.members || {});
+
+  const topMessages = buildRankedLines(
+    memberEntries
+      .map(([memberId, stats]) => ({ memberId, value: stats.messages || 0 }))
+      .filter(item => item.value > 0)
+      .sort((left, right) => right.value - left.value),
+    item => `${getMemberLabel(guild, item.memberId)} — ${item.value} сообщений`
+  );
+
+  const topVoice = buildRankedLines(
+    memberEntries
+      .map(([memberId, stats]) => ({ memberId, value: stats.voiceMinutes || 0 }))
+      .filter(item => item.value > 0)
+      .sort((left, right) => right.value - left.value),
+    item => `${getMemberLabel(guild, item.memberId)} — ${formatMinutesLong(item.value)}`
+  );
+
+  const topReactions = buildRankedLines(
+    memberEntries
+      .map(([memberId, stats]) => ({ memberId, value: stats.reactions || 0 }))
+      .filter(item => item.value > 0)
+      .sort((left, right) => right.value - left.value),
+    item => `${getMemberLabel(guild, item.memberId)} — ${item.value} реакций`
+  );
+
+  const topChannels = buildRankedLines(
+    Object.entries(analytics.channels || {})
+      .map(([channelId, value]) => ({ channelId, value }))
+      .filter(item => item.value > 0)
+      .sort((left, right) => right.value - left.value),
+    item => `${getChannelLabel(guild, item.channelId)} — ${item.value} сообщений`
+  );
+
+  const topVoiceChannels = buildRankedLines(
+    Object.entries(analytics.voiceChannels || {})
+      .map(([channelId, value]) => ({ channelId, value }))
+      .filter(item => item.value > 0)
+      .sort((left, right) => right.value - left.value),
+    item => `${getChannelLabel(guild, item.channelId)} — ${formatMinutesLong(item.value)}`
+  );
+
+  return new EmbedBuilder()
+    .setColor(period === 'monthly' ? 0xf59e0b : 0x2563eb)
+    .setTitle(`📅 ${formatPeriodLabel(period)}`)
+    .setDescription(formatPeriodRangeLabel(analytics))
+    .setThumbnail(client.user?.displayAvatarURL?.() || null)
+    .setImage(settings.visuals.familyBanner || null)
+    .addFields(
+      {
+        name: '💬 Топ по сообщениям',
+        value: topMessages.length ? topMessages.join('\n').slice(0, 1024) : 'Нет данных за период.'
+      },
+      {
+        name: '🎤 Топ по голосовой активности',
+        value: topVoice.length ? topVoice.join('\n').slice(0, 1024) : 'Нет данных за период.'
+      },
+      {
+        name: '✨ Топ по реакциям',
+        value: topReactions.length ? topReactions.join('\n').slice(0, 1024) : 'Нет данных за период.'
+      },
+      {
+        name: '📍 Самые активные каналы',
+        value: topChannels.length ? topChannels.join('\n').slice(0, 1024) : 'Нет данных за период.'
+      },
+      {
+        name: '🔊 Топ по голосовым каналам',
+        value: topVoiceChannels.length ? topVoiceChannels.join('\n').slice(0, 1024) : 'Нет данных за период.'
+      },
+      {
+        name: '👋 Участники',
+        value: [`Новые участники: **${analytics.joins}**`, `Ушедшие участники: **${analytics.leaves}**`].join('\n'),
+        inline: true
+      },
+      {
+        name: '📊 Общая статистика',
+        value: [
+          `Всего сообщений: **${analytics.messagesTotal}**`,
+          `Время в войсе: **${formatMinutesLong(analytics.voiceMinutesTotal)}**`,
+          `Всего реакций: **${analytics.reactionsTotal}**`
+        ].join('\n'),
+        inline: true
+      }
+    )
+    .setFooter({ text: `BRHD • Phoenix • ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
+    .setTimestamp();
+}
+
 function normalizeMemberQuery(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -734,6 +929,55 @@ function getRoleLimit(guildId) {
   return isPremiumGuild(guildId) ? Number.MAX_SAFE_INTEGER : 6;
 }
 
+function getCommandModule(commandName) {
+  switch (commandName) {
+    case 'family':
+    case 'profile':
+      return 'family';
+    case 'apply':
+    case 'applypanel':
+    case 'applications':
+      return 'applications';
+    case 'warn':
+    case 'commend':
+    case 'purge':
+    case 'purgeuser':
+    case 'clearallchannel':
+    case 'kickroless':
+    case 'mute':
+    case 'unmute':
+    case 'lockchannel':
+    case 'unlockchannel':
+    case 'slowmode':
+    case 'warnhistory':
+    case 'clearwarns':
+      return 'moderation';
+    case 'blacklistadd':
+    case 'blacklistremove':
+    case 'blacklistlist':
+    case 'banlist':
+    case 'unbanid':
+      return 'security';
+    case 'leaderboard':
+    case 'voiceactivity':
+    case 'activityreport':
+    case 'serverreport':
+      return 'analytics';
+    case 'ai':
+    case 'aiadvisor':
+      return 'ai';
+    case 'automod':
+      return 'automod';
+    default:
+      return null;
+  }
+}
+
+function isModuleEnabled(guildId, moduleName) {
+  if (!moduleName) return true;
+  return resolveGuildSettings(guildId).modules?.[moduleName] !== false;
+}
+
 function getHelpCatalog(interaction) {
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -750,6 +994,8 @@ function getHelpCatalog(interaction) {
     { name: 'setrole', description: copy.commands.setRoleDescription },
     { name: 'setchannel', description: copy.commands.setChannelDescription },
     { name: 'setfamilytitle', description: copy.commands.setFamilyTitleDescription },
+    { name: 'setmode', description: copy.commands.setModeDescription },
+    { name: 'setmodule', description: copy.commands.setModuleDescription },
     { name: 'setart', description: copy.commands.setArtDescription },
     { name: 'setup', description: copy.commands.setupDescription },
     { name: 'adminpanel', description: copy.commands.adminPanelDescription },
@@ -762,6 +1008,8 @@ function getHelpCatalog(interaction) {
     { name: 'unlockchannel', description: copy.commands.unlockChannelDescription },
     { name: 'slowmode', description: copy.commands.slowmodeDescription },
     { name: 'warnhistory', description: copy.commands.warnHistoryDescription },
+    { name: 'serverreport', description: copy.commands.serverReportDescription },
+    { name: 'automod', description: copy.commands.automodDescription },
     { name: 'debugconfig', description: copy.commands.debugConfigDescription }
   ];
 
@@ -791,20 +1039,27 @@ function getHelpCatalog(interaction) {
   }
 
   const premium = isPremiumGuild(guildId);
-  const availableRegular = premium ? [...regularFree, ...regularPremium] : regularFree;
+  const availableRegularBase = premium ? [...regularFree, ...regularPremium] : regularFree;
+  const availableRegular = availableRegularBase.filter(command => canUseCommandInContext(command.name, interaction));
   const availableAdminBase = premium ? [...adminFree, ...adminPremium] : adminFree;
   const availableAdmin = availableAdminBase.filter(command => canUseCommandInContext(command.name, interaction));
+  const lockedPremiumRegular = premium ? [] : regularPremium.filter(command => isModuleEnabled(guildId, getCommandModule(command.name)));
+  const lockedPremiumAdmin = premium ? [] : adminPremium.filter(command => isModuleEnabled(guildId, getCommandModule(command.name)));
 
   return {
     plan: getGuildPlan(guildId),
     regularCommands: availableRegular,
     adminCommands: availableAdmin,
-    premiumRegularCommands: premium ? [] : regularPremium,
-    premiumAdminCommands: premium ? [] : adminPremium
+    premiumRegularCommands: lockedPremiumRegular,
+    premiumAdminCommands: lockedPremiumAdmin
   };
 }
 
 function canUseCommandInContext(commandName, interaction) {
+  if (!isModuleEnabled(interaction.guild.id, getCommandModule(commandName))) {
+    return false;
+  }
+
   switch (commandName) {
     case 'applypanel':
       return canApplications(interaction.member);
@@ -813,10 +1068,13 @@ function canUseCommandInContext(commandName, interaction) {
     case 'setrole':
     case 'setchannel':
     case 'setfamilytitle':
+    case 'setmode':
+    case 'setmodule':
     case 'setart':
     case 'debugconfig':
     case 'aiadvisor':
     case 'testaccept':
+    case 'automod':
       return canDebugConfig(interaction);
     case 'warn':
     case 'commend':
@@ -842,6 +1100,7 @@ function canUseCommandInContext(commandName, interaction) {
       return canUseSecurity(interaction.member);
     case 'subscription':
       return isOwner(interaction.user.id);
+    case 'serverreport':
     case 'activityreport':
       return canDebugConfig(interaction);
     default:
@@ -888,6 +1147,75 @@ function buildAiCommandsOverview(interaction) {
     '',
     ...available.map(command => `/${command.name} — ${command.description}`)
   ].join('\n').slice(0, 1900);
+}
+
+function splitUpdateChangeLines() {
+  const raw = DEPLOY_COMMIT_MESSAGE
+    .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])/i)
+    .map(item => item.replace(/^[-*]\s*/, '').trim())
+    .filter(Boolean);
+
+  if (!raw.length) {
+    return [
+      'Новая сборка развёрнута и готова к работе.',
+      'Команды и модули сервера синхронизированы.',
+      `Текущая версия: ${PRODUCT_VERSION_LABEL}.`
+    ];
+  }
+
+  return raw.slice(0, 6);
+}
+
+function canBypassAutomod(member) {
+  return canModerate(member) || canDebugConfig({ memberPermissions: member?.permissions, member });
+}
+
+function getAutomodStateKey(guildId, userId) {
+  return `${guildId}:${userId}`;
+}
+
+function buildAutomodRulePatch(rule, state) {
+  switch (rule) {
+    case 'invites':
+      return { invitesEnabled: state };
+    case 'links':
+      return { linksEnabled: state };
+    case 'caps':
+      return { capsEnabled: state };
+    case 'mentions':
+      return { mentionsEnabled: state };
+    case 'spam':
+      return { spamEnabled: state };
+    case 'badWords':
+      return { badWordsEnabled: state };
+    default:
+      return {};
+  }
+}
+
+function getAutomodTargetLimits(target, value) {
+  switch (target) {
+    case 'capsPercent':
+      return { capsPercent: Math.max(50, Math.min(100, value)) };
+    case 'capsMinLength':
+      return { capsMinLength: Math.max(4, Math.min(200, value)) };
+    case 'mentionLimit':
+      return { mentionLimit: Math.max(2, Math.min(50, value)) };
+    case 'spamCount':
+      return { spamCount: Math.max(3, Math.min(20, value)) };
+    case 'spamWindowSeconds':
+      return { spamWindowSeconds: Math.max(3, Math.min(60, value)) };
+    default:
+      return {};
+  }
+}
+
+function isPremiumAutomodRule(rule) {
+  return rule === 'spam' || rule === 'badWords';
+}
+
+function isPremiumAutomodTarget(target) {
+  return target === 'spamCount' || target === 'spamWindowSeconds';
 }
 
 function canApplications(member) {
@@ -1320,6 +1648,49 @@ async function sendSecurityLog(guild, content) {
   await channel.send({ content }).catch(() => {});
 }
 
+async function sendServerLogEmbed(guild, embed) {
+  const { channels } = resolveGuildSettings(guild.id);
+  if (!channels.logs) return;
+  const channel = await fetchTextChannel(guild, channels.logs);
+  if (!channel) return;
+  await channel.send({ embeds: [embed] }).catch(() => {});
+}
+
+async function announceBuildUpdate(guild) {
+  const record = database.getGuild(guild.id);
+  if (record.maintenance?.lastUpdateAnnouncementId === CURRENT_BUILD_SIGNATURE) {
+    return;
+  }
+
+  const settings = resolveGuildSettings(guild.id);
+  const channelId = settings.channels.updates || settings.channels.logs;
+  if (!channelId) return;
+
+  const channel = await fetchTextChannel(guild, channelId);
+  if (!channel) return;
+
+  const sent = await channel.send({
+    embeds: [
+      embeds.buildUpdateAnnouncementEmbed({
+        versionLabel: PRODUCT_VERSION_LABEL,
+        semver: PRODUCT_VERSION_SEMVER,
+        buildId: DEPLOY_BUILD_ID,
+        commitMessage: DEPLOY_COMMIT_MESSAGE,
+        changeLines: splitUpdateChangeLines()
+      })
+    ]
+  }).catch(() => null);
+
+  if (sent) {
+    database.updateGuildMaintenance(guild.id, { lastUpdateAnnouncementId: CURRENT_BUILD_SIGNATURE });
+  }
+}
+
+async function sendAutomodLog(guild, payload) {
+  const embed = embeds.buildAutomodActionEmbed(payload);
+  await sendServerLogEmbed(guild, embed);
+}
+
 async function sendWelcomeInvite(member) {
   const { channels, familyTitle, visuals } = resolveGuildSettings(member.guild.id);
   const channel = (await fetchTextChannel(member.guild, channels.applications)) || (await fetchTextChannel(member.guild, channels.panel));
@@ -1349,6 +1720,57 @@ function getApplicationsService(guildId) {
     sendAcceptLog,
     sendAcceptanceDm
   });
+}
+
+async function handleAutomodMessage(message) {
+  const guildId = message.guild.id;
+  if (!isModuleEnabled(guildId, 'automod')) return false;
+  if (canBypassAutomod(message.member)) return false;
+
+  const settings = resolveGuildSettings(guildId);
+  const automod = settings.automod;
+  let triggered = evaluateAutomodMessage({
+    content: message.content,
+    mentionCount: message.mentions?.users?.size || 0,
+    config: automod
+  });
+
+  if (!triggered && automod.spamEnabled) {
+    const stateKey = getAutomodStateKey(guildId, message.author.id);
+    const now = Date.now();
+    const current = automodState.get(stateKey) || [];
+    const spam = evaluateSpamActivity(current, now, automod);
+    automodState.set(stateKey, spam.recent);
+    if (spam.triggered) {
+      triggered = {
+        rule: 'spam',
+        detail: `${spam.recent.length}/${automod.spamCount}`
+      };
+    }
+  }
+
+  if (!triggered) {
+    return false;
+  }
+
+  await message.delete().catch(() => {});
+  const notice = await message.channel.send({
+    content: copy.automod.notice(message.author.id, copy.automod.ruleLabel(triggered.rule), triggered.detail)
+  }).catch(() => null);
+
+  if (notice) {
+    setTimeout(() => notice.delete().catch(() => {}), 8000);
+  }
+
+  await sendAutomodLog(message.guild, {
+    member: message.member,
+    rule: triggered.rule,
+    detail: triggered.detail,
+    channelId: message.channel.id,
+    content: message.content
+  }).catch(() => {});
+
+  return true;
 }
 
 async function refreshMember(member) {
@@ -1460,22 +1882,25 @@ function startVoiceSession(member) {
   if (!member?.id || !member.voice?.channelId || member.user?.bot) return;
   const key = memberSessionKey(member.guild.id, member.id);
   if (!voiceSessions.has(key)) {
-    voiceSessions.set(key, Date.now());
+    voiceSessions.set(key, {
+      startedAt: Date.now(),
+      channelId: member.voice.channelId
+    });
   }
 }
 
 function stopVoiceSession(member) {
   if (!member?.id) return 0;
   const key = memberSessionKey(member.guild.id, member.id);
-  const startedAt = voiceSessions.get(key);
-  if (!startedAt) return 0;
+  const session = voiceSessions.get(key);
+  if (!session?.startedAt) return 0;
 
   voiceSessions.delete(key);
-  const elapsedMs = Date.now() - startedAt;
+  const elapsedMs = Date.now() - session.startedAt;
   const minutes = Math.floor(elapsedMs / 60000);
   if (minutes <= 0) return 0;
 
-  return getGuildStorage(member.guild.id).addVoiceMinutes(member.id, minutes);
+  return getGuildStorage(member.guild.id).addVoiceMinutesInChannel(member.id, minutes, session.channelId);
 }
 
 function flushVoiceSessions() {
@@ -1821,6 +2246,10 @@ client.on('clientReady', async () => {
         console.error(`Ошибка стартового обновления панели ${guild.id}:`, error);
       });
 
+      await announceBuildUpdate(guild).catch(error => {
+        console.error(`Ошибка анонса обновления ${guild.id}:`, error);
+      });
+
       await runRolelessCleanupDetailed(guild.id, 'startup').catch(error => {
         console.error(`Ошибка стартовой чистки ${guild.id}:`, error);
       });
@@ -1908,6 +2337,7 @@ client.on('clientReady', async () => {
 
 client.on('messageCreate', async message => {
   if (!message.guild || message.author.bot || !message.member) return;
+  const guildStorage = getGuildStorage(message.guild.id);
 
   if (isPremiumGuild(message.guild.id) && LEAK_GUARD.enabled && containsDiscordInvite(message.content) && !canBypassLeakGuard(message.member)) {
     await message.delete().catch(() => {});
@@ -1919,8 +2349,14 @@ client.on('messageCreate', async message => {
     return;
   }
 
+  if (await handleAutomodMessage(message)) {
+    return;
+  }
+
+  guildStorage.trackAnalyticsMessage(message.member.id, message.channel.id);
+
   if (!hasFamilyRole(message.member)) return;
-  getGuildStorage(message.guild.id).trackMessage(message.member.id);
+  guildStorage.trackMessage(message.member.id);
 });
 
 client.on('presenceUpdate', (_, presence) => {
@@ -1954,10 +2390,24 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.on('guildMemberAdd', async member => {
   if (member.user?.bot) return;
+  getGuildStorage(member.guild.id).trackJoin();
   const blocked = await enforceBlacklist(member);
   if (!blocked) {
     await sendWelcomeInvite(member);
   }
+});
+
+client.on('guildMemberRemove', member => {
+  if (member.user?.bot) return;
+  getGuildStorage(member.guild.id).trackLeave();
+});
+
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (!reaction?.message?.guild || !user || user.bot) return;
+  const member = reaction.message.guild.members.cache.get(user.id)
+    || await reaction.message.guild.members.fetch(user.id).catch(() => null);
+  if (!member) return;
+  getGuildStorage(reaction.message.guild.id).addReaction(user.id);
 });
 
 client.on('guildMemberUpdate', (oldMember, newMember) => {
@@ -2022,6 +2472,11 @@ client.on('interactionCreate', async interaction => {
       const guildStorage = getGuildStorage(guildId);
       const applicationsService = getApplicationsService(guildId);
       const rankService = getRankService(guildId);
+      const commandModule = getCommandModule(interaction.commandName);
+
+      if (commandModule && !isModuleEnabled(guildId, commandModule)) {
+        return interaction.reply(ephemeral({ content: copy.common.moduleDisabled }));
+      }
 
       if (interaction.commandName === 'family') {
         const settings = resolveGuildSettings(guildId);
@@ -2138,6 +2593,135 @@ client.on('interactionCreate', async interaction => {
             embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
           })
         );
+      }
+
+      if (interaction.commandName === 'setmode') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const mode = interaction.options.getString(copy.commands.modeOptionName, true);
+        const modules = defaultModulesForMode(mode);
+        database.updateGuildSettings(guildId, { mode, modules });
+        const record = database.markSetupComplete(interaction.guild.id, buildGuildSettingsSnapshot(interaction.guild));
+        await doPanelUpdate(guildId, true);
+        return interaction.reply(
+          ephemeral({
+            content: `Режим сервера переключён на **${mode}**.`,
+            embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+          })
+        );
+      }
+
+      if (interaction.commandName === 'setmodule') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const key = interaction.options.getString(copy.commands.moduleOptionName, true);
+        const state = interaction.options.getString(copy.commands.stateOptionName, true) === 'on';
+        database.updateGuildSettings(guildId, { modules: { [key]: state } });
+        const record = database.markSetupComplete(interaction.guild.id, buildGuildSettingsSnapshot(interaction.guild));
+        await doPanelUpdate(guildId, true);
+        return interaction.reply(
+          ephemeral({
+            content: `Модуль **${key}** теперь **${state ? 'включён' : 'выключен'}**.`,
+            embeds: [embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })]
+          })
+        );
+      }
+
+      if (interaction.commandName === 'automod') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        const current = resolveGuildSettings(guildId).automod;
+
+        if (subcommand === copy.commands.automodStatusSubcommand) {
+          return interaction.reply(ephemeral({
+            embeds: [embeds.buildAutomodStatusEmbed(current)]
+          }));
+        }
+
+        if (subcommand === copy.commands.automodToggleSubcommand) {
+          const rule = interaction.options.getString(copy.commands.automodRuleOptionName, true);
+          if (!isPremiumGuild(guildId) && isPremiumAutomodRule(rule)) {
+            return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+          }
+
+          const enabled = interaction.options.getString(copy.commands.stateOptionName, true) === 'on';
+          database.updateGuildSettings(guildId, { automod: buildAutomodRulePatch(rule, enabled) });
+          const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
+          return interaction.reply(ephemeral({
+            content: copy.automod.toggleDone(copy.automod.ruleLabel(rule), enabled),
+            embeds: [
+              embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod),
+              embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })
+            ]
+          }));
+        }
+
+        if (subcommand === copy.commands.automodLimitSubcommand) {
+          const target = interaction.options.getString(copy.commands.automodTargetOptionName, true);
+          if (!isPremiumGuild(guildId) && isPremiumAutomodTarget(target)) {
+            return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+          }
+
+          const value = interaction.options.getInteger(copy.commands.valueOptionName, true);
+          const patch = getAutomodTargetLimits(target, value);
+          database.updateGuildSettings(guildId, { automod: patch });
+          return interaction.reply(ephemeral({
+            content: copy.automod.limitDone(copy.automod.targetLabel(target), Object.values(patch)[0]),
+            embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+          }));
+        }
+
+        if (subcommand === copy.commands.automodWordsSubcommand) {
+          if (!isPremiumGuild(guildId)) {
+            return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+          }
+
+          const action = interaction.options.getString(copy.commands.actionOptionName, true);
+          const rawWord = interaction.options.getString(copy.commands.wordOptionName) || '';
+          const word = rawWord.trim().toLowerCase();
+          const words = [...current.badWords];
+
+          if (action === 'list') {
+            return interaction.reply(ephemeral({
+              embeds: [embeds.buildAutomodStatusEmbed(current)]
+            }));
+          }
+
+          if (action === 'clear') {
+            database.updateGuildSettings(guildId, { automod: { badWords: [] } });
+            return interaction.reply(ephemeral({
+              content: copy.automod.wordsCleared,
+              embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+            }));
+          }
+
+          if (!word) {
+            return interaction.reply(ephemeral({ content: copy.automod.wordMissing }));
+          }
+
+          if (action === 'add') {
+            const nextWords = [...new Set([...words, word])];
+            database.updateGuildSettings(guildId, { automod: { badWords: nextWords, badWordsEnabled: true } });
+            return interaction.reply(ephemeral({
+              content: copy.automod.wordAdded(word),
+              embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+            }));
+          }
+
+          const nextWords = words.filter(item => item !== word);
+          database.updateGuildSettings(guildId, { automod: { badWords: nextWords } });
+          return interaction.reply(ephemeral({
+            content: copy.automod.wordRemoved(word),
+            embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+          }));
+        }
       }
 
       if (interaction.commandName === 'setart') {
@@ -2533,6 +3117,17 @@ client.on('interactionCreate', async interaction => {
 
         return interaction.reply(ephemeral({
           embeds: [embeds.buildVoiceActivityEmbed(buildVoiceActivityLines(interaction.guild, 15), buildVoiceActivitySummary(interaction.guild))]
+        }));
+      }
+
+      if (interaction.commandName === 'serverreport') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const period = interaction.options.getString(copy.commands.periodOptionName, true);
+        return interaction.reply(ephemeral({
+          embeds: [buildServerStatsReportEmbed(interaction.guild, period)]
         }));
       }
 

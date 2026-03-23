@@ -5,6 +5,10 @@ const copy = require('./copy');
 function defaultStore() {
   return {
     members: {},
+    analytics: {
+      daily: {},
+      reports: {}
+    },
     applications: [],
     cooldowns: {},
     warns: [],
@@ -36,6 +40,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     if (!value || typeof value !== 'object') return false;
     return Boolean(
       Object.keys(value.members || {}).length
+      || Object.keys(value.analytics?.daily || {}).length
       || (value.applications || []).length
       || Object.keys(value.cooldowns || {}).length
       || (value.warns || []).length
@@ -99,6 +104,87 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
 
   function cooldownKey(guildId, userId) {
     return `${guildId}:${userId}`;
+  }
+
+  function analyticsDayKey(date = new Date()) {
+    const value = new Date(date);
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function analyticsKey(guildId, dayKey) {
+    return `${guildId}:${dayKey}`;
+  }
+
+  function ensureAnalyticsStore() {
+    if (!store.analytics || typeof store.analytics !== 'object') {
+      store.analytics = { daily: {}, reports: {} };
+    }
+
+    store.analytics.daily = store.analytics.daily || {};
+    store.analytics.reports = store.analytics.reports || {};
+    return store.analytics;
+  }
+
+  function ensureGuildAnalyticsDay(guildId, date = new Date()) {
+    const analytics = ensureAnalyticsStore();
+    const dayKey = analyticsDayKey(date);
+    const key = analyticsKey(guildId, dayKey);
+    if (!analytics.daily[key]) {
+      analytics.daily[key] = {
+        guildId,
+        dayKey,
+        joins: 0,
+        leaves: 0,
+        messagesTotal: 0,
+        reactionsTotal: 0,
+        voiceMinutesTotal: 0,
+        channels: {},
+        voiceChannels: {},
+        members: {}
+      };
+    }
+
+    pruneGuildAnalytics(guildId, 120);
+    return analytics.daily[key];
+  }
+
+  function pruneGuildAnalytics(guildId, keepDays = 120) {
+    const analytics = ensureAnalyticsStore();
+    const keys = Object.keys(analytics.daily)
+      .filter(key => key.startsWith(`${guildId}:`))
+      .sort();
+
+    if (keys.length <= keepDays) return;
+    for (const key of keys.slice(0, keys.length - keepDays)) {
+      delete analytics.daily[key];
+    }
+  }
+
+  function ensureDayMember(dayRecord, memberId) {
+    if (!dayRecord.members[memberId]) {
+      dayRecord.members[memberId] = {
+        messages: 0,
+        reactions: 0,
+        voiceMinutes: 0
+      };
+    }
+
+    return dayRecord.members[memberId];
+  }
+
+  function incrementChannelCounter(record, channelId, amount = 1) {
+    if (!channelId) return;
+    record[channelId] = (record[channelId] || 0) + amount;
+  }
+
+  function recordGuildMessageAnalytics(guildId, memberId, channelId = '') {
+    const day = ensureGuildAnalyticsDay(guildId);
+    ensureDayMember(day, memberId).messages += 1;
+    day.messagesTotal += 1;
+    incrementChannelCounter(day.channels, channelId, 1);
   }
 
   function migrateLegacyMemberIfNeeded(guildId, memberId, existingMember = null) {
@@ -260,11 +346,16 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     save();
   }
 
-  function trackGuildMessage(guildId, memberId) {
+  function trackGuildMessage(guildId, memberId, channelId = '') {
     const member = ensureGuildMember(guildId, memberId);
     member.messageCount += 1;
     member.lastSeenAt = Date.now();
     clearAfkWarning(member);
+    save();
+  }
+
+  function trackGuildAnalyticsMessage(guildId, memberId, channelId = '') {
+    recordGuildMessageAnalytics(guildId, memberId, channelId);
     save();
   }
 
@@ -350,7 +441,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return safeMinutes;
   }
 
-  function addGuildVoiceMinutes(guildId, memberId, minutes) {
+  function addGuildVoiceMinutes(guildId, memberId, minutes, channelId = '') {
     const safeMinutes = Math.max(0, Math.floor(Number(minutes) || 0));
     if (!safeMinutes) return 0;
 
@@ -358,8 +449,97 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     member.voiceMinutes = (member.voiceMinutes || 0) + safeMinutes;
     member.lastSeenAt = Date.now();
     clearAfkWarning(member);
+    const day = ensureGuildAnalyticsDay(guildId);
+    ensureDayMember(day, memberId).voiceMinutes += safeMinutes;
+    day.voiceMinutesTotal += safeMinutes;
+    incrementChannelCounter(day.voiceChannels, channelId, safeMinutes);
     save();
     return safeMinutes;
+  }
+
+  function addGuildReaction(guildId, memberId) {
+    const day = ensureGuildAnalyticsDay(guildId);
+    ensureDayMember(day, memberId).reactions += 1;
+    day.reactionsTotal += 1;
+    save();
+    return day.members[memberId].reactions;
+  }
+
+  function trackGuildJoin(guildId) {
+    const day = ensureGuildAnalyticsDay(guildId);
+    day.joins += 1;
+    save();
+    return day.joins;
+  }
+
+  function trackGuildLeave(guildId) {
+    const day = ensureGuildAnalyticsDay(guildId);
+    day.leaves += 1;
+    save();
+    return day.leaves;
+  }
+
+  function getGuildPeriodAnalytics(guildId, days = 7, now = new Date()) {
+    const analytics = ensureAnalyticsStore();
+    const totalDays = Math.max(1, Math.min(366, Number(days) || 7));
+    const end = new Date(now);
+    end.setHours(0, 0, 0, 0);
+
+    const result = {
+      guildId,
+      dayCount: totalDays,
+      fromDayKey: analyticsDayKey(new Date(end.getTime() - (totalDays - 1) * 24 * 60 * 60 * 1000)),
+      toDayKey: analyticsDayKey(end),
+      joins: 0,
+      leaves: 0,
+      messagesTotal: 0,
+      reactionsTotal: 0,
+      voiceMinutesTotal: 0,
+      members: {},
+      channels: {},
+      voiceChannels: {}
+    };
+
+    for (let index = 0; index < totalDays; index += 1) {
+      const day = new Date(end.getTime() - index * 24 * 60 * 60 * 1000);
+      const dayRecord = analytics.daily[analyticsKey(guildId, analyticsDayKey(day))];
+      if (!dayRecord) continue;
+
+      result.joins += Number(dayRecord.joins) || 0;
+      result.leaves += Number(dayRecord.leaves) || 0;
+      result.messagesTotal += Number(dayRecord.messagesTotal) || 0;
+      result.reactionsTotal += Number(dayRecord.reactionsTotal) || 0;
+      result.voiceMinutesTotal += Number(dayRecord.voiceMinutesTotal) || 0;
+
+      for (const [channelId, count] of Object.entries(dayRecord.channels || {})) {
+        result.channels[channelId] = (result.channels[channelId] || 0) + (Number(count) || 0);
+      }
+
+      for (const [channelId, count] of Object.entries(dayRecord.voiceChannels || {})) {
+        result.voiceChannels[channelId] = (result.voiceChannels[channelId] || 0) + (Number(count) || 0);
+      }
+
+      for (const [memberId, stats] of Object.entries(dayRecord.members || {})) {
+        if (!result.members[memberId]) {
+          result.members[memberId] = { messages: 0, reactions: 0, voiceMinutes: 0 };
+        }
+
+        result.members[memberId].messages += Number(stats.messages) || 0;
+        result.members[memberId].reactions += Number(stats.reactions) || 0;
+        result.members[memberId].voiceMinutes += Number(stats.voiceMinutes) || 0;
+      }
+    }
+
+    return result;
+  }
+
+  function getGuildReportMarker(guildId, markerKey) {
+    return ensureAnalyticsStore().reports[`${guildId}:${markerKey}`] || '';
+  }
+
+  function setGuildReportMarker(guildId, markerKey, value) {
+    ensureAnalyticsStore().reports[`${guildId}:${markerKey}`] = String(value || '');
+    save();
   }
 
   function markGuildAfkWarningSent(guildId, memberId, value = new Date().toISOString()) {
@@ -599,6 +779,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     getGuildPanelMessageId,
     trackMessage,
     trackGuildMessage,
+    trackGuildAnalyticsMessage,
     trackPresence,
     trackGuildPresence,
     addWarn,
@@ -609,8 +790,14 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     addGuildCommend,
     addVoiceMinutes,
     addGuildVoiceMinutes,
+    addGuildReaction,
     markGuildAfkWarningSent,
     clearGuildAfkWarningSent,
+    trackGuildJoin,
+    trackGuildLeave,
+    getGuildPeriodAnalytics,
+    getGuildReportMarker,
+    setGuildReportMarker,
     getCooldown,
     getGuildCooldown,
     setCooldown,

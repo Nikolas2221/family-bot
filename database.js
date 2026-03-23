@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { normalizeAutomodConfig } = require('./automod');
 
 function defaultDatabase() {
   return {
@@ -10,7 +11,60 @@ function defaultDatabase() {
   };
 }
 
+function defaultModulesForMode(mode = 'hybrid') {
+  const normalized = ['family', 'server', 'hybrid'].includes(mode) ? mode : 'hybrid';
+
+  if (normalized === 'family') {
+    return {
+      family: true,
+      applications: true,
+      moderation: true,
+      security: false,
+      analytics: true,
+      ai: true,
+      welcome: true,
+      automod: false,
+      subscriptions: false,
+      customCommands: false,
+      music: false
+    };
+  }
+
+  if (normalized === 'server') {
+    return {
+      family: false,
+      applications: false,
+      moderation: true,
+      security: true,
+      analytics: true,
+      ai: false,
+      welcome: true,
+      automod: true,
+      subscriptions: false,
+      customCommands: false,
+      music: false
+    };
+  }
+
+  return {
+    family: true,
+    applications: true,
+    moderation: true,
+    security: true,
+    analytics: true,
+    ai: true,
+    welcome: true,
+    automod: true,
+    subscriptions: false,
+    customCommands: false,
+    music: false
+  };
+}
+
 function normalizeGuildRecord(guildId, guild = {}) {
+  const mode = guild.settings?.mode || 'hybrid';
+  const defaultModules = defaultModulesForMode(mode);
+
   return {
     guildId,
     guildName: guild.guildName || '',
@@ -21,15 +75,18 @@ function normalizeGuildRecord(guildId, guild = {}) {
     subscriptionAssignedBy: guild.subscriptionAssignedBy || '',
     subscriptionAssignedAt: guild.subscriptionAssignedAt || '',
     maintenance: {
-      lastRolelessCleanupAt: guild.maintenance?.lastRolelessCleanupAt || ''
+      lastRolelessCleanupAt: guild.maintenance?.lastRolelessCleanupAt || '',
+      lastUpdateAnnouncementId: guild.maintenance?.lastUpdateAnnouncementId || ''
     },
     settings: {
+      mode,
       familyTitle: guild.settings?.familyTitle || '',
       channels: {
         panel: guild.settings?.channels?.panel || '',
         applications: guild.settings?.channels?.applications || '',
         logs: guild.settings?.channels?.logs || '',
-        disciplineLogs: guild.settings?.channels?.disciplineLogs || ''
+        disciplineLogs: guild.settings?.channels?.disciplineLogs || '',
+        updates: guild.settings?.channels?.updates || ''
       },
       roles: {
         leader: guild.settings?.roles?.leader || '',
@@ -47,6 +104,20 @@ function normalizeGuildRecord(guildId, guild = {}) {
       visuals: {
         familyBanner: guild.settings?.visuals?.familyBanner || '',
         applicationsBanner: guild.settings?.visuals?.applicationsBanner || ''
+      },
+      automod: normalizeAutomodConfig(guild.settings?.automod),
+      modules: {
+        family: guild.settings?.modules?.family ?? defaultModules.family,
+        applications: guild.settings?.modules?.applications ?? defaultModules.applications,
+        moderation: guild.settings?.modules?.moderation ?? defaultModules.moderation,
+        security: guild.settings?.modules?.security ?? defaultModules.security,
+        analytics: guild.settings?.modules?.analytics ?? defaultModules.analytics,
+        ai: guild.settings?.modules?.ai ?? defaultModules.ai,
+        welcome: guild.settings?.modules?.welcome ?? defaultModules.welcome,
+        automod: guild.settings?.modules?.automod ?? defaultModules.automod,
+        subscriptions: guild.settings?.modules?.subscriptions ?? defaultModules.subscriptions,
+        customCommands: guild.settings?.modules?.customCommands ?? defaultModules.customCommands,
+        music: guild.settings?.modules?.music ?? defaultModules.music
       },
       features: {
         aiEnabled: Boolean(guild.settings?.features?.aiEnabled),
@@ -155,6 +226,14 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
           ...(guild.settings?.visuals || {}),
           ...(patch?.visuals || {})
         },
+        automod: {
+          ...(guild.settings?.automod || {}),
+          ...(patch?.automod || {})
+        },
+        modules: {
+          ...(guild.settings?.modules || {}),
+          ...(patch?.modules || {})
+        },
         features: {
           ...(guild.settings?.features || {}),
           ...(patch?.features || {})
@@ -225,5 +304,6 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
 
 module.exports = {
   createDatabase,
-  defaultDatabase
+  defaultDatabase,
+  defaultModulesForMode
 };
