@@ -6,7 +6,7 @@ const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, Perm
 const { createAIService } = require('./ai');
 const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('./automod');
 const { createApplicationsService } = require('./applications');
-const { registerCommands } = require('./commands');
+const { buildCommands, getCommandsSignature, registerCommands } = require('./commands');
 const { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } = require('./config');
 const copy = require('./copy');
 const { createDatabase, defaultModulesForMode } = require('./database');
@@ -2209,15 +2209,22 @@ client.on('clientReady', async () => {
   try {
     console.log(`Бот запущен как ${client.user.tag}`);
 
+    const commandsPayload = buildCommands();
+    const commandsSignature = getCommandsSignature(commandsPayload);
     const guilds = await client.guilds.fetch();
     for (const guildData of guilds.values()) {
       try {
         const guild = await guildData.fetch();
-        database.ensureGuild(guild.id, {
+        const guildRecord = database.ensureGuild(guild.id, {
           guildName: guild.name,
           ownerId: guild.ownerId || ''
         });
-        await registerCommands(guild);
+        if (guildRecord.maintenance?.lastCommandSignature !== commandsSignature) {
+          await registerCommands(guild, commandsPayload);
+          database.updateGuildMaintenance(guild.id, {
+            lastCommandSignature: commandsSignature
+          });
+        }
       } catch (error) {
         console.error(`Ошибка инициализации guild ${guildData.id}:`, error);
       }

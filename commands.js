@@ -1,8 +1,9 @@
+const crypto = require('crypto');
 const { ChannelType, SlashCommandBuilder } = require('discord.js');
 const copy = require('./copy');
 
-async function registerCommands(guild) {
-  const commands = [
+function buildCommands() {
+  return [
     new SlashCommandBuilder().setName('family').setDescription(copy.commands.familyDescription),
     new SlashCommandBuilder().setName('apply').setDescription(copy.commands.applyDescription),
     new SlashCommandBuilder().setName('applypanel').setDescription(copy.commands.applyPanelDescription),
@@ -418,8 +419,15 @@ async function registerCommands(guild) {
         option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
       )
   ].map(command => command.toJSON());
-
-  await guild.commands.set(commands);
 }
 
-module.exports = { registerCommands };
+function getCommandsSignature(commands = buildCommands()) {
+  return crypto.createHash('sha1').update(JSON.stringify(commands)).digest('hex');
+}
+
+async function registerCommands(guild, commands = buildCommands()) {
+  await guild.commands.set(commands);
+  return commands;
+}
+
+module.exports = { buildCommands, getCommandsSignature, registerCommands };

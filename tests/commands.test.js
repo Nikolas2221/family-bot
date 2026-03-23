@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-const { registerCommands } = require('../commands');
+const { buildCommands, getCommandsSignature, registerCommands } = require('../commands');
 
 async function runTest(name, fn) {
   try {
@@ -69,10 +69,18 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'updates'), true);
 }
 
+async function testCommandSignatureIsStable() {
+  const first = buildCommands();
+  const second = buildCommands();
+
+  assert.equal(getCommandsSignature(first), getCommandsSignature(second));
+}
+
 async function main() {
   await runTest('commands keep required options before optional ones', testRequiredOptionsPrecedeOptionalOptions);
   await runTest('clearallchannel keeps confirmation as the first required option', testClearAllChannelConfirmationStaysRequiredAndFirst);
   await runTest('automod and serverreport commands are registered', testAutomodAndServerReportCommandsAreRegistered);
+  await runTest('command signature stays stable between builds', testCommandSignatureIsStable);
   console.log('ALL COMMAND TESTS PASSED');
 }
 

@@ -76,7 +76,8 @@ function normalizeGuildRecord(guildId, guild = {}) {
     subscriptionAssignedAt: guild.subscriptionAssignedAt || '',
     maintenance: {
       lastRolelessCleanupAt: guild.maintenance?.lastRolelessCleanupAt || '',
-      lastUpdateAnnouncementId: guild.maintenance?.lastUpdateAnnouncementId || ''
+      lastUpdateAnnouncementId: guild.maintenance?.lastUpdateAnnouncementId || '',
+      lastCommandSignature: guild.maintenance?.lastCommandSignature || ''
     },
     settings: {
       mode,
