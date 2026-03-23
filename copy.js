@@ -554,4 +554,14 @@ copy.moderation = {
   }
 };
 
+copy.security.banListLine = function banListLine(index, ban) {
+  const username = ban?.user?.username || 'unknown';
+  const reason = ban?.reason || 'без причины';
+  return `${index + 1}. <@${ban.user.id}> • \`${ban.user.id}\` • ${username} • ${reason}`;
+};
+
+copy.security.blacklistLine = function blacklistLine(index, entry) {
+  return `${index + 1}. <@${entry.userId}> • \`${entry.userId}\` • ${entry.reason}`;
+};
+
 module.exports = copy;

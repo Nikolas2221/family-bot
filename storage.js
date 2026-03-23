@@ -455,9 +455,23 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
 
   function setApplicationTicketInfo(app, ticketInfo = {}) {
     if (!app) return null;
-    app.ticketThreadId = String(ticketInfo.ticketThreadId || app.ticketThreadId || '');
-    app.ticketMessageId = String(ticketInfo.ticketMessageId || app.ticketMessageId || '');
-    app.ticketStarterMessageId = String(ticketInfo.ticketStarterMessageId || app.ticketStarterMessageId || '');
+    if (Object.prototype.hasOwnProperty.call(ticketInfo, 'ticketThreadId')) {
+      app.ticketThreadId = String(ticketInfo.ticketThreadId || '');
+    } else {
+      app.ticketThreadId = String(app.ticketThreadId || '');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(ticketInfo, 'ticketMessageId')) {
+      app.ticketMessageId = String(ticketInfo.ticketMessageId || '');
+    } else {
+      app.ticketMessageId = String(app.ticketMessageId || '');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(ticketInfo, 'ticketStarterMessageId')) {
+      app.ticketStarterMessageId = String(ticketInfo.ticketStarterMessageId || '');
+    } else {
+      app.ticketStarterMessageId = String(app.ticketStarterMessageId || '');
+    }
     save();
     return app;
   }

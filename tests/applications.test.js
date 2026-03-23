@@ -376,6 +376,117 @@ async function testAcceptApplicationAssignsResolvedFamilyRole() {
   assert.deepEqual(removedRoleIds, ['role-member', 'role-newbie']);
 }
 
+async function testAcceptApplicationDeletesTicketAfterApproval() {
+  const storage = createTempStorage();
+  const applicationId = storage.createApplication({
+    userId: 'user-44',
+    nickname: 'Ticket Applicant',
+    level: '18',
+    inviter: 'Recruiter',
+    discovery: 'Discord',
+    about: 'Хочу попасть в семью и пройти одобрение через тикет.'
+  });
+  const application = storage.findApplication(applicationId);
+  storage.setApplicationTicketInfo(application, {
+    ticketThreadId: 'thread-accepted',
+    ticketMessageId: 'ticket-message-1',
+    ticketStarterMessageId: 'starter-message-1'
+  });
+
+  let starterDeleted = false;
+  let threadDeleted = false;
+  const replies = [];
+
+  const starterMessage = {
+    async delete() {
+      starterDeleted = true;
+      return true;
+    }
+  };
+
+  const threadChannel = {
+    id: 'thread-accepted',
+    parent: {
+      type: 0,
+      messages: {
+        async fetch(messageId) {
+          return messageId === 'starter-message-1' ? starterMessage : null;
+        }
+      }
+    },
+    isThread() {
+      return true;
+    },
+    async delete() {
+      threadDeleted = true;
+      return true;
+    }
+  };
+
+  const member = {
+    id: 'user-44',
+    displayName: 'Ticket Applicant',
+    roles: {
+      cache: new Map(),
+      async add() {
+        return true;
+      },
+      async remove() {
+        return true;
+      }
+    }
+  };
+
+  const service = createApplicationsService({
+    storage,
+    fetchTextChannel: async () => null,
+    applicationsChannelId: 'applications',
+    applicationDefaultRole: 'role-newbie',
+    logChannelId: '',
+    familyRoles: buildFamilyRoles(),
+    client: {},
+    embeds: createEmbedsStub(),
+    sendAcceptLog: async () => {}
+  });
+
+  const interaction = {
+    user: { id: 'moderator-1', username: 'Boss' },
+    guild: {
+      members: {
+        async fetch() {
+          return member;
+        }
+      },
+      roles: {
+        cache: {
+          get(roleId) {
+            return { id: roleId };
+          }
+        }
+      }
+    },
+    channel: threadChannel,
+    message: {
+      async edit() {}
+    },
+    async reply(payload) {
+      replies.push(payload);
+      return payload;
+    }
+  };
+
+  await service.accept(interaction, applicationId, 'user-44', {
+    reason: 'Одобрен',
+    rankName: '1 ранг'
+  });
+
+  assert.equal(replies.length, 1);
+  assert.equal(starterDeleted, true);
+  assert.equal(threadDeleted, true);
+  assert.equal(application.ticketThreadId, '');
+  assert.equal(application.ticketStarterMessageId, '');
+}
+
 async function testRejectApplication() {
   const storage = createTempStorage();
   const applicationId = storage.createApplication({
@@ -438,6 +549,7 @@ async function main() {
   await runTest('submitApplication creates thread ticket when threads are available', testSubmitApplicationCreatesThreadTicket);
   await runTest('accept updates status and logs admission', testAcceptApplication);
   await runTest('accept assigns resolved family role', testAcceptApplicationAssignsResolvedFamilyRole);
+  await runTest('accept deletes ticket after approval', testAcceptApplicationDeletesTicketAfterApproval);
   await runTest('reject updates status and sends reject log', testRejectApplication);
   console.log('ALL TESTS PASSED');
 }

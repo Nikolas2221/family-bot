@@ -362,6 +362,34 @@ function buildWarnLogEmbed({ targetUser, moderatorUser, reason }) {
     footer: 'BRHD • Phoenix • Discipline',
     thumbnail: avatarUrl(targetUser)
   }).addFields(
+    section(copy.logs.participant, interactiveIdentityBlock(targetUser, targetUser.username), true),
+    section(copy.logs.moderator, interactiveIdentityBlock(moderatorUser, moderatorUser.username), true),
+    section(copy.logs.reason, reason, false)
+  );
+}
+
+function buildCommendLogEmbed({ targetUser, moderatorUser, reason }) {
+  return card({
+    title: copy.logs.commendTitle,
+    color: THEME.royal,
+    description: copy.logs.commendDescription(moderatorUser.id, targetUser.id),
+    footer: 'BRHD • Phoenix • Discipline',
+    thumbnail: avatarUrl(targetUser)
+  }).addFields(
+    section(copy.logs.participant, interactiveIdentityBlock(targetUser, targetUser.username), true),
+    section(copy.logs.moderator, interactiveIdentityBlock(moderatorUser, moderatorUser.username), true),
+    section(copy.logs.reason, reason, false)
+  );
+}
+
+function buildWarnLogEmbed({ targetUser, moderatorUser, reason }) {
+  return card({
+    title: copy.logs.warnTitle,
+    color: THEME.warning,
+    description: copy.logs.warnDescription(moderatorUser.id, targetUser.id),
+    footer: 'BRHD • Phoenix • Discipline',
+    thumbnail: avatarUrl(targetUser)
+  }).addFields(
     section(copy.logs.participant, `<@${targetUser.id}>\n\`${targetUser.id}\``, true),
     section(copy.logs.moderator, `<@${moderatorUser.id}>\n\`${moderatorUser.id}\``, true),
     section(copy.logs.reason, reason, false)
@@ -805,6 +833,42 @@ function buildAdminPanelEmbed({ guildName, record }) {
       ].join('\n'),
       false
     )
+  );
+}
+
+function interactiveIdentityBlock(user, nickname = '') {
+  return [
+    `Пользователь: <@${user.id}>`,
+    nickname ? `Ник: ${nickname}` : null,
+    `ID: \`${user.id}\` • Профиль: <@${user.id}>`
+  ].filter(Boolean).join('\n');
+}
+
+function buildAcceptLogEmbed({ member, moderatorUser, reason = copy.applications.acceptReason, rankName = copy.applications.acceptRank }) {
+  return card({
+    title: copy.logs.acceptTitle,
+    color: THEME.emerald,
+    description: copy.logs.acceptDescription(moderatorUser.id, member.id),
+    footer: 'BRHD • Phoenix • Family Log',
+    thumbnail: avatarUrl(member.user)
+  }).addFields(
+    section(copy.logs.acceptedMember, interactiveIdentityBlock(member, member.displayName)),
+    section(copy.logs.acceptedBy, interactiveIdentityBlock(moderatorUser, moderatorUser.username)),
+    section(copy.logs.acceptDetails, [`Причина: ${reason}`, `Принят на: ${rankName}`].join('\n'))
+  );
+}
+
+function buildRejectLogEmbed({ user, moderatorUser, reason = 'Отказ' }) {
+  return card({
+    title: copy.logs.rejectTitle,
+    color: THEME.ruby,
+    description: copy.logs.rejectDescription(moderatorUser.id, user.id),
+    footer: 'BRHD • Phoenix • Family Log',
+    thumbnail: avatarUrl(user)
+  }).addFields(
+    section(copy.logs.candidate, interactiveIdentityBlock(user)),
+    section(copy.logs.rejectedBy, interactiveIdentityBlock(moderatorUser, moderatorUser.username)),
+    section(copy.logs.reason, reason)
   );
 }
 

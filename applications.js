@@ -111,6 +111,39 @@ function createApplicationsService({
     return { starterMessage, thread, ticketMessage };
   }
 
+  async function cleanupAcceptedTicket(guild, application, activeChannel = null) {
+    const thread = activeChannel?.isThread?.()
+      ? activeChannel
+      : application.ticketThreadId
+        ? await guild.channels.fetch(application.ticketThreadId).catch(() => null)
+        : null;
+
+    const starterChannel = thread?.parent?.type === 0
+      ? thread.parent
+      : await fetchTextChannel(guild, applicationsChannelId);
+
+    if (starterChannel && application.ticketStarterMessageId && starterChannel.messages?.fetch) {
+      const starterMessage = await starterChannel.messages.fetch(application.ticketStarterMessageId).catch(() => null);
+      if (starterMessage?.deletable || typeof starterMessage?.delete === 'function') {
+        await starterMessage.delete().catch(() => {});
+      }
+    }
+
+    if (thread) {
+      const deleted = await thread.delete(copy.applications.ticketReason(application.discordId || 'user')).then(() => true).catch(() => false);
+      if (!deleted) {
+        await thread.setArchived(true, copy.applications.ticketReason(application.discordId || 'user')).catch(() => {});
+        await thread.setLocked(true).catch(() => {});
+      }
+    }
+
+    storage.setApplicationTicketInfo(application, {
+      ticketThreadId: '',
+      ticketMessageId: '',
+      ticketStarterMessageId: ''
+    });
+  }
+
   function resolveAcceptedRoleId(rankName) {
     const fallbackRoleId = applicationDefaultRole || familyRoles.find(role => role.key === 'newbie')?.id || '';
     const normalized = normalizeRankToken(rankName);
@@ -276,8 +309,9 @@ function createApplicationsService({
       reason,
       rankName
     });
-
-    return interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
+    await interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
+    await cleanupAcceptedTicket(interaction.guild, application, interaction.channel);
+    return true;
   }
 
   async function moveToReview(interaction, applicationId, userId) {
