@@ -66,6 +66,24 @@ function ephemeral(payload = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
 
+function scheduleDeleteReply(interaction, delayMs = 5000) {
+  setTimeout(() => {
+    interaction.deleteReply().catch(() => {});
+  }, delayMs);
+}
+
+async function replyAndAutoDelete(interaction, payload, delayMs = 5000) {
+  const response = await interaction.reply(ephemeral(payload));
+  scheduleDeleteReply(interaction, delayMs);
+  return response;
+}
+
+async function editReplyAndAutoDelete(interaction, payload, delayMs = 5000) {
+  const response = await interaction.editReply(payload);
+  scheduleDeleteReply(interaction, delayMs);
+  return response;
+}
+
 function memberSessionKey(guildId, memberId) {
   return `${guildId}:${memberId}`;
 }
@@ -886,7 +904,17 @@ async function deleteMessagesFast(messages) {
     const batch = fresh.slice(index, index + 100);
     if (!batch.length) continue;
     const result = await batch[0].channel.bulkDelete(batch.map(message => message.id), true).catch(() => null);
-    deleted += result?.size || 0;
+    if (result?.size) {
+      deleted += result.size;
+      continue;
+    }
+
+    for (const message of batch) {
+      const ok = await message.delete().then(() => true).catch(() => false);
+      if (ok) {
+        deleted += 1;
+      }
+    }
   }
 
   for (const message of stale) {
@@ -899,6 +927,29 @@ async function deleteMessagesFast(messages) {
   return deleted;
 }
 
+async function fetchRecentDeletableMessages(channel, count) {
+  const collected = [];
+  let before;
+
+  while (collected.length < count) {
+    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!batch || !batch.size) break;
+
+    for (const message of batch.values()) {
+      if (message.pinned) continue;
+      if (message.deletable === false) continue;
+      collected.push(message);
+      if (collected.length >= count) {
+        break;
+      }
+    }
+
+    before = batch.last()?.id;
+  }
+
+  return collected;
+}
+
 async function fetchMessagesForUser(channel, userId, count) {
   const collected = [];
   let before;
@@ -908,6 +959,8 @@ async function fetchMessagesForUser(channel, userId, count) {
     if (!batch || !batch.size) break;
 
     for (const message of batch.values()) {
+      if (message.pinned) continue;
+      if (message.deletable === false) continue;
       if (message.author?.id === userId) {
         collected.push(message);
         if (collected.length >= count) {
@@ -1933,19 +1986,8 @@ client.on('interactionCreate', async interaction => {
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        let deleted = 0;
-        let remaining = count;
-        let before;
-
-        while (remaining > 0) {
-          const batch = await channel.messages.fetch({ limit: Math.min(100, remaining), before }).catch(() => null);
-          if (!batch || !batch.size) break;
-
-          const messages = [...batch.values()];
-          deleted += await deleteMessagesFast(messages);
-          remaining -= messages.length;
-          before = batch.last()?.id;
-        }
+        const messages = await fetchRecentDeletableMessages(channel, count);
+        const deleted = await deleteMessagesFast(messages);
 
         return interaction.editReply({ content: copy.moderation.purgeDone(deleted, channel.id) });
       }
