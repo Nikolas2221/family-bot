@@ -12,6 +12,7 @@ const copy = require('./copy');
 const { createDatabase, defaultModulesForMode } = require('./database');
 const embeds = require('./embeds');
 const { createRankService } = require('./ranks');
+const { getReleaseNotes } = require('./release-notes');
 const ROLES = require('./roles');
 const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
@@ -49,7 +50,7 @@ const AFK_WARNING_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const REPORT_SCHEDULE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const PRODUCT_VERSION_LABEL = 'BRHD/PHOENIX 0.1 BETA';
-const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.1';
+const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.2';
 const DEPLOY_COMMIT_SHA = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || '').trim();
 const DEPLOY_COMMIT_MESSAGE = (process.env.RAILWAY_GIT_COMMIT_MESSAGE || process.env.GIT_COMMIT_MESSAGE || '').trim();
 const DEPLOY_BUILD_ID = (DEPLOY_COMMIT_SHA ? DEPLOY_COMMIT_SHA.slice(0, 7) : (process.env.RAILWAY_DEPLOYMENT_ID || PRODUCT_VERSION_SEMVER));
@@ -1396,6 +1397,11 @@ function extractUpdateParts(body) {
 }
 
 function splitUpdateChangeLines() {
+  const releaseGroups = getReleaseNotes(PRODUCT_VERSION_SEMVER);
+  if (releaseGroups) {
+    return releaseGroups;
+  }
+
   const rawLines = DEPLOY_COMMIT_MESSAGE
     .split(/\r?\n|;|,(?=\s*(?:add|added|feat|feature|introduce|implemented|fix|fixed|bugfix|update|updated|upgrade|improve|optimi[sz]e|refactor|polish|adjust|change|rework|move|cleanup|remove)\b)/i)
     .map(item => item.replace(/^[-*]\s*/, '').trim())
