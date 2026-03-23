@@ -199,18 +199,28 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
 
   function sanitizeApplicationInput(fields) {
     const nickname = trimText(fields.nickname, 64);
-    const age = trimText(fields.age, 32);
-    const text = trimText(fields.text, 1000);
+    const level = trimText(fields.level || fields.age, 32);
+    const inviter = trimText(fields.inviter, 128);
+    const discovery = trimText(fields.discovery, 128);
+    const about = trimText(fields.about || fields.text, 1000);
 
-    if (!nickname || !age || !text) {
+    if (!nickname || !level || !inviter || !discovery || !about) {
       return { error: copy.applications.invalidEmpty };
     }
 
-    if (text.length < 10) {
+    if (about.length < 10) {
       return { error: copy.applications.invalidShort };
     }
 
-    return { nickname, age, text };
+    return {
+      nickname,
+      level,
+      inviter,
+      discovery,
+      about,
+      age: level,
+      text: about
+    };
   }
 
   function setApplicationStatus(app, status, reviewerId) {
@@ -221,8 +231,8 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   }
 
   function setPanelMessageId(messageId, fixedMessageId = '') {
-    if (!fixedMessageId && messageId && store.panelMessageId !== messageId) {
-      store.panelMessageId = messageId;
+    if (!fixedMessageId && store.panelMessageId !== (messageId || '')) {
+      store.panelMessageId = messageId || '';
       save();
     }
   }
@@ -232,8 +242,8 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
   }
 
   function setGuildPanelMessageId(guildId, messageId, fixedMessageId = '') {
-    if (messageId && store.panelMessageIds[guildId] !== messageId) {
-      store.panelMessageIds[guildId] = messageId;
+    if (store.panelMessageIds[guildId] !== (messageId || '')) {
+      store.panelMessageIds[guildId] = messageId || '';
       save();
     }
   }
@@ -288,6 +298,26 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     store.warns.unshift({ guildId, userId, moderatorId, reason, createdAt: new Date().toISOString() });
     store.warns = store.warns.slice(0, 500);
     save();
+  }
+
+  function listGuildWarnsForUser(guildId, userId, limit = 10) {
+    return store.warns
+      .filter(item => item.userId === userId && (item.guildId || guildId) === guildId)
+      .slice(0, limit);
+  }
+
+  function clearGuildWarnsForUser(guildId, userId) {
+    const entries = store.warns.filter(item => item.userId === userId && (item.guildId || guildId) === guildId);
+    if (!entries.length) {
+      return 0;
+    }
+
+    store.warns = store.warns.filter(item => !(item.userId === userId && (item.guildId || guildId) === guildId));
+    const member = ensureGuildMember(guildId, userId);
+    member.warns = Math.max(0, (member.warns || 0) - entries.length);
+    member.points = clampPoints((member.points || 0) + entries.length);
+    save();
+    return entries.length;
   }
 
   function addCommend({ userId, moderatorId, reason }) {
@@ -368,14 +398,21 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     save();
   }
 
-  function createApplication({ userId, nickname, age, text }) {
+  function createApplication({ userId, nickname, level = '', inviter = '', discovery = '', about = '', age = '', text = '' }) {
     const applicationId = `${Date.now()}_${userId}`;
     store.applications.unshift({
       id: applicationId,
       discordId: userId,
       nickname,
-      age,
-      text,
+      level: level || age,
+      inviter,
+      discovery,
+      about: about || text,
+      age: age || level,
+      text: text || about,
+      ticketThreadId: '',
+      ticketMessageId: '',
+      ticketStarterMessageId: '',
       status: 'pending',
       createdAt: new Date().toISOString()
     });
@@ -384,15 +421,22 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return applicationId;
   }
 
-  function createGuildApplication({ guildId, userId, nickname, age, text }) {
+  function createGuildApplication({ guildId, userId, nickname, level = '', inviter = '', discovery = '', about = '', age = '', text = '' }) {
     const applicationId = `${Date.now()}_${userId}`;
     store.applications.unshift({
       id: applicationId,
       guildId,
       discordId: userId,
       nickname,
-      age,
-      text,
+      level: level || age,
+      inviter,
+      discovery,
+      about: about || text,
+      age: age || level,
+      text: text || about,
+      ticketThreadId: '',
+      ticketMessageId: '',
+      ticketStarterMessageId: '',
       status: 'pending',
       createdAt: new Date().toISOString()
     });
@@ -407,6 +451,15 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
 
   function findGuildApplication(guildId, applicationId) {
     return store.applications.find(item => item.id === applicationId && (item.guildId || guildId) === guildId) || null;
+  }
+
+  function setApplicationTicketInfo(app, ticketInfo = {}) {
+    if (!app) return null;
+    app.ticketThreadId = String(ticketInfo.ticketThreadId || app.ticketThreadId || '');
+    app.ticketMessageId = String(ticketInfo.ticketMessageId || app.ticketMessageId || '');
+    app.ticketStarterMessageId = String(ticketInfo.ticketStarterMessageId || app.ticketStarterMessageId || '');
+    save();
+    return app;
   }
 
   function listRecentApplications(limit = 10) {
@@ -536,6 +589,8 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     trackGuildPresence,
     addWarn,
     addGuildWarn,
+    listGuildWarnsForUser,
+    clearGuildWarnsForUser,
     addCommend,
     addGuildCommend,
     addVoiceMinutes,
@@ -550,6 +605,7 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     createGuildApplication,
     findApplication,
     findGuildApplication,
+    setApplicationTicketInfo,
     listRecentApplications,
     listGuildRecentApplications,
     listBlacklist,

@@ -40,13 +40,24 @@ function createEmbedsStub() {
     buildApplicationsPanelButtons() {
       return [{ type: 'buttons' }];
     },
-    buildApplicationEmbed({ user, nickname, age, text, applicationId, source }) {
+    buildApplicationEmbed({ user, nickname, level, inviter, discovery, about, age, text, applicationId, source }) {
       const embed = createFakeEmbed();
-      embed.payload = { user, nickname, age, text, applicationId, source };
+      embed.payload = {
+        user,
+        nickname,
+        level,
+        inviter,
+        discovery,
+        about,
+        age,
+        text,
+        applicationId,
+        source
+      };
       return embed;
     },
-    buildApplicationButtons(applicationId, userId) {
-      return [{ applicationId, userId }];
+    buildApplicationButtons(applicationId, userId, options = {}) {
+      return [{ applicationId, userId, options }];
     },
     buildRejectLogEmbed({ user, moderatorUser, reason }) {
       return { user, moderatorUser, reason };
@@ -104,8 +115,10 @@ async function testSubmitApplication() {
       getTextInputValue(field) {
         return {
           nickname: 'Tester',
-          age: '21',
-          text: 'Хочу вступить в семью и помогать проекту.'
+          level: '21',
+          inviter: 'Deniska',
+          discovery: 'Discord',
+          about: 'Хочу вступить в семью и помогать проекту.'
         }[field];
       }
     },
@@ -119,8 +132,82 @@ async function testSubmitApplication() {
 
   assert.equal(storage.listRecentApplications(1).length, 1);
   assert.equal(storage.getCooldown('user-1') > 0, true);
+  assert.equal(channel.sent.length, 2);
+  assert.match(replies[0].content, /заявка отправлена/i);
+}
+
+async function testSubmitApplicationCreatesThreadTicket() {
+  const storage = createTempStorage();
+  const threadMessages = [];
+  let starterEdited = null;
+  let threadOptions = null;
+
+  const thread = {
+    id: 'thread-1',
+    async send(payload) {
+      threadMessages.push(payload);
+      return { id: `thread-message-${threadMessages.length}`, ...payload };
+    }
+  };
+
+  const channel = {
+    sent: [],
+    async send(payload) {
+      this.sent.push(payload);
+      return {
+        id: `starter-${this.sent.length}`,
+        async startThread(options) {
+          threadOptions = options;
+          return thread;
+        },
+        async edit(payloadToEdit) {
+          starterEdited = payloadToEdit;
+          return payloadToEdit;
+        }
+      };
+    }
+  };
+
+  const service = createApplicationsService({
+    storage,
+    fetchTextChannel: async () => channel,
+    applicationsChannelId: 'applications',
+    applicationDefaultRole: '',
+    logChannelId: '',
+    familyRoles: buildFamilyRoles(),
+    applicationAccessRoleIds: ['role-admin-1', 'role-admin-2'],
+    client: {},
+    embeds: createEmbedsStub(),
+    sendAcceptLog: async () => {}
+  });
+
+  const interaction = {
+    guild: { id: 'guild-thread' },
+    user: { id: 'user-thread' },
+    fields: {
+      getTextInputValue(field) {
+        return {
+          nickname: 'Threader',
+          level: '15',
+          inviter: 'Old Member',
+          discovery: 'YouTube',
+          about: 'Еще один тест заявки для тикетного сценария.'
+        }[field];
+      }
+    },
+    async reply() {}
+  };
+
+  await service.submitApplication(interaction);
+
+  const saved = storage.listRecentApplications(1)[0];
   assert.equal(channel.sent.length, 1);
-  assert.match(replies[0].content, /Заявка отправлена/i);
+  assert.equal(threadMessages.length, 1);
+  assert.equal(saved.ticketThreadId, 'thread-1');
+  assert.equal(saved.ticketStarterMessageId, 'starter-1');
+  assert.equal(saved.ticketMessageId, 'thread-message-1');
+  assert.equal(threadOptions.name.startsWith('ticket-Threader-'), true);
+  assert.match(starterEdited.content, /тикет/i);
 }
 
 async function testAcceptApplication() {
@@ -128,8 +215,10 @@ async function testAcceptApplication() {
   const applicationId = storage.createApplication({
     userId: 'user-2',
     nickname: 'Applicant',
-    age: '19',
-    text: 'Хочу быть полезным и активным участником семьи.'
+    level: '19',
+    inviter: 'Boss',
+    discovery: 'Forum',
+    about: 'Хочу быть полезным и активным участником семьи.'
   });
 
   const edits = [];
@@ -195,7 +284,7 @@ async function testAcceptApplication() {
   };
 
   await service.accept(interaction, applicationId, 'user-2', {
-    reason: 'Прошёл собеседование',
+    reason: 'Прошел собеседование',
     rankName: '1 ранг'
   });
 
@@ -204,7 +293,7 @@ async function testAcceptApplication() {
   assert.equal(addedRoleId, 'role-newbie');
   assert.equal(removedRoleIds, null);
   assert.deepEqual(acceptLogPayload, {
-    reason: 'Прошёл собеседование',
+    reason: 'Прошел собеседование',
     rankName: '1 ранг'
   });
   assert.match(replies[0].content, /принят в семью/i);
@@ -215,8 +304,10 @@ async function testAcceptApplicationAssignsResolvedFamilyRole() {
   const applicationId = storage.createApplication({
     userId: 'user-22',
     nickname: 'Applicant 2',
-    age: '22',
-    text: 'Хочу вступить и показать активный онлайн.'
+    level: '22',
+    inviter: 'Friend',
+    discovery: 'Discord',
+    about: 'Хочу вступить и показать активный онлайн.'
   });
 
   let addedRoleId = null;
@@ -290,8 +381,10 @@ async function testRejectApplication() {
   const applicationId = storage.createApplication({
     userId: 'user-3',
     nickname: 'Rejected',
-    age: '20',
-    text: 'Подаю заявку для проверки сценария отклонения.'
+    level: '20',
+    inviter: 'Recruiter',
+    discovery: 'TikTok',
+    about: 'Подаю заявку для проверки сценария отклонения.'
   });
 
   const logChannel = {
@@ -342,6 +435,7 @@ async function testRejectApplication() {
 
 async function main() {
   await runTest('submitApplication stores data and sends application message', testSubmitApplication);
+  await runTest('submitApplication creates thread ticket when threads are available', testSubmitApplicationCreatesThreadTicket);
   await runTest('accept updates status and logs admission', testAcceptApplication);
   await runTest('accept assigns resolved family role', testAcceptApplicationAssignsResolvedFamilyRole);
   await runTest('reject updates status and sends reject log', testRejectApplication);

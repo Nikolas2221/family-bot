@@ -36,7 +36,8 @@ function normalizeGuildRecord(guildId, guild = {}) {
         deputy: guild.settings?.roles?.deputy || '',
         elder: guild.settings?.roles?.elder || '',
         member: guild.settings?.roles?.member || '',
-        newbie: guild.settings?.roles?.newbie || ''
+        newbie: guild.settings?.roles?.newbie || '',
+        mute: guild.settings?.roles?.mute || ''
       },
       access: {
         applications: [...(guild.settings?.access?.applications || [])],

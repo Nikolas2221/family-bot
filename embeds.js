@@ -200,11 +200,17 @@ function buildApplyModal() {
       new TextInputBuilder().setCustomId('nickname').setLabel(copy.applications.applyModalNick).setStyle(TextInputStyle.Short).setRequired(true)
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('age').setLabel(copy.applications.applyModalAge).setStyle(TextInputStyle.Short).setRequired(true)
+      new TextInputBuilder().setCustomId('level').setLabel(copy.applications.applyModalLevel).setStyle(TextInputStyle.Short).setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('inviter').setLabel(copy.applications.applyModalInviter).setStyle(TextInputStyle.Short).setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('discovery').setLabel(copy.applications.applyModalDiscovery).setStyle(TextInputStyle.Short).setRequired(true)
     ),
     new ActionRowBuilder().addComponents(
       new TextInputBuilder()
-        .setCustomId('text')
+        .setCustomId('about')
         .setLabel(copy.applications.applyModalText)
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true)
@@ -697,6 +703,108 @@ function buildVoiceActivityEmbed(entries, summary = {}) {
       true
     ),
     section('Топ по голосу', content, false)
+  );
+}
+
+function buildApplicationEmbed({
+  user,
+  nickname,
+  level = '',
+  inviter = '',
+  discovery = '',
+  about = '',
+  age = '',
+  text = '',
+  applicationId,
+  source = copy.applications.source
+}) {
+  const normalizedLevel = level || age || 'не указано';
+  const normalizedAbout = about || text || 'не указано';
+  const embed = card({
+    title: `${copy.applications.embedTitle} • Phoenix Intake`,
+    color: THEME.phoenix,
+    description: [
+      copy.applications.description(source, user.id, copy.applications.statusLabel('review')),
+      '',
+      'Стильная карточка кандидата для быстрого решения руководства.'
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Candidate Card',
+    thumbnail: avatarUrl(user)
+  });
+
+  return embed.addFields(
+    section('Кандидат', [`Пользователь: <@${user.id}>`, `Ник в игре: ${nickname}`, `Лвл: ${normalizedLevel}`].join('\n'), true),
+    section(copy.applications.fieldInvite, [`Кто дал инвайт: ${inviter || 'не указано'}`, `Откуда узнали: ${discovery || 'не указано'}`].join('\n'), true),
+    section('ID анкеты', `\`${applicationId}\``, true),
+    section(copy.applications.fieldText, normalizedAbout, false)
+  );
+}
+
+function buildApplicationButtons(applicationId, userId, { closed = false } = {}) {
+  const rows = [];
+
+  if (!closed) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`app_accept:${applicationId}:${userId}`).setLabel(copy.applications.acceptButton).setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`app_ai:${applicationId}:${userId}`).setLabel(copy.applications.aiButton).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`app_review:${applicationId}:${userId}`).setLabel(copy.applications.reviewButton).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`app_reject:${applicationId}:${userId}`).setLabel(copy.applications.rejectButton).setStyle(ButtonStyle.Danger)
+      )
+    );
+  }
+
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`app_close:${applicationId}:${userId}`).setLabel(copy.applications.closeTicketButton).setStyle(ButtonStyle.Secondary)
+    )
+  );
+
+  return rows;
+}
+
+function buildAdminPanelEmbed({ guildName, record }) {
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? copy.admin.panelPremium : copy.admin.panelFree;
+
+  return card({
+    title: copy.admin.panelTitle,
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `Сервер: **${guildName}**`,
+    footer: 'BRHD • Phoenix • Administration'
+  }).addFields(
+    section('Статус', [`План: ${planLabel}`, `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`].join('\n'), true),
+    section('Возможности', copy.admin.panelFeatures(record.plan), true),
+    section(
+      copy.admin.panelFieldChannels,
+      [
+        channelLine('Панель', record.settings.channels.panel),
+        channelLine('Заявки', record.settings.channels.applications),
+        channelLine('Логи', record.settings.channels.logs),
+        channelLine('Дисциплина', record.settings.channels.disciplineLogs)
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldRoles,
+      [
+        roleLine('Лидер', record.settings.roles.leader),
+        roleLine('Зам', record.settings.roles.deputy),
+        roleLine('Старший', record.settings.roles.elder),
+        roleLine('Участник', record.settings.roles.member),
+        roleLine('Новичок', record.settings.roles.newbie),
+        roleLine('Мут', record.settings.roles.mute)
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldVisuals,
+      [
+        copy.admin.visualLine('Панель семьи', record.settings.visuals?.familyBanner),
+        copy.admin.visualLine('Подача заявки', record.settings.visuals?.applicationsBanner)
+      ].join('\n'),
+      false
+    )
   );
 }
 

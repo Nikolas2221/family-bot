@@ -94,6 +94,7 @@ function resolveGuildSettings(guildId) {
       discipline: settings.access?.discipline?.length ? settings.access.discipline : ACCESS_DISCIPLINE,
       ranks: settings.access?.ranks?.length ? settings.access.ranks : ACCESS_RANKS
     },
+    muteRoleId: settings.roles?.mute || '',
     visuals: {
       familyBanner: settings.visuals?.familyBanner || '',
       applicationsBanner: settings.visuals?.applicationsBanner || ''
@@ -132,6 +133,12 @@ function getGuildStorage(guildId) {
     addWarn({ userId, moderatorId, reason }) {
       return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
     },
+    listWarns(userId, limit = 10) {
+      return storage.listGuildWarnsForUser(guildId, userId, limit);
+    },
+    clearWarns(userId) {
+      return storage.clearGuildWarnsForUser(guildId, userId);
+    },
     addCommend({ userId, moderatorId, reason }) {
       return storage.addGuildCommend({ guildId, userId, moderatorId, reason });
     },
@@ -141,11 +148,24 @@ function getGuildStorage(guildId) {
     setCooldown(userId, value) {
       return storage.setGuildCooldown(guildId, userId, value);
     },
-    createApplication({ userId, nickname, age, text }) {
-      return storage.createGuildApplication({ guildId, userId, nickname, age, text });
+    createApplication({ userId, nickname, level, inviter, discovery, about, age, text }) {
+      return storage.createGuildApplication({
+        guildId,
+        userId,
+        nickname,
+        level,
+        inviter,
+        discovery,
+        about,
+        age,
+        text
+      });
     },
     findApplication(applicationId) {
       return storage.findGuildApplication(guildId, applicationId);
+    },
+    setApplicationTicketInfo(application, ticketInfo) {
+      return storage.setApplicationTicketInfo(application, ticketInfo);
     },
     listRecentApplications(limit) {
       return storage.listGuildRecentApplications(guildId, limit);
@@ -228,7 +248,8 @@ function buildGuildSettingsSnapshot(guild) {
         deputy: settings.roles.find(role => role.key === 'deputy')?.id || '',
         elder: settings.roles.find(role => role.key === 'elder')?.id || '',
         member: settings.roles.find(role => role.key === 'member')?.id || '',
-        newbie: settings.roles.find(role => role.key === 'newbie')?.id || ''
+        newbie: settings.roles.find(role => role.key === 'newbie')?.id || '',
+        mute: settings.muteRoleId || ''
       },
       access: {
         applications: settings.access.applications,
@@ -700,6 +721,13 @@ function getHelpCatalog(guildId, userId) {
     { name: 'adminpanel', description: copy.commands.adminPanelDescription },
     { name: 'warn', description: copy.commands.warnDescription },
     { name: 'commend', description: copy.commands.commendDescription },
+    { name: 'purge', description: copy.commands.purgeDescription },
+    { name: 'mute', description: copy.commands.muteDescription },
+    { name: 'unmute', description: copy.commands.unmuteDescription },
+    { name: 'lockchannel', description: copy.commands.lockChannelDescription },
+    { name: 'unlockchannel', description: copy.commands.unlockChannelDescription },
+    { name: 'slowmode', description: copy.commands.slowmodeDescription },
+    { name: 'warnhistory', description: copy.commands.warnHistoryDescription },
     { name: 'debugconfig', description: copy.commands.debugConfigDescription }
   ];
 
@@ -714,7 +742,10 @@ function getHelpCatalog(guildId, userId) {
     { name: 'blacklistlist', description: copy.commands.blacklistListDescription },
     { name: 'banlist', description: copy.commands.banListDescription },
     { name: 'unbanid', description: copy.commands.unbanIdDescription },
-    { name: 'testaccept', description: copy.commands.testAcceptDescription }
+    { name: 'testaccept', description: copy.commands.testAcceptDescription },
+    { name: 'purgeuser', description: copy.commands.purgeUserDescription },
+    { name: 'clearallchannel', description: copy.commands.clearAllChannelDescription },
+    { name: 'clearwarns', description: copy.commands.clearWarnsDescription }
   ];
 
   if (isOwner(userId)) {
@@ -750,6 +781,17 @@ function canManageRanks(member) {
   const accessRoles = resolveGuildSettings(member.guild.id).access.ranks;
   if (!accessRoles.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
   return hasAnyRole(member, accessRoles) || hasPermission(member, PermissionFlagsBits.ManageRoles);
+}
+
+function canModerate(member) {
+  if (!member) return false;
+  return (
+    hasPermission(member, PermissionFlagsBits.Administrator) ||
+    hasPermission(member, PermissionFlagsBits.ManageMessages) ||
+    hasPermission(member, PermissionFlagsBits.ManageChannels) ||
+    hasPermission(member, PermissionFlagsBits.ManageRoles) ||
+    hasPermission(member, PermissionFlagsBits.ModerateMembers)
+  );
 }
 
 function canDebugConfig(interaction) {
@@ -801,6 +843,100 @@ async function fetchTextChannel(guild, id) {
   const channel = await guild.channels.fetch(id).catch(() => null);
   if (!channel || channel.type !== ChannelType.GuildText) return null;
   return channel;
+}
+
+function resolveTargetTextChannel(interaction) {
+  const channel = interaction.options.getChannel(copy.commands.channelOptionName) || interaction.channel;
+  if (!channel || channel.type !== ChannelType.GuildText) {
+    return null;
+  }
+
+  return channel;
+}
+
+function canManageTargetChannel(member, channel) {
+  if (!member || !channel) return false;
+  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
+
+  const permissions = channel.permissionsFor(member);
+  return Boolean(
+    permissions?.has(PermissionFlagsBits.ManageMessages) ||
+    permissions?.has(PermissionFlagsBits.ManageChannels)
+  );
+}
+
+function formatModerationTimestamp(timestamp) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return 'неизвестно';
+  }
+
+  return date.toLocaleString('ru-RU');
+}
+
+async function deleteMessagesFast(messages) {
+  if (!messages.length) return 0;
+
+  const now = Date.now();
+  const fresh = messages.filter(message => now - message.createdTimestamp < 14 * 24 * 60 * 60 * 1000);
+  const stale = messages.filter(message => now - message.createdTimestamp >= 14 * 24 * 60 * 60 * 1000);
+  let deleted = 0;
+
+  for (let index = 0; index < fresh.length; index += 100) {
+    const batch = fresh.slice(index, index + 100);
+    if (!batch.length) continue;
+    const result = await batch[0].channel.bulkDelete(batch.map(message => message.id), true).catch(() => null);
+    deleted += result?.size || 0;
+  }
+
+  for (const message of stale) {
+    const ok = await message.delete().then(() => true).catch(() => false);
+    if (ok) {
+      deleted += 1;
+    }
+  }
+
+  return deleted;
+}
+
+async function fetchMessagesForUser(channel, userId, count) {
+  const collected = [];
+  let before;
+
+  while (collected.length < count) {
+    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!batch || !batch.size) break;
+
+    for (const message of batch.values()) {
+      if (message.author?.id === userId) {
+        collected.push(message);
+        if (collected.length >= count) {
+          break;
+        }
+      }
+    }
+
+    before = batch.last()?.id;
+  }
+
+  return collected;
+}
+
+function remapConfiguredChannelIds(guildId, oldChannelId, newChannelId) {
+  const settings = resolveGuildSettings(guildId);
+  const channelPatch = {};
+
+  for (const [key, value] of Object.entries(settings.channels || {})) {
+    if (value === oldChannelId) {
+      channelPatch[key] = newChannelId;
+    }
+  }
+
+  if (Object.keys(channelPatch).length) {
+    database.updateGuildSettings(guildId, { channels: channelPatch });
+  }
+
+  return channelPatch;
 }
 
 async function fetchMemberFast(guild, userId) {
@@ -957,6 +1093,7 @@ function getApplicationsService(guildId) {
     logChannelId: settings.channels.logs,
     applicationsBanner: settings.visuals.applicationsBanner,
     familyRoles: settings.roles,
+    applicationAccessRoleIds: settings.access.applications,
     client,
     embeds,
     sendAcceptLog,
@@ -1775,6 +1912,292 @@ client.on('interactionCreate', async interaction => {
         );
       }
 
+      if (interaction.commandName === 'purge') {
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const count = interaction.options.getInteger(copy.commands.countOptionName, true);
+        if (count < 1 || count > 500) {
+          return interaction.reply(ephemeral({ content: copy.moderation.invalidCount }));
+        }
+
+        const channel = resolveTargetTextChannel(interaction);
+        if (!channel) {
+          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+        }
+
+        if (!canManageTargetChannel(interaction.member, channel)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        let deleted = 0;
+        let remaining = count;
+        let before;
+
+        while (remaining > 0) {
+          const batch = await channel.messages.fetch({ limit: Math.min(100, remaining), before }).catch(() => null);
+          if (!batch || !batch.size) break;
+
+          const messages = [...batch.values()];
+          deleted += await deleteMessagesFast(messages);
+          remaining -= messages.length;
+          before = batch.last()?.id;
+        }
+
+        return interaction.editReply({ content: copy.moderation.purgeDone(deleted, channel.id) });
+      }
+
+      if (interaction.commandName === 'purgeuser') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.premiumOnly }));
+        }
+
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const user = interaction.options.getUser(copy.commands.userOptionName, true);
+        const count = interaction.options.getInteger(copy.commands.countOptionName, true);
+        if (count < 1 || count > 500) {
+          return interaction.reply(ephemeral({ content: copy.moderation.invalidCount }));
+        }
+
+        const channel = resolveTargetTextChannel(interaction);
+        if (!channel) {
+          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+        }
+
+        if (!canManageTargetChannel(interaction.member, channel)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const messages = await fetchMessagesForUser(channel, user.id, count);
+        const deleted = await deleteMessagesFast(messages);
+        return interaction.editReply({ content: copy.moderation.purgeUserDone(deleted, user.id, channel.id) });
+      }
+
+      if (interaction.commandName === 'clearallchannel') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.premiumOnly }));
+        }
+
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const confirmation = interaction.options.getString(copy.commands.confirmOptionName, true).trim().toUpperCase();
+        if (confirmation !== 'CLEAR') {
+          return interaction.reply(ephemeral({ content: copy.moderation.invalidConfirmation }));
+        }
+
+        const channel = resolveTargetTextChannel(interaction);
+        if (!channel) {
+          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+        }
+
+        if (!canManageTargetChannel(interaction.member, channel)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const cloned = await channel.clone({ reason: `Full clear by ${interaction.user.id}` }).catch(() => null);
+        if (!cloned) {
+          return interaction.editReply({ content: copy.moderation.actionFailed('clearallchannel') });
+        }
+
+        await cloned.setPosition(channel.rawPosition).catch(() => {});
+        remapConfiguredChannelIds(guildId, channel.id, cloned.id);
+
+        if (resolveGuildSettings(guildId).channels.panel === cloned.id) {
+          storage.setGuildPanelMessageId(guildId, '');
+        }
+
+        await channel.delete(`Full clear by ${interaction.user.id}`).catch(() => {});
+        if (resolveGuildSettings(guildId).channels.panel === cloned.id) {
+          await doPanelUpdate(guildId, true);
+        }
+
+        return interaction.editReply({ content: copy.moderation.clearChannelDone(channel.id, cloned.id) });
+      }
+
+      if (interaction.commandName === 'mute') {
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const settings = resolveGuildSettings(guildId);
+        if (!settings.muteRoleId) {
+          return interaction.reply(ephemeral({ content: copy.moderation.muteRoleMissing }));
+        }
+
+        const user = interaction.options.getUser(copy.commands.userOptionName, true);
+        const member = await fetchMemberFast(interaction.guild, user.id);
+        if (!member) {
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+        }
+
+        const muteRole = interaction.guild.roles.cache.get(settings.muteRoleId)
+          || await interaction.guild.roles.fetch(settings.muteRoleId).catch(() => null);
+        if (!muteRole) {
+          return interaction.reply(ephemeral({ content: copy.moderation.muteRoleMissing }));
+        }
+
+        const reason = interaction.options.getString(copy.commands.reasonOptionName) || 'Mute via bot';
+        const ok = await member.roles.add(muteRole, reason).then(() => true).catch(() => false);
+        if (!ok) {
+          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('mute') }));
+        }
+
+        return interaction.reply(ephemeral({ content: copy.moderation.muteDone(user.id, muteRole.id) }));
+      }
+
+      if (interaction.commandName === 'unmute') {
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const settings = resolveGuildSettings(guildId);
+        if (!settings.muteRoleId) {
+          return interaction.reply(ephemeral({ content: copy.moderation.muteRoleMissing }));
+        }
+
+        const user = interaction.options.getUser(copy.commands.userOptionName, true);
+        const member = await fetchMemberFast(interaction.guild, user.id);
+        if (!member) {
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+        }
+
+        const ok = await member.roles.remove(settings.muteRoleId, 'Unmute via bot').then(() => true).catch(() => false);
+        if (!ok) {
+          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('unmute') }));
+        }
+
+        return interaction.reply(ephemeral({ content: copy.moderation.unmuteDone(user.id) }));
+      }
+
+      if (interaction.commandName === 'lockchannel') {
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const channel = resolveTargetTextChannel(interaction);
+        if (!channel) {
+          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+        }
+
+        if (!canManageTargetChannel(interaction.member, channel)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const ok = await channel.permissionOverwrites
+          .edit(interaction.guild.roles.everyone, { SendMessages: false }, { reason: `Locked by ${interaction.user.id}` })
+          .then(() => true)
+          .catch(() => false);
+        if (!ok) {
+          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('lockchannel') }));
+        }
+
+        return interaction.reply(ephemeral({ content: copy.moderation.lockDone(channel.id) }));
+      }
+
+      if (interaction.commandName === 'unlockchannel') {
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const channel = resolveTargetTextChannel(interaction);
+        if (!channel) {
+          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+        }
+
+        if (!canManageTargetChannel(interaction.member, channel)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const ok = await channel.permissionOverwrites
+          .edit(interaction.guild.roles.everyone, { SendMessages: null }, { reason: `Unlocked by ${interaction.user.id}` })
+          .then(() => true)
+          .catch(() => false);
+        if (!ok) {
+          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('unlockchannel') }));
+        }
+
+        return interaction.reply(ephemeral({ content: copy.moderation.unlockDone(channel.id) }));
+      }
+
+      if (interaction.commandName === 'slowmode') {
+        if (!canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const seconds = interaction.options.getInteger(copy.commands.secondsOptionName, true);
+        if (seconds < 0 || seconds > 21600) {
+          return interaction.reply(ephemeral({ content: copy.moderation.invalidSeconds }));
+        }
+
+        const channel = resolveTargetTextChannel(interaction);
+        if (!channel) {
+          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+        }
+
+        if (!canManageTargetChannel(interaction.member, channel)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const ok = await channel.setRateLimitPerUser(seconds, `Slowmode by ${interaction.user.id}`).then(() => true).catch(() => false);
+        if (!ok) {
+          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('slowmode') }));
+        }
+
+        return interaction.reply(ephemeral({ content: copy.moderation.slowmodeDone(channel.id, seconds) }));
+      }
+
+      if (interaction.commandName === 'warnhistory') {
+        if (!canDiscipline(interaction.member) && !canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const user = interaction.options.getUser(copy.commands.userOptionName, true);
+        const entries = guildStorage.listWarns(user.id, 10);
+        const embed = new EmbedBuilder()
+          .setColor(0xf97316)
+          .setTitle(copy.moderation.warnHistoryTitle(user.tag || user.username))
+          .setDescription(
+            entries.length
+              ? entries
+                .map((entry, index) => copy.moderation.warnHistoryLine(index, {
+                  ...entry,
+                  createdAt: formatModerationTimestamp(entry.createdAt)
+                }))
+                .join('\n')
+                .slice(0, 4000)
+              : copy.moderation.warnHistoryEmpty
+          )
+          .setFooter({ text: 'BRHD • Phoenix • Moderation' });
+
+        return interaction.reply(ephemeral({ embeds: [embed] }));
+      }
+
+      if (interaction.commandName === 'clearwarns') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.premiumOnly }));
+        }
+
+        if (!canDiscipline(interaction.member) && !canModerate(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+        }
+
+        const user = interaction.options.getUser(copy.commands.userOptionName, true);
+        const cleared = guildStorage.clearWarns(user.id);
+        await doPanelUpdate(guildId, false);
+        return interaction.reply(ephemeral({ content: copy.moderation.clearWarnsDone(user.id, cleared) }));
+      }
+
       if (interaction.commandName === 'leaderboard') {
         if (!isPremiumGuild(guildId)) {
           return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
@@ -2283,6 +2706,15 @@ client.on('interactionCreate', async interaction => {
 
         const [, applicationId, userId] = interaction.customId.split(':');
         return applicationsService.reject(interaction, applicationId, userId);
+      }
+
+      if (interaction.customId.startsWith('app_close:')) {
+        if (!canApplications(interaction.member)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const [, applicationId] = interaction.customId.split(':');
+        return applicationsService.closeTicket(interaction, applicationId);
       }
     }
 

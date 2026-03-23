@@ -20,6 +20,7 @@ function createApplicationsService({
   logChannelId,
   applicationsBanner,
   familyRoles = [],
+  applicationAccessRoleIds = [],
   client,
   embeds,
   sendAcceptLog,
@@ -38,6 +39,76 @@ function createApplicationsService({
 
   function isTerminalApplicationStatus(status) {
     return status === 'accepted' || status === 'rejected';
+  }
+
+  function buildApplicationManagerMentions() {
+    return applicationAccessRoleIds
+      .filter(Boolean)
+      .map(roleId => `<@&${roleId}>`)
+      .join(' ');
+  }
+
+  async function createApplicationTicket(channel, application, user) {
+    const managerMentions = buildApplicationManagerMentions();
+    const starterMessage = await channel.send({
+      content: managerMentions || copy.applications.ticketThreadHeader(user.id, application.id),
+      allowedMentions: {
+        parse: [],
+        roles: applicationAccessRoleIds,
+        users: []
+      }
+    });
+
+    const thread = typeof starterMessage.startThread === 'function'
+      ? await starterMessage.startThread({
+        name: copy.applications.ticketThreadName(application.nickname || 'candidate', application.id),
+        autoArchiveDuration: 1440,
+        reason: copy.applications.ticketReason(user.id)
+      }).catch(() => null)
+      : null;
+
+    const targetChannel = thread || channel;
+    const ticketMessage = await targetChannel.send({
+      content: thread ? copy.applications.ticketThreadHeader(user.id, application.id) : managerMentions,
+      embeds: [
+        embeds.buildApplicationEmbed({
+          user,
+          nickname: application.nickname,
+          level: application.level,
+          inviter: application.inviter,
+          discovery: application.discovery,
+          about: application.about,
+          age: application.age,
+          text: application.text,
+          applicationId: application.id
+        })
+      ],
+      components: embeds.buildApplicationButtons(application.id, user.id),
+      allowedMentions: {
+        parse: [],
+        roles: thread ? [] : applicationAccessRoleIds,
+        users: []
+      }
+    });
+
+    if (thread) {
+      await starterMessage.edit({
+        content: [copy.applications.ticketStarter(user.id, thread.id), managerMentions].filter(Boolean).join('\n'),
+        allowedMentions: {
+          parse: [],
+          roles: applicationAccessRoleIds,
+          users: []
+        }
+      }).catch(() => {});
+    }
+
+    storage.setApplicationTicketInfo(application, {
+      ticketThreadId: thread?.id || '',
+      ticketMessageId: ticketMessage?.id || '',
+      ticketStarterMessageId: starterMessage?.id || ''
+    });
+
+    return { starterMessage, thread, ticketMessage };
   }
 
   function resolveAcceptedRoleId(rankName) {
@@ -98,30 +169,34 @@ function createApplicationsService({
   async function submitApplication(interaction) {
     const sanitized = storage.sanitizeApplicationInput({
       nickname: interaction.fields.getTextInputValue('nickname'),
-      age: interaction.fields.getTextInputValue('age'),
-      text: interaction.fields.getTextInputValue('text')
+      level: interaction.fields.getTextInputValue('level'),
+      inviter: interaction.fields.getTextInputValue('inviter'),
+      discovery: interaction.fields.getTextInputValue('discovery'),
+      about: interaction.fields.getTextInputValue('about')
     });
 
     if (sanitized.error) {
       return interaction.reply(ephemeral({ content: sanitized.error }));
     }
 
-    const { nickname, age, text } = sanitized;
+    const { nickname, level, inviter, discovery, about } = sanitized;
     storage.setCooldown(interaction.user.id);
     const applicationId = storage.createApplication({
       userId: interaction.user.id,
       nickname,
-      age,
-      text
+      level,
+      inviter,
+      discovery,
+      about
     });
+    const application = storage.findApplication(applicationId);
 
     const channel = await fetchTextChannel(interaction.guild, applicationsChannelId);
-    if (channel) {
-      await channel.send({
-        embeds: [embeds.buildApplicationEmbed({ user: interaction.user, nickname, age, text, applicationId })],
-        components: embeds.buildApplicationButtons(applicationId, interaction.user.id)
-      });
+    if (!channel || !application) {
+      return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
     }
+
+    await createApplicationTicket(channel, application, interaction.user);
 
     return interaction.reply(ephemeral({ content: copy.applications.sent }));
   }
@@ -167,6 +242,10 @@ function createApplicationsService({
     const accepted = embeds.buildApplicationEmbed({
       user: { id: userId },
       nickname: application.nickname,
+      level: application.level,
+      inviter: application.inviter,
+      discovery: application.discovery,
+      about: application.about,
       age: application.age,
       text: application.text,
       applicationId,
@@ -188,7 +267,7 @@ function createApplicationsService({
       return interaction.reply(ephemeral({ content: copy.common.unknownError }));
     }
 
-    await targetMessage.edit({ embeds: [accepted], components: [] });
+    await targetMessage.edit({ embeds: [accepted], components: embeds.buildApplicationButtons(applicationId, userId, { closed: true }) });
     await sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName);
     await sendAcceptanceDm({
       guild: interaction.guild,
@@ -219,6 +298,10 @@ function createApplicationsService({
     const review = embeds.buildApplicationEmbed({
       user: { id: userId },
       nickname: application.nickname,
+      level: application.level,
+      inviter: application.inviter,
+      discovery: application.discovery,
+      about: application.about,
       age: application.age,
       text: application.text,
       applicationId,
@@ -249,6 +332,10 @@ function createApplicationsService({
     const rejected = embeds.buildApplicationEmbed({
       user: { id: userId },
       nickname: application.nickname,
+      level: application.level,
+      inviter: application.inviter,
+      discovery: application.discovery,
+      about: application.about,
       age: application.age,
       text: application.text,
       applicationId,
@@ -260,7 +347,7 @@ function createApplicationsService({
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('rejected')))
       .setFooter({ text: copy.applications.rejectedFooter(interaction.user.username) });
 
-    await interaction.message.edit({ embeds: [rejected], components: [] });
+    await interaction.message.edit({ embeds: [rejected], components: embeds.buildApplicationButtons(applicationId, userId, { closed: true }) });
 
     const user = await client.users.fetch(userId).catch(() => null);
     if (user && logChannelId) {
@@ -281,8 +368,25 @@ function createApplicationsService({
     return interaction.reply(ephemeral({ content: copy.applications.rejectedReply(userId) }));
   }
 
+  async function closeTicket(interaction, applicationId) {
+    const application = storage.findApplication(applicationId);
+    if (!application) {
+      return interaction.reply(ephemeral({ content: copy.applications.notFound }));
+    }
+
+    if (!interaction.channel?.isThread?.()) {
+      return interaction.reply(ephemeral({ content: copy.applications.ticketOnlyInThread }));
+    }
+
+    await interaction.reply(ephemeral({ content: copy.applications.ticketClosedReply }));
+    await interaction.channel.setArchived(true, copy.applications.ticketReason(application.discordId || 'user')).catch(() => {});
+    await interaction.channel.setLocked(true).catch(() => {});
+    return true;
+  }
+
   return {
     accept,
+    closeTicket,
     getCooldownSecondsLeft,
     moveToReview,
     reject,

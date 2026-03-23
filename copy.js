@@ -460,4 +460,98 @@ copy.security.unbanFailed = function unbanFailed(userId) {
   return `Не удалось разбанить пользователя \`${userId}\`. Проверь ID и наличие бана.`;
 };
 
+copy.applications.fieldNick = '🎮 Ник в игре';
+copy.applications.fieldLevel = '⚡ Лвл';
+copy.applications.fieldInvite = '🫂 Кто дал инвайт / Откуда узнали';
+copy.applications.fieldText = '📝 О себе';
+copy.applications.applyModalNick = 'Ник в игре';
+copy.applications.applyModalLevel = 'Какой лвл?';
+copy.applications.applyModalInviter = 'Кто дал инвайт?';
+copy.applications.applyModalDiscovery = 'Откуда о нас узнали?';
+copy.applications.applyModalText = 'О себе';
+copy.applications.closeTicketButton = '🔒 Закрыть тикет';
+copy.applications.ticketClosedReply = '🔒 Тикет по заявке закрыт.';
+copy.applications.ticketOnlyInThread = 'Закрыть тикет можно только внутри треда заявки.';
+copy.applications.ticketThreadName = function ticketThreadName(nickname, applicationId) {
+  return `ticket-${nickname}-${applicationId}`.slice(0, 90);
+};
+copy.applications.ticketStarter = function ticketStarter(userId, threadId) {
+  return `Новая заявка от <@${userId}> • тикет: <#${threadId}>`;
+};
+copy.applications.ticketThreadHeader = function ticketThreadHeader(userId, applicationId) {
+  return `Тикет по заявке <@${userId}> • ID: \`${applicationId}\``;
+};
+copy.applications.ticketReason = function ticketReason(userId) {
+  return `Тикет по заявке ${userId}`;
+};
+
+copy.commands.roleTargetMute = 'Мут';
+copy.commands.purgeDescription = 'Удалить выбранное количество сообщений в канале';
+copy.commands.purgeUserDescription = 'Удалить сообщения конкретного участника';
+copy.commands.clearAllChannelDescription = 'Полностью очистить текстовый канал';
+copy.commands.muteDescription = 'Выдать мут участнику через mute-роль';
+copy.commands.unmuteDescription = 'Снять мут с участника';
+copy.commands.lockChannelDescription = 'Закрыть канал для @everyone';
+copy.commands.unlockChannelDescription = 'Открыть канал для @everyone';
+copy.commands.slowmodeDescription = 'Изменить slowmode канала';
+copy.commands.warnHistoryDescription = 'Показать историю выговоров участника';
+copy.commands.clearWarnsDescription = 'Очистить выговоры участника';
+copy.commands.countOptionName = 'количество';
+copy.commands.countOptionDescription = 'Сколько сообщений обработать';
+copy.commands.channelOptionName = 'канал';
+copy.commands.channelOptionDescription = 'Текстовый канал для команды';
+copy.commands.confirmOptionName = 'подтверждение';
+copy.commands.confirmOptionDescription = 'Напишите CLEAR, чтобы подтвердить полную очистку канала';
+copy.commands.secondsOptionName = 'секунды';
+copy.commands.secondsOptionDescription = 'Количество секунд для slowmode';
+
+copy.moderation = {
+  noAccess: 'У тебя нет доступа к этой модераторской команде.',
+  premiumOnly: 'Эта модераторская команда доступна только на Premium.',
+  muteRoleMissing: 'Сначала задай mute-роль через /setrole.',
+  invalidCount: 'Укажи количество от 1 до 500.',
+  invalidSeconds: 'Укажи значение от 0 до 21600 секунд.',
+  invalidConfirmation: 'Для полной очистки канала нужно написать `CLEAR`.',
+  notTextChannel: 'Эта команда работает только с текстовыми каналами сервера.',
+  purgeDone(count, channelId) {
+    return `Удалено сообщений: **${count}** в канале <#${channelId}>.`;
+  },
+  purgeUserDone(count, userId, channelId) {
+    return `Удалено сообщений участника <@${userId}>: **${count}** в канале <#${channelId}>.`;
+  },
+  clearChannelDone(oldChannelId, newChannelId) {
+    return `Канал <#${oldChannelId}> очищен. Новый канал: <#${newChannelId}>.`;
+  },
+  muteDone(userId, roleId) {
+    return `Участнику <@${userId}> выдан мут <@&${roleId}>.`;
+  },
+  unmuteDone(userId) {
+    return `С участника <@${userId}> снят мут.`;
+  },
+  slowmodeDone(channelId, seconds) {
+    return seconds > 0
+      ? `Slowmode для <#${channelId}> установлен на **${seconds}** сек.`
+      : `Slowmode для <#${channelId}> отключён.`;
+  },
+  lockDone(channelId) {
+    return `Канал <#${channelId}> закрыт для @everyone.`;
+  },
+  unlockDone(channelId) {
+    return `Канал <#${channelId}> снова открыт для @everyone.`;
+  },
+  warnHistoryTitle(userTag) {
+    return `История выговоров: ${userTag}`;
+  },
+  warnHistoryEmpty: 'У участника пока нет сохранённых выговоров.',
+  warnHistoryLine(index, entry) {
+    return `${index + 1}. ${entry.reason} • модератор <@${entry.moderatorId}> • ${entry.createdAt}`;
+  },
+  clearWarnsDone(userId, count) {
+    return `Для <@${userId}> очищено выговоров: **${count}**.`;
+  },
+  actionFailed(action) {
+    return `Не удалось выполнить действие: ${action}. Проверь права бота и иерархию ролей.`;
+  }
+};
+
 module.exports = copy;

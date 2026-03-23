@@ -23,7 +23,8 @@ async function registerCommands(guild) {
             { name: copy.commands.roleTargetDeputy, value: 'deputy' },
             { name: copy.commands.roleTargetElder, value: 'elder' },
             { name: copy.commands.roleTargetMember, value: 'member' },
-            { name: copy.commands.roleTargetNewbie, value: 'newbie' }
+            { name: copy.commands.roleTargetNewbie, value: 'newbie' },
+            { name: copy.commands.roleTargetMute, value: 'mute' }
           )
       )
       .addRoleOption(option =>
@@ -157,6 +158,111 @@ async function registerCommands(guild) {
       .setDescription(copy.commands.aiDescription)
       .addStringOption(option =>
         option.setName(copy.commands.queryOptionName).setDescription(copy.commands.queryDescription).setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('purge')
+      .setDescription(copy.commands.purgeDescription)
+      .addIntegerOption(option =>
+        option.setName(copy.commands.countOptionName).setDescription(copy.commands.countOptionDescription).setRequired(true)
+      )
+      .addChannelOption(option =>
+        option
+          .setName(copy.commands.channelOptionName)
+          .setDescription(copy.commands.channelOptionDescription)
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('purgeuser')
+      .setDescription(copy.commands.purgeUserDescription)
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
+      )
+      .addIntegerOption(option =>
+        option.setName(copy.commands.countOptionName).setDescription(copy.commands.countOptionDescription).setRequired(true)
+      )
+      .addChannelOption(option =>
+        option
+          .setName(copy.commands.channelOptionName)
+          .setDescription(copy.commands.channelOptionDescription)
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('clearallchannel')
+      .setDescription(copy.commands.clearAllChannelDescription)
+      .addChannelOption(option =>
+        option
+          .setName(copy.commands.channelOptionName)
+          .setDescription(copy.commands.channelOptionDescription)
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)
+      )
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.confirmOptionName)
+          .setDescription(copy.commands.confirmOptionDescription)
+          .setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('mute')
+      .setDescription(copy.commands.muteDescription)
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName(copy.commands.reasonOptionName).setDescription(copy.commands.reasonDescription).setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('unmute')
+      .setDescription(copy.commands.unmuteDescription)
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('lockchannel')
+      .setDescription(copy.commands.lockChannelDescription)
+      .addChannelOption(option =>
+        option
+          .setName(copy.commands.channelOptionName)
+          .setDescription(copy.commands.channelOptionDescription)
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('unlockchannel')
+      .setDescription(copy.commands.unlockChannelDescription)
+      .addChannelOption(option =>
+        option
+          .setName(copy.commands.channelOptionName)
+          .setDescription(copy.commands.channelOptionDescription)
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('slowmode')
+      .setDescription(copy.commands.slowmodeDescription)
+      .addIntegerOption(option =>
+        option.setName(copy.commands.secondsOptionName).setDescription(copy.commands.secondsOptionDescription).setRequired(true)
+      )
+      .addChannelOption(option =>
+        option
+          .setName(copy.commands.channelOptionName)
+          .setDescription(copy.commands.channelOptionDescription)
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('warnhistory')
+      .setDescription(copy.commands.warnHistoryDescription)
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('clearwarns')
+      .setDescription(copy.commands.clearWarnsDescription)
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
       )
   ].map(command => command.toJSON());
 
