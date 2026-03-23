@@ -519,8 +519,14 @@ copy.moderation = {
   purgeUserDone(count, userId, channelId) {
     return `Удалено сообщений участника <@${userId}>: **${count}** в канале <#${channelId}>.`;
   },
+  purgeUserScanDone(count, matched, userId, channelId) {
+    return `Удалено сообщений участника <@${userId}>: **${count}** из **${matched}** найденных в канале <#${channelId}>.`;
+  },
   clearChannelDone(oldChannelId, newChannelId) {
     return `Канал <#${oldChannelId}> очищен. Новый канал: <#${newChannelId}>.`;
+  },
+  clearChannelPartial(channelId, deleted, skippedSystem) {
+    return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Служебных системных сообщений осталось: **${skippedSystem}**.`;
   },
   muteDone(userId, roleId) {
     return `Участнику <@${userId}> выдан мут <@&${roleId}>.`;
@@ -563,5 +569,47 @@ copy.security.banListLine = function banListLine(index, ban) {
 copy.security.blacklistLine = function blacklistLine(index, entry) {
   return `${index + 1}. <@${entry.userId}> • \`${entry.userId}\` • ${entry.reason}`;
 };
+
+copy.commands.channelTargetApplications = 'Подача заявки';
+
+copy.moderation.purgeUserDetailed = function purgeUserDetailed(count, matched, blocked, system, userId, channelId) {
+  const details = [
+    `Удалено сообщений участника <@${userId}>: **${count}**`,
+    `Найдено совпадений: **${matched}**`,
+    `Канал: <#${channelId}>`
+  ];
+
+  if (blocked > 0) {
+    details.push(`Неудаляемых сообщений: **${blocked}**`);
+  }
+
+  if (system > 0) {
+    details.push(`Системных записей Discord: **${system}**`);
+  }
+
+  return details.join(' • ');
+};
+
+copy.moderation.clearChannelPartial = function clearChannelPartial(channelId, deleted, skipped) {
+  return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Осталось неудаляемых или системных сообщений: **${skipped}**.`;
+};
+
+copy.commands.nicknameOptionName = 'новый_ник';
+copy.commands.nicknameOptionDescription = 'Новый ник для AI-действия';
+copy.commands.kickRolessDescription = 'Кикнуть участников без ролей вручную';
+
+copy.moderation.kickRolessDone = function kickRolessDone(kicked, failed) {
+  return `Чистка безрольных завершена: кикнуто **${kicked}**, ошибок **${failed}**.`;
+};
+
+copy.ai.commandsOverviewTitle = 'Что тебе доступно сейчас';
+copy.ai.commandsOverviewEmpty = 'Не нашел доступных команд для твоих прав.';
+copy.ai.nicknameMissingTarget = 'Для смены ника укажи пользователя и новый ник.';
+copy.ai.nicknameNoAccess = 'Для смены ника через AI нужны права администратора или Manage Nicknames.';
+copy.ai.nicknameTooLong = 'Новый ник должен быть от 1 до 32 символов.';
+copy.ai.nicknameDone = function nicknameDone(userId, nickname) {
+  return `AI изменил ник для <@${userId}> на **${nickname}**.`;
+};
+copy.ai.nicknameFailed = 'AI не смог изменить ник. Проверь права бота и иерархию ролей.';
 
 module.exports = copy;

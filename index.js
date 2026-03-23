@@ -67,8 +67,19 @@ function ephemeral(payload = {}) {
 }
 
 function scheduleDeleteReply(interaction, delayMs = 5000) {
-  setTimeout(() => {
-    interaction.deleteReply().catch(() => {});
+  setTimeout(async () => {
+    try {
+      await interaction.deleteReply();
+      return;
+    } catch (_) {
+      // Fall through to webhook cleanup.
+    }
+
+    try {
+      await interaction.webhook?.deleteMessage('@original');
+    } catch (_) {
+      // Ignore cleanup failures for temporary moderation replies.
+    }
   }, delayMs);
 }
 
@@ -763,6 +774,7 @@ function getHelpCatalog(guildId, userId) {
     { name: 'testaccept', description: copy.commands.testAcceptDescription },
     { name: 'purgeuser', description: copy.commands.purgeUserDescription },
     { name: 'clearallchannel', description: copy.commands.clearAllChannelDescription },
+    { name: 'kickroless', description: copy.commands.kickRolessDescription },
     { name: 'clearwarns', description: copy.commands.clearWarnsDescription }
   ];
 
@@ -775,6 +787,92 @@ function getHelpCatalog(guildId, userId) {
     availableCommands: isPremiumGuild(guildId) ? [...freeCommands, ...premiumCommands] : freeCommands,
     premiumCommands: isPremiumGuild(guildId) ? [] : premiumCommands
   };
+}
+
+function canUseCommandInContext(commandName, interaction) {
+  switch (commandName) {
+    case 'applypanel':
+      return canApplications(interaction.member);
+    case 'setup':
+    case 'adminpanel':
+    case 'setrole':
+    case 'setchannel':
+    case 'setfamilytitle':
+    case 'setart':
+    case 'debugconfig':
+    case 'aiadvisor':
+    case 'testaccept':
+      return canDebugConfig(interaction);
+    case 'warn':
+    case 'commend':
+      return canDiscipline(interaction.member);
+    case 'warnhistory':
+    case 'clearwarns':
+      return canDiscipline(interaction.member) || canModerate(interaction.member);
+    case 'purge':
+    case 'purgeuser':
+    case 'clearallchannel':
+    case 'mute':
+    case 'unmute':
+    case 'lockchannel':
+    case 'unlockchannel':
+    case 'slowmode':
+    case 'kickroless':
+      return canModerate(interaction.member);
+    case 'blacklistadd':
+    case 'blacklistremove':
+    case 'blacklistlist':
+    case 'banlist':
+    case 'unbanid':
+      return canUseSecurity(interaction.member);
+    case 'subscription':
+      return isOwner(interaction.user.id);
+    case 'activityreport':
+      return canDebugConfig(interaction);
+    default:
+      return true;
+  }
+}
+
+function isAiCommandOverviewQuery(query) {
+  const value = String(query || '').toLowerCase();
+  return (
+    value.includes('что я умею') ||
+    value.includes('что мне доступно') ||
+    value.includes('какие команды') ||
+    value.includes('что я могу') ||
+    value.includes('мои команды')
+  );
+}
+
+function isAiNicknameRequest(query, targetUser, newNickname) {
+  if (!targetUser || !newNickname) return false;
+  const value = String(query || '').toLowerCase();
+  return (
+    value.includes('смени ник') ||
+    value.includes('смени ник') ||
+    value.includes('измени ник') ||
+    value.includes('переименуй') ||
+    value.includes('rename nick')
+  );
+}
+
+function buildAiCommandsOverview(interaction) {
+  const catalog = getHelpCatalog(interaction.guild.id, interaction.user.id);
+  const available = catalog.availableCommands.filter(command => canUseCommandInContext(command.name, interaction));
+
+  if (!available.length) {
+    return copy.ai.commandsOverviewEmpty;
+  }
+
+  const planLabel = isPremiumGuild(interaction.guild.id) ? 'Premium' : 'Free';
+  return [
+    `${copy.ai.commandsOverviewTitle}:`,
+    `План: **${planLabel}**`,
+    `Пользователь: <@${interaction.user.id}>`,
+    '',
+    ...available.map(command => `/${command.name} — ${command.description}`)
+  ].join('\n').slice(0, 1900);
 }
 
 function canApplications(member) {
@@ -809,6 +907,15 @@ function canModerate(member) {
     hasPermission(member, PermissionFlagsBits.ManageChannels) ||
     hasPermission(member, PermissionFlagsBits.ManageRoles) ||
     hasPermission(member, PermissionFlagsBits.ModerateMembers)
+  );
+}
+
+function canManageNicknames(member) {
+  if (!member) return false;
+  return (
+    hasPermission(member, PermissionFlagsBits.Administrator) ||
+    hasPermission(member, PermissionFlagsBits.ManageNicknames) ||
+    hasPermission(member, PermissionFlagsBits.ManageGuild)
   );
 }
 
@@ -952,6 +1059,8 @@ async function fetchRecentDeletableMessages(channel, count) {
 
 async function fetchAllDeletableMessages(channel, { includePinned = true } = {}) {
   const collected = [];
+  let skippedSystem = 0;
+  let skippedBlocked = 0;
   let before;
 
   while (true) {
@@ -960,14 +1069,21 @@ async function fetchAllDeletableMessages(channel, { includePinned = true } = {})
 
     for (const message of batch.values()) {
       if (!includePinned && message.pinned) continue;
-      if (message.deletable === false) continue;
+      if (message.deletable === false) {
+        if (message.system || message.type !== 0) {
+          skippedSystem += 1;
+        } else {
+          skippedBlocked += 1;
+        }
+        continue;
+      }
       collected.push(message);
     }
 
     before = batch.last()?.id;
   }
 
-  return collected;
+  return { messages: collected, skippedSystem, skippedBlocked };
 }
 
 function messageBelongsToUser(message, userId) {
@@ -983,11 +1099,18 @@ function messageBelongsToUser(message, userId) {
     return true;
   }
 
+  if (message.mentions?.users?.has?.(userId) && message.type !== 0) {
+    return true;
+  }
+
   return false;
 }
 
 async function fetchMessagesForUser(channel, userId, count) {
   const collected = [];
+  let matched = 0;
+  let blocked = 0;
+  let system = 0;
   let before;
 
   while (collected.length < count) {
@@ -995,20 +1118,43 @@ async function fetchMessagesForUser(channel, userId, count) {
     if (!batch || !batch.size) break;
 
     for (const message of batch.values()) {
+      if (!messageBelongsToUser(message, userId)) continue;
+
+      matched += 1;
+
       if (message.pinned) continue;
-      if (message.deletable === false) continue;
-      if (messageBelongsToUser(message, userId)) {
-        collected.push(message);
-        if (collected.length >= count) {
-          break;
+
+      if (message.deletable === false) {
+        if (message.system || message.type !== 0) {
+          system += 1;
+        } else {
+          blocked += 1;
         }
+        continue;
+      }
+
+      collected.push(message);
+      if (collected.length >= count) {
+        break;
       }
     }
 
     before = batch.last()?.id;
   }
 
-  return collected;
+  return { messages: collected, matched, blocked, system };
+}
+
+async function clearChannelByMessages(channel) {
+  const { messages, skippedSystem, skippedBlocked } = await fetchAllDeletableMessages(channel);
+  const deleted = await deleteMessagesFast(messages);
+
+  return {
+    deleted,
+    requested: messages.length,
+    skippedSystem,
+    skippedBlocked
+  };
 }
 
 function remapConfiguredChannelIds(guildId, oldChannelId, newChannelId) {
@@ -1490,7 +1636,7 @@ async function runRolelessCleanup(guildId, reason = 'interval') {
 
   const { channels } = resolveGuildSettings(guildId);
   const logChannel = await fetchTextChannel(guild, channels.logs);
-  if (!logChannel) return;
+  if (!logChannel) return { skipped: false, kicked, failed };
 
   await logChannel.send({
     embeds: [
@@ -1503,9 +1649,12 @@ async function runRolelessCleanup(guildId, reason = 'interval') {
       })
     ]
   }).catch(() => {});
+
+  return { skipped: false, kicked, failed };
 }
 
-async function runRolelessCleanupDetailed(guildId, reason = 'interval') {
+async function runRolelessCleanupDetailed(guildId, reason = 'interval', options = {}) {
+  const { force = false, notify = true } = options;
   if (!isPremiumGuild(guildId)) return;
 
   const guild = client.guilds.cache.get(guildId);
@@ -1513,8 +1662,8 @@ async function runRolelessCleanupDetailed(guildId, reason = 'interval') {
 
   const record = database.getGuild(guildId);
   const lastRunAt = record.maintenance?.lastRolelessCleanupAt ? Date.parse(record.maintenance.lastRolelessCleanupAt) : 0;
-  if (lastRunAt && Date.now() - lastRunAt < ROLELESS_CLEANUP_INTERVAL_MS) {
-    return;
+  if (!force && lastRunAt && Date.now() - lastRunAt < ROLELESS_CLEANUP_INTERVAL_MS) {
+    return { skipped: true, kicked: [], failed: [] };
   }
 
   await guild.members.fetch().catch(() => {});
@@ -2053,9 +2202,11 @@ client.on('interactionCreate', async interaction => {
         }
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const messages = await fetchMessagesForUser(channel, user.id, count);
+        const { messages, matched, blocked, system } = await fetchMessagesForUser(channel, user.id, count);
         const deleted = await deleteMessagesFast(messages);
-        return editReplyAndAutoDelete(interaction, { content: copy.moderation.purgeUserDone(deleted, user.id, channel.id) });
+        return editReplyAndAutoDelete(interaction, {
+          content: copy.moderation.purgeUserDetailed(deleted, matched, blocked, system, user.id, channel.id)
+        });
       }
 
       if (interaction.commandName === 'clearallchannel') {
@@ -2083,14 +2234,59 @@ client.on('interactionCreate', async interaction => {
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const cloned = await channel.clone({ reason: `Full clear by ${interaction.user.id}` }).catch(() => null);
-        if (!cloned) {
-          const messages = await fetchAllDeletableMessages(channel);
-          const deleted = await deleteMessagesFast(messages);
+        {
+          const clearClone = await channel.clone({ reason: `Full clear by ${interaction.user.id}` }).catch(() => null);
+          if (clearClone) {
+            await clearClone.setPosition(channel.rawPosition).catch(() => {});
+
+            const wasPanelChannel = resolveGuildSettings(guildId).channels.panel === channel.id;
+            const removedOld = await channel.delete(`Full clear by ${interaction.user.id}`).then(() => true).catch(() => false);
+
+            if (removedOld) {
+              remapConfiguredChannelIds(guildId, channel.id, clearClone.id);
+
+              if (wasPanelChannel) {
+                storage.setGuildPanelMessageId(guildId, '');
+                await doPanelUpdate(guildId, true);
+              }
+
+              return editReplyAndAutoDelete(interaction, {
+                content: copy.moderation.clearChannelDone(channel.id, clearClone.id)
+              });
+            }
+
+            await clearClone.delete(`Rollback failed clear by ${interaction.user.id}`).catch(() => {});
+          }
+
+          const { deleted, requested, skippedSystem, skippedBlocked } = await clearChannelByMessages(channel);
+          const skippedTotal = skippedSystem + skippedBlocked + Math.max(0, requested - deleted);
+
+          if (deleted > 0 && skippedTotal > 0) {
+            return editReplyAndAutoDelete(interaction, {
+              content: copy.moderation.clearChannelPartial(channel.id, deleted, skippedTotal)
+            });
+          }
+
           if (deleted > 0) {
             return editReplyAndAutoDelete(interaction, {
-              content: `Канал <#${channel.id}> очищен по сообщениям. Удалено: **${deleted}**.`
+              content: `РљР°РЅР°Р» <#${channel.id}> РѕС‡РёС‰РµРЅ РїРѕ СЃРѕРѕР±С‰РµРЅРёСЏРј. РЈРґР°Р»РµРЅРѕ: **${deleted}**.`
             });
+          }
+
+          return editReplyAndAutoDelete(interaction, {
+            content: copy.moderation.actionFailed('clearallchannel')
+          });
+        }
+
+        const cloned = await channel.clone({ reason: `Full clear by ${interaction.user.id}` }).catch(() => null);
+        if (!cloned) {
+          const { messages, skippedSystem } = await fetchAllDeletableMessages(channel);
+          const deleted = await deleteMessagesFast(messages);
+          if (deleted > 0) {
+            const content = skippedSystem > 0
+              ? copy.moderation.clearChannelPartial(channel.id, deleted, skippedSystem)
+              : `Канал <#${channel.id}> очищен по сообщениям. Удалено: **${deleted}**.`;
+            return editReplyAndAutoDelete(interaction, { content });
           }
 
           return editReplyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('clearallchannel') });
@@ -2109,6 +2305,27 @@ client.on('interactionCreate', async interaction => {
         }
 
         return editReplyAndAutoDelete(interaction, { content: copy.moderation.clearChannelDone(channel.id, cloned.id) });
+      }
+
+      if (interaction.commandName === 'kickroless') {
+        if (!isPremiumGuild(guildId)) {
+          return replyAndAutoDelete(interaction, { content: copy.moderation.premiumOnly });
+        }
+
+        if (!canUseSecurity(interaction.member)) {
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const result = await runRolelessCleanupDetailed(guildId, `manual:${interaction.user.id}`, { force: true });
+
+        if (!result) {
+          return editReplyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('kickroless') });
+        }
+
+        return editReplyAndAutoDelete(interaction, {
+          content: copy.moderation.kickRolessDone(result.kicked.length, result.failed.length)
+        });
       }
 
       if (interaction.commandName === 'mute') {
@@ -2580,7 +2797,46 @@ client.on('interactionCreate', async interaction => {
         }
 
         const query = interaction.options.getString(copy.commands.queryOptionName, true);
+        const targetUser = interaction.options.getUser(copy.commands.userOptionName);
+        const desiredNickname = (interaction.options.getString(copy.commands.nicknameOptionName) || '').trim();
+        const queryLower = query.toLowerCase();
+        const wantsNicknameChange = queryLower.includes('смени ник')
+          || queryLower.includes('измени ник')
+          || queryLower.includes('переименуй')
+          || queryLower.includes('rename nick');
+
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        if (isAiCommandOverviewQuery(query)) {
+          return interaction.editReply({ content: buildAiCommandsOverview(interaction) });
+        }
+
+        if (wantsNicknameChange) {
+          if (!targetUser || !desiredNickname) {
+            return interaction.editReply({ content: copy.ai.nicknameMissingTarget });
+          }
+
+          if (!canManageNicknames(interaction.member)) {
+            return interaction.editReply({ content: copy.ai.nicknameNoAccess });
+          }
+
+          if (desiredNickname.length < 1 || desiredNickname.length > 32) {
+            return interaction.editReply({ content: copy.ai.nicknameTooLong });
+          }
+
+          const targetMember = await fetchMemberFast(interaction.guild, targetUser.id);
+          if (!targetMember) {
+            return interaction.editReply({ content: copy.profile.notFound });
+          }
+
+          const ok = await targetMember.setNickname(desiredNickname, `AI request by ${interaction.user.id}`)
+            .then(() => true)
+            .catch(() => false);
+
+          return interaction.editReply({
+            content: ok ? copy.ai.nicknameDone(targetUser.id, desiredNickname) : copy.ai.nicknameFailed
+          });
+        }
 
         try {
           const answer = await aiService.aiText(copy.ai.assistantPrompt, query);

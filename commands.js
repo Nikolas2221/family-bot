@@ -158,6 +158,12 @@ async function registerCommands(guild) {
       .setDescription(copy.commands.aiDescription)
       .addStringOption(option =>
         option.setName(copy.commands.queryOptionName).setDescription(copy.commands.queryDescription).setRequired(true)
+      )
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(false)
+      )
+      .addStringOption(option =>
+        option.setName(copy.commands.nicknameOptionName).setDescription(copy.commands.nicknameOptionDescription).setRequired(false)
       ),
     new SlashCommandBuilder()
       .setName('purge')
@@ -204,6 +210,9 @@ async function registerCommands(guild) {
           .addChannelTypes(ChannelType.GuildText)
           .setRequired(false)
       ),
+    new SlashCommandBuilder()
+      .setName('kickroless')
+      .setDescription(copy.commands.kickRolessDescription),
     new SlashCommandBuilder()
       .setName('mute')
       .setDescription(copy.commands.muteDescription)
