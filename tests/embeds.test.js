@@ -232,9 +232,7 @@ async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
   assert.ok(updatedField);
   assert.ok(fixedField);
   assert.ok(!fields.find(field => field.name === 'Добавлено'));
-  assert.match(updatedField.value, /обновлено:/);
   assert.match(updatedField.value, /окно обновлений/);
-  assert.match(fixedField.value, /исправлено:/);
   assert.match(fixedField.value, /синхронизация команд/);
 }
 

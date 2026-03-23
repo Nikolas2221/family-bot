@@ -1098,13 +1098,7 @@ function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMes
 
 function formatUpdateSectionLinesNatural(lines = [], mode = 'updated', fallback = '—') {
   if (!Array.isArray(lines) || !lines.length) return fallback;
-  const prefixMap = {
-    added: 'добавлено',
-    updated: 'обновлено',
-    fixed: 'исправлено'
-  };
-  const prefix = prefixMap[mode] || 'обновлено';
-  return lines.map(line => `• ${prefix}: ${line}`).join('\n');
+  return lines.map(line => `• ${line}`).join('\n');
 }
 
 function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMessage = '', changeLines = [] }) {
