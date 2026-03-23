@@ -950,6 +950,42 @@ async function fetchRecentDeletableMessages(channel, count) {
   return collected;
 }
 
+async function fetchAllDeletableMessages(channel, { includePinned = true } = {}) {
+  const collected = [];
+  let before;
+
+  while (true) {
+    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!batch || !batch.size) break;
+
+    for (const message of batch.values()) {
+      if (!includePinned && message.pinned) continue;
+      if (message.deletable === false) continue;
+      collected.push(message);
+    }
+
+    before = batch.last()?.id;
+  }
+
+  return collected;
+}
+
+function messageBelongsToUser(message, userId) {
+  if (message.author?.id === userId) {
+    return true;
+  }
+
+  if (message.interactionMetadata?.user?.id === userId) {
+    return true;
+  }
+
+  if (message.interaction?.user?.id === userId) {
+    return true;
+  }
+
+  return false;
+}
+
 async function fetchMessagesForUser(channel, userId, count) {
   const collected = [];
   let before;
@@ -961,7 +997,7 @@ async function fetchMessagesForUser(channel, userId, count) {
     for (const message of batch.values()) {
       if (message.pinned) continue;
       if (message.deletable === false) continue;
-      if (message.author?.id === userId) {
+      if (messageBelongsToUser(message, userId)) {
         collected.push(message);
         if (collected.length >= count) {
           break;
@@ -1967,21 +2003,21 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'purge') {
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const count = interaction.options.getInteger(copy.commands.countOptionName, true);
         if (count < 1 || count > 500) {
-          return interaction.reply(ephemeral({ content: copy.moderation.invalidCount }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.invalidCount });
         }
 
         const channel = resolveTargetTextChannel(interaction);
         if (!channel) {
-          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.notTextChannel });
         }
 
         if (!canManageTargetChannel(interaction.member, channel)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -1989,67 +2025,75 @@ client.on('interactionCreate', async interaction => {
         const messages = await fetchRecentDeletableMessages(channel, count);
         const deleted = await deleteMessagesFast(messages);
 
-        return interaction.editReply({ content: copy.moderation.purgeDone(deleted, channel.id) });
+        return editReplyAndAutoDelete(interaction, { content: copy.moderation.purgeDone(deleted, channel.id) });
       }
 
       if (interaction.commandName === 'purgeuser') {
         if (!isPremiumGuild(guildId)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.premiumOnly }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.premiumOnly });
         }
 
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
         const count = interaction.options.getInteger(copy.commands.countOptionName, true);
         if (count < 1 || count > 500) {
-          return interaction.reply(ephemeral({ content: copy.moderation.invalidCount }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.invalidCount });
         }
 
         const channel = resolveTargetTextChannel(interaction);
         if (!channel) {
-          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.notTextChannel });
         }
 
         if (!canManageTargetChannel(interaction.member, channel)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const messages = await fetchMessagesForUser(channel, user.id, count);
         const deleted = await deleteMessagesFast(messages);
-        return interaction.editReply({ content: copy.moderation.purgeUserDone(deleted, user.id, channel.id) });
+        return editReplyAndAutoDelete(interaction, { content: copy.moderation.purgeUserDone(deleted, user.id, channel.id) });
       }
 
       if (interaction.commandName === 'clearallchannel') {
         if (!isPremiumGuild(guildId)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.premiumOnly }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.premiumOnly });
         }
 
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const confirmation = interaction.options.getString(copy.commands.confirmOptionName, true).trim().toUpperCase();
         if (confirmation !== 'CLEAR') {
-          return interaction.reply(ephemeral({ content: copy.moderation.invalidConfirmation }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.invalidConfirmation });
         }
 
         const channel = resolveTargetTextChannel(interaction);
         if (!channel) {
-          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.notTextChannel });
         }
 
         if (!canManageTargetChannel(interaction.member, channel)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const cloned = await channel.clone({ reason: `Full clear by ${interaction.user.id}` }).catch(() => null);
         if (!cloned) {
-          return interaction.editReply({ content: copy.moderation.actionFailed('clearallchannel') });
+          const messages = await fetchAllDeletableMessages(channel);
+          const deleted = await deleteMessagesFast(messages);
+          if (deleted > 0) {
+            return editReplyAndAutoDelete(interaction, {
+              content: `Канал <#${channel.id}> очищен по сообщениям. Удалено: **${deleted}**.`
+            });
+          }
+
+          return editReplyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('clearallchannel') });
         }
 
         await cloned.setPosition(channel.rawPosition).catch(() => {});
@@ -2064,76 +2108,76 @@ client.on('interactionCreate', async interaction => {
           await doPanelUpdate(guildId, true);
         }
 
-        return interaction.editReply({ content: copy.moderation.clearChannelDone(channel.id, cloned.id) });
+        return editReplyAndAutoDelete(interaction, { content: copy.moderation.clearChannelDone(channel.id, cloned.id) });
       }
 
       if (interaction.commandName === 'mute') {
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const settings = resolveGuildSettings(guildId);
         if (!settings.muteRoleId) {
-          return interaction.reply(ephemeral({ content: copy.moderation.muteRoleMissing }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.muteRoleMissing });
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
         const member = await fetchMemberFast(interaction.guild, user.id);
         if (!member) {
-          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+          return replyAndAutoDelete(interaction, { content: copy.profile.notFound });
         }
 
         const muteRole = interaction.guild.roles.cache.get(settings.muteRoleId)
           || await interaction.guild.roles.fetch(settings.muteRoleId).catch(() => null);
         if (!muteRole) {
-          return interaction.reply(ephemeral({ content: copy.moderation.muteRoleMissing }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.muteRoleMissing });
         }
 
         const reason = interaction.options.getString(copy.commands.reasonOptionName) || 'Mute via bot';
         const ok = await member.roles.add(muteRole, reason).then(() => true).catch(() => false);
         if (!ok) {
-          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('mute') }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('mute') });
         }
 
-        return interaction.reply(ephemeral({ content: copy.moderation.muteDone(user.id, muteRole.id) }));
+        return replyAndAutoDelete(interaction, { content: copy.moderation.muteDone(user.id, muteRole.id) });
       }
 
       if (interaction.commandName === 'unmute') {
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const settings = resolveGuildSettings(guildId);
         if (!settings.muteRoleId) {
-          return interaction.reply(ephemeral({ content: copy.moderation.muteRoleMissing }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.muteRoleMissing });
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
         const member = await fetchMemberFast(interaction.guild, user.id);
         if (!member) {
-          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+          return replyAndAutoDelete(interaction, { content: copy.profile.notFound });
         }
 
         const ok = await member.roles.remove(settings.muteRoleId, 'Unmute via bot').then(() => true).catch(() => false);
         if (!ok) {
-          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('unmute') }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('unmute') });
         }
 
-        return interaction.reply(ephemeral({ content: copy.moderation.unmuteDone(user.id) }));
+        return replyAndAutoDelete(interaction, { content: copy.moderation.unmuteDone(user.id) });
       }
 
       if (interaction.commandName === 'lockchannel') {
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const channel = resolveTargetTextChannel(interaction);
         if (!channel) {
-          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.notTextChannel });
         }
 
         if (!canManageTargetChannel(interaction.member, channel)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const ok = await channel.permissionOverwrites
@@ -2141,24 +2185,24 @@ client.on('interactionCreate', async interaction => {
           .then(() => true)
           .catch(() => false);
         if (!ok) {
-          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('lockchannel') }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('lockchannel') });
         }
 
-        return interaction.reply(ephemeral({ content: copy.moderation.lockDone(channel.id) }));
+        return replyAndAutoDelete(interaction, { content: copy.moderation.lockDone(channel.id) });
       }
 
       if (interaction.commandName === 'unlockchannel') {
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const channel = resolveTargetTextChannel(interaction);
         if (!channel) {
-          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.notTextChannel });
         }
 
         if (!canManageTargetChannel(interaction.member, channel)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const ok = await channel.permissionOverwrites
@@ -2166,42 +2210,42 @@ client.on('interactionCreate', async interaction => {
           .then(() => true)
           .catch(() => false);
         if (!ok) {
-          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('unlockchannel') }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('unlockchannel') });
         }
 
-        return interaction.reply(ephemeral({ content: copy.moderation.unlockDone(channel.id) }));
+        return replyAndAutoDelete(interaction, { content: copy.moderation.unlockDone(channel.id) });
       }
 
       if (interaction.commandName === 'slowmode') {
         if (!canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const seconds = interaction.options.getInteger(copy.commands.secondsOptionName, true);
         if (seconds < 0 || seconds > 21600) {
-          return interaction.reply(ephemeral({ content: copy.moderation.invalidSeconds }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.invalidSeconds });
         }
 
         const channel = resolveTargetTextChannel(interaction);
         if (!channel) {
-          return interaction.reply(ephemeral({ content: copy.moderation.notTextChannel }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.notTextChannel });
         }
 
         if (!canManageTargetChannel(interaction.member, channel)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const ok = await channel.setRateLimitPerUser(seconds, `Slowmode by ${interaction.user.id}`).then(() => true).catch(() => false);
         if (!ok) {
-          return interaction.reply(ephemeral({ content: copy.moderation.actionFailed('slowmode') }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.actionFailed('slowmode') });
         }
 
-        return interaction.reply(ephemeral({ content: copy.moderation.slowmodeDone(channel.id, seconds) }));
+        return replyAndAutoDelete(interaction, { content: copy.moderation.slowmodeDone(channel.id, seconds) });
       }
 
       if (interaction.commandName === 'warnhistory') {
         if (!canDiscipline(interaction.member) && !canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
@@ -2222,22 +2266,22 @@ client.on('interactionCreate', async interaction => {
           )
           .setFooter({ text: 'BRHD • Phoenix • Moderation' });
 
-        return interaction.reply(ephemeral({ embeds: [embed] }));
+        return replyAndAutoDelete(interaction, { embeds: [embed] });
       }
 
       if (interaction.commandName === 'clearwarns') {
         if (!isPremiumGuild(guildId)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.premiumOnly }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.premiumOnly });
         }
 
         if (!canDiscipline(interaction.member) && !canModerate(interaction.member)) {
-          return interaction.reply(ephemeral({ content: copy.moderation.noAccess }));
+          return replyAndAutoDelete(interaction, { content: copy.moderation.noAccess });
         }
 
         const user = interaction.options.getUser(copy.commands.userOptionName, true);
         const cleared = guildStorage.clearWarns(user.id);
         await doPanelUpdate(guildId, false);
-        return interaction.reply(ephemeral({ content: copy.moderation.clearWarnsDone(user.id, cleared) }));
+        return replyAndAutoDelete(interaction, { content: copy.moderation.clearWarnsDone(user.id, cleared) });
       }
 
       if (interaction.commandName === 'leaderboard') {
