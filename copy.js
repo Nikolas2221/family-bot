@@ -612,4 +612,10 @@ copy.ai.nicknameDone = function nicknameDone(userId, nickname) {
 };
 copy.ai.nicknameFailed = 'AI не смог изменить ник. Проверь права бота и иерархию ролей.';
 
+copy.help.regularSection = 'Обычные команды';
+copy.help.adminSection = 'Команды администрации';
+copy.help.premiumRegularSection = 'Обычные команды в Premium';
+copy.help.premiumAdminSection = 'Админ-команды в Premium';
+copy.help.none = 'Нет доступных команд для этого раздела.';
+
 module.exports = copy;

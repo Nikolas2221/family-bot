@@ -872,6 +872,34 @@ function buildRejectLogEmbed({ user, moderatorUser, reason = 'Отказ' }) {
   );
 }
 
+function buildHelpEmbed({ plan, regularCommands = [], adminCommands = [], premiumRegularCommands = [], premiumAdminCommands = [] }) {
+  return card({
+    title: copy.help.title(plan),
+    color: plan === 'premium' ? THEME.gold : THEME.brand,
+    description: plan === 'premium'
+      ? 'Открыт полный набор команд текущего тарифа.'
+      : 'Показываю команды отдельно для обычных участников и администрации.',
+    footer: 'BRHD • Phoenix • Commands'
+  }).addFields(
+    section(
+      copy.help.regularSection,
+      regularCommands.length ? regularCommands.map(command => copy.help.line(command.name, command.description)).join('\n') : copy.help.none
+    ),
+    section(
+      copy.help.adminSection,
+      adminCommands.length ? adminCommands.map(command => copy.help.line(command.name, command.description)).join('\n') : copy.help.none
+    ),
+    section(
+      copy.help.premiumRegularSection,
+      premiumRegularCommands.length ? premiumRegularCommands.map(command => copy.help.line(command.name, command.description)).join('\n') : copy.debugConfig.none
+    ),
+    section(
+      copy.help.premiumAdminSection,
+      premiumAdminCommands.length ? premiumAdminCommands.map(command => copy.help.line(command.name, command.description)).join('\n') : copy.debugConfig.none
+    )
+  );
+}
+
 module.exports = {
   buildAcceptLogEmbed,
   buildApplicationButtons,

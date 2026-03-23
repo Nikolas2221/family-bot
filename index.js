@@ -734,14 +734,19 @@ function getRoleLimit(guildId) {
   return isPremiumGuild(guildId) ? Number.MAX_SAFE_INTEGER : 6;
 }
 
-function getHelpCatalog(guildId, userId) {
-  const freeCommands = [
+function getHelpCatalog(interaction) {
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const regularFree = [
     { name: 'family', description: copy.commands.familyDescription },
     { name: 'apply', description: copy.commands.applyDescription },
-    { name: 'applypanel', description: copy.commands.applyPanelDescription },
     { name: 'applications', description: copy.commands.applicationsDescription },
     { name: 'profile', description: copy.commands.profileDescription },
-    { name: 'help', description: copy.commands.helpDescription },
+    { name: 'help', description: copy.commands.helpDescription }
+  ];
+
+  const adminFree = [
+    { name: 'applypanel', description: copy.commands.applyPanelDescription },
     { name: 'setrole', description: copy.commands.setRoleDescription },
     { name: 'setchannel', description: copy.commands.setChannelDescription },
     { name: 'setfamilytitle', description: copy.commands.setFamilyTitleDescription },
@@ -760,12 +765,15 @@ function getHelpCatalog(guildId, userId) {
     { name: 'debugconfig', description: copy.commands.debugConfigDescription }
   ];
 
-  const premiumCommands = [
+  const regularPremium = [
     { name: 'leaderboard', description: copy.commands.leaderboardDescription },
     { name: 'voiceactivity', description: copy.commands.voiceActivityDescription },
+    { name: 'ai', description: copy.commands.aiDescription }
+  ];
+
+  const adminPremium = [
     { name: 'activityreport', description: copy.commands.activityReportDescription },
     { name: 'aiadvisor', description: copy.commands.aiAdvisorDescription },
-    { name: 'ai', description: copy.commands.aiDescription },
     { name: 'blacklistadd', description: copy.commands.blacklistAddDescription },
     { name: 'blacklistremove', description: copy.commands.blacklistRemoveDescription },
     { name: 'blacklistlist', description: copy.commands.blacklistListDescription },
@@ -779,13 +787,20 @@ function getHelpCatalog(guildId, userId) {
   ];
 
   if (isOwner(userId)) {
-    freeCommands.push({ name: 'subscription', description: copy.commands.subscriptionDescription });
+    adminFree.push({ name: 'subscription', description: copy.commands.subscriptionDescription });
   }
+
+  const premium = isPremiumGuild(guildId);
+  const availableRegular = premium ? [...regularFree, ...regularPremium] : regularFree;
+  const availableAdminBase = premium ? [...adminFree, ...adminPremium] : adminFree;
+  const availableAdmin = availableAdminBase.filter(command => canUseCommandInContext(command.name, interaction));
 
   return {
     plan: getGuildPlan(guildId),
-    availableCommands: isPremiumGuild(guildId) ? [...freeCommands, ...premiumCommands] : freeCommands,
-    premiumCommands: isPremiumGuild(guildId) ? [] : premiumCommands
+    regularCommands: availableRegular,
+    adminCommands: availableAdmin,
+    premiumRegularCommands: premium ? [] : regularPremium,
+    premiumAdminCommands: premium ? [] : adminPremium
   };
 }
 
@@ -858,8 +873,8 @@ function isAiNicknameRequest(query, targetUser, newNickname) {
 }
 
 function buildAiCommandsOverview(interaction) {
-  const catalog = getHelpCatalog(interaction.guild.id, interaction.user.id);
-  const available = catalog.availableCommands.filter(command => canUseCommandInContext(command.name, interaction));
+  const catalog = getHelpCatalog(interaction);
+  const available = [...catalog.regularCommands, ...catalog.adminCommands];
 
   if (!available.length) {
     return copy.ai.commandsOverviewEmpty;
@@ -2064,11 +2079,11 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'help') {
-        const catalog = getHelpCatalog(interaction.guild.id, interaction.user.id);
-        return interaction.reply(ephemeral({
-          embeds: [embeds.buildHelpEmbed(catalog)]
-        }));
-      }
+          const catalog = getHelpCatalog(interaction);
+          return interaction.reply(ephemeral({
+            embeds: [embeds.buildHelpEmbed(catalog)]
+          }));
+        }
 
       if (interaction.commandName === 'setrole') {
         if (!canDebugConfig(interaction)) {
