@@ -1297,10 +1297,12 @@ function humanizeUpdatePart(part) {
     .trim();
 
   const mapped = [
+    [/embed updates?/i, 'окно обновлений'],
+    [/embed(?:s| message| messages| card| cards| panel| panels)?/i, 'embed-карточки'],
     [/welcome messages?/i, 'welcome-сообщения'],
-    [/welcome/i, 'welcome-сообщения'],
-    [/autoroles?/i, 'автороль'],
-    [/reaction roles?/i, 'reaction roles'],
+    [/welcome/i, 'welcome-модуль'],
+    [/autoroles?/i, 'система автороли'],
+    [/reaction roles?/i, 'меню ролей по реакциям'],
     [/report schedule/i, 'расписание отчётов'],
     [/scheduled reports?/i, 'автоотправка отчётов'],
     [/server reports?/i, 'серверные отчёты'],
@@ -1333,7 +1335,10 @@ function humanizeUpdatePart(part) {
 
 function extractUpdateParts(body) {
   const knownPhrases = [
-    ['reaction roles', 'reaction roles'],
+    ['embed update', 'окно обновлений'],
+    ['embeds', 'embed-карточки'],
+    ['embed', 'embed-карточки'],
+    ['reaction roles', 'меню ролей по реакциям'],
     ['report schedule', 'расписание отчётов'],
     ['welcome messages', 'welcome-сообщения'],
     ['welcome', 'welcome-сообщения'],
@@ -1404,6 +1409,10 @@ function splitUpdateChangeLines() {
 
   if (!groups.added.length && !groups.updated.length && !groups.fixed.length) {
     groups.updated.push('сервисное обновление и синхронизация модулей');
+  }
+
+  if (!groups.added.length && !groups.fixed.length && groups.updated.length === 1 && /^embed update$/i.test(DEPLOY_COMMIT_MESSAGE.trim())) {
+    groups.updated = ['окно обновлений'];
   }
 
   groups.added = groups.added.slice(0, 6);

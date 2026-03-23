@@ -1064,24 +1064,94 @@ function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMes
     normalizedGroups.fixed.length
   );
 
+  const fields = [
+    section('Версия', [`Лейбл: ${versionLabel}`, `Semver: ${semver}`, `Build: ${buildId}`].join('\n'), true),
+    section('Коммит', trimValue(commitMessage || 'Нет commit message в окружении Railway.', 1024), true)
+  ];
+
+  if (normalizedGroups.added.length) {
+    fields.push(section('Добавлено', formatUpdateSectionLines(normalizedGroups.added), true));
+  }
+
+  if (normalizedGroups.updated.length) {
+    fields.push(section('Обновлено', formatUpdateSectionLines(normalizedGroups.updated), true));
+  }
+
+  if (normalizedGroups.fixed.length) {
+    fields.push(section('Исправлено', formatUpdateSectionLines(normalizedGroups.fixed)));
+  }
+
+  fields.push(section(
+    'Итог',
+    hasStructuredChanges
+      ? 'Обновление успешно применено и разложено по ключевым изменениям.'
+      : 'Список изменений не передан, но сборка успешно развернута.'
+  ));
+
   return card({
     title: '🚀 Бот получил обновление',
     color: THEME.gold,
     description: `${versionLabel}\nСборка успешно развернута на сервере.`,
     footer: 'BRHD • Phoenix • Updates'
-  }).addFields(
-    section('Версия', [`Лейбл: ${versionLabel}`, `Semver: ${semver}`, `Build: ${buildId}`].join('\n'), true),
-    section('Коммит', trimValue(commitMessage || 'Нет commit message в окружении Railway.', 1024), true),
-    section('Добавлено', formatUpdateSectionLines(normalizedGroups.added), true),
-    section('Обновлено', formatUpdateSectionLines(normalizedGroups.updated), true),
-    section('Исправлено', formatUpdateSectionLines(normalizedGroups.fixed)),
-    section(
-      'Итог',
-      hasStructuredChanges
-        ? 'Обновление успешно применено и разложено по ключевым изменениям.'
-        : 'Список изменений не передан, но сборка успешно развернута.'
-    )
+  }).addFields(...fields);
+}
+
+function formatUpdateSectionLinesNatural(lines = [], mode = 'updated', fallback = '—') {
+  if (!Array.isArray(lines) || !lines.length) return fallback;
+  const prefixMap = {
+    added: 'добавлено',
+    updated: 'обновлено',
+    fixed: 'исправлено'
+  };
+  const prefix = prefixMap[mode] || 'обновлено';
+  return lines.map(line => `• ${prefix}: ${line}`).join('\n');
+}
+
+function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMessage = '', changeLines = [] }) {
+  const normalizedGroups = Array.isArray(changeLines)
+    ? { added: changeLines, updated: [], fixed: [] }
+    : {
+        added: changeLines?.added || [],
+        updated: changeLines?.updated || [],
+        fixed: changeLines?.fixed || []
+      };
+
+  const hasStructuredChanges = (
+    normalizedGroups.added.length ||
+    normalizedGroups.updated.length ||
+    normalizedGroups.fixed.length
   );
+
+  const fields = [
+    section('Версия', [`Лейбл: ${versionLabel}`, `Semver: ${semver}`, `Build: ${buildId}`].join('\n'), true),
+    section('Коммит', trimValue(commitMessage || 'Нет commit message в окружении Railway.', 1024), true)
+  ];
+
+  if (normalizedGroups.added.length) {
+    fields.push(section('Добавлено', formatUpdateSectionLinesNatural(normalizedGroups.added, 'added'), true));
+  }
+
+  if (normalizedGroups.updated.length) {
+    fields.push(section('Обновлено', formatUpdateSectionLinesNatural(normalizedGroups.updated, 'updated'), true));
+  }
+
+  if (normalizedGroups.fixed.length) {
+    fields.push(section('Исправлено', formatUpdateSectionLinesNatural(normalizedGroups.fixed, 'fixed')));
+  }
+
+  fields.push(section(
+    'Итог',
+    hasStructuredChanges
+      ? 'Обновление успешно применено и разложено по понятным пунктам.'
+      : 'Список изменений не передан, но сборка успешно развернута.'
+  ));
+
+  return card({
+    title: '🚀 Бот получил обновление',
+    color: THEME.gold,
+    description: `${versionLabel}\nСборка успешно развернута на сервере.`,
+    footer: 'BRHD • Phoenix • Updates'
+  }).addFields(...fields);
 }
 
 function buildAutoroleStatusEmbed(roleId = '') {

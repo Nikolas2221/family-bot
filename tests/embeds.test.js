@@ -217,24 +217,24 @@ async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
     versionLabel: 'BRHD/PHOENIX 0.1 BETA',
     semver: '0.1.0-beta.1',
     buildId: 'abc123',
-    commitMessage: 'add welcome autorole reaction roles and report schedule',
+    commitMessage: 'embed update',
     changeLines: {
-      added: ['welcome-сообщения', 'автороль'],
-      updated: ['reaction roles', 'расписание отчётов'],
+      added: [],
+      updated: ['окно обновлений'],
       fixed: ['синхронизация команд']
     }
   }).toJSON();
 
   const fields = embed.fields || [];
-  const addedField = fields.find(field => field.name === 'Добавлено');
   const updatedField = fields.find(field => field.name === 'Обновлено');
   const fixedField = fields.find(field => field.name === 'Исправлено');
 
-  assert.ok(addedField);
   assert.ok(updatedField);
   assert.ok(fixedField);
-  assert.match(addedField.value, /welcome-сообщения/);
-  assert.match(updatedField.value, /reaction roles/);
+  assert.ok(!fields.find(field => field.name === 'Добавлено'));
+  assert.match(updatedField.value, /обновлено:/);
+  assert.match(updatedField.value, /окно обновлений/);
+  assert.match(fixedField.value, /исправлено:/);
   assert.match(fixedField.value, /синхронизация команд/);
 }
 
