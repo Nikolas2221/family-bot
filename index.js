@@ -1265,6 +1265,154 @@ function canBypassAutomod(member) {
   return canModerate(member) || canDebugConfig({ memberPermissions: member?.permissions, member });
 }
 
+function detectUpdateBucket(line) {
+  const normalized = String(line || '').trim().toLowerCase();
+  if (!normalized) return 'updated';
+  if (/^(add|added|feat|feature|introduce|introduced|implement|implemented)\b/.test(normalized)) return 'added';
+  if (/^(fix|fixed|bugfix|hotfix|patch|patched|resolve|resolved|correct|corrected)\b/.test(normalized)) return 'fixed';
+  return 'updated';
+}
+
+function stripUpdatePrefix(line) {
+  return String(line || '')
+    .trim()
+    .replace(
+      /^(add|added|feat|feature|introduce|introduced|implement|implemented|fix|fixed|bugfix|hotfix|patch|patched|resolve|resolved|correct|corrected|update|updated|upgrade|upgraded|improve|improved|optimize|optimized|optimise|optimised|refactor|refactored|polish|polished|adjust|adjusted|change|changed|rework|reworked|move|moved|cleanup|clean up|remove|removed)\s*:?\s*/i,
+      ''
+    )
+    .replace(/^[-*]\s*/, '')
+    .trim();
+}
+
+function humanizeUpdatePart(part) {
+  const text = String(part || '').trim();
+  if (!text) return '';
+
+  const normalized = text
+    .toLowerCase()
+    .replace(/\bthe\b/g, '')
+    .replace(/\ba\b/g, '')
+    .replace(/\ban\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const mapped = [
+    [/welcome messages?/i, 'welcome-сообщения'],
+    [/welcome/i, 'welcome-сообщения'],
+    [/autoroles?/i, 'автороль'],
+    [/reaction roles?/i, 'reaction roles'],
+    [/report schedule/i, 'расписание отчётов'],
+    [/scheduled reports?/i, 'автоотправка отчётов'],
+    [/server reports?/i, 'серверные отчёты'],
+    [/activity reports?/i, 'отчёты по активности'],
+    [/automod/i, 'automod'],
+    [/command sync/i, 'синхронизация команд'],
+    [/guild warmup/i, 'оптимизация запуска guild'],
+    [/startup/i, 'оптимизация старта'],
+    [/ticket(?:s)?/i, 'тикеты'],
+    [/application(?:s)?/i, 'заявки'],
+    [/leaderboard/i, 'лидерборд'],
+    [/voice activity/i, 'голосовая активность'],
+    [/\bvoice\b/i, 'голосовая активность'],
+    [/ai advisor/i, 'AI-советник'],
+    [/\bai\b/i, 'AI-модуль'],
+    [/security/i, 'модуль безопасности'],
+    [/moderation/i, 'модерация'],
+    [/logs?/i, 'логи'],
+    [/nickname(?:s)?/i, 'смена ников'],
+    [/cleanup/i, 'очистка'],
+    [/performance/i, 'оптимизация производительности']
+  ].find(([pattern]) => pattern.test(normalized));
+
+  if (mapped) {
+    return mapped[1];
+  }
+
+  return text.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extractUpdateParts(body) {
+  const knownPhrases = [
+    ['reaction roles', 'reaction roles'],
+    ['report schedule', 'расписание отчётов'],
+    ['welcome messages', 'welcome-сообщения'],
+    ['welcome', 'welcome-сообщения'],
+    ['autorole', 'автороль'],
+    ['automod', 'automod'],
+    ['server report', 'серверные отчёты'],
+    ['activity report', 'отчёты по активности'],
+    ['command sync', 'синхронизация команд'],
+    ['guild warmup', 'оптимизация запуска guild'],
+    ['voice activity', 'голосовая активность'],
+    ['leaderboard', 'лидерборд'],
+    ['tickets', 'тикеты'],
+    ['applications', 'заявки'],
+    ['logs', 'логи']
+  ];
+
+  let remaining = String(body || '').trim();
+  const parts = [];
+
+  for (const [needle, label] of knownPhrases) {
+    const pattern = new RegExp(`\\b${needle.replace(/\s+/g, '\\s+')}\\b`, 'i');
+    if (pattern.test(remaining)) {
+      parts.push(label);
+      remaining = remaining.replace(pattern, ' ');
+    }
+  }
+
+  remaining
+    .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])|\s+\band\b\s+|\s+&\s+/i)
+    .map(item => humanizeUpdatePart(item))
+    .filter(Boolean)
+    .forEach(item => parts.push(item));
+
+  return [...new Set(parts)].slice(0, 8);
+}
+
+function splitUpdateChangeLines() {
+  const rawLines = DEPLOY_COMMIT_MESSAGE
+    .split(/\r?\n|;|,(?=\s*(?:add|added|feat|feature|introduce|implemented|fix|fixed|bugfix|update|updated|upgrade|improve|optimi[sz]e|refactor|polish|adjust|change|rework|move|cleanup|remove)\b)/i)
+    .map(item => item.replace(/^[-*]\s*/, '').trim())
+    .filter(Boolean);
+
+  if (!rawLines.length) {
+    return {
+      added: ['новая сборка развернута на сервере'],
+      updated: ['команды и модули синхронизированы'],
+      fixed: []
+    };
+  }
+
+  const groups = {
+    added: [],
+    updated: [],
+    fixed: []
+  };
+
+  for (const line of rawLines) {
+    const bucket = detectUpdateBucket(line);
+    const parts = extractUpdateParts(stripUpdatePrefix(line));
+    if (!parts.length) continue;
+
+    for (const part of parts) {
+      if (!groups[bucket].includes(part)) {
+        groups[bucket].push(part);
+      }
+    }
+  }
+
+  if (!groups.added.length && !groups.updated.length && !groups.fixed.length) {
+    groups.updated.push('сервисное обновление и синхронизация модулей');
+  }
+
+  groups.added = groups.added.slice(0, 6);
+  groups.updated = groups.updated.slice(0, 6);
+  groups.fixed = groups.fixed.slice(0, 6);
+
+  return groups;
+}
+
 function getAutomodStateKey(guildId, userId) {
   return `${guildId}:${userId}`;
 }

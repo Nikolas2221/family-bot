@@ -1044,6 +1044,46 @@ function buildWelcomeStatusEmbed({ enabled, channelId, dmEnabled, message = '', 
   );
 }
 
+function formatUpdateSectionLines(lines = [], fallback = '—') {
+  if (!Array.isArray(lines) || !lines.length) return fallback;
+  return lines.map(line => `• ${line}`).join('\n');
+}
+
+function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMessage = '', changeLines = [] }) {
+  const normalizedGroups = Array.isArray(changeLines)
+    ? { added: changeLines, updated: [], fixed: [] }
+    : {
+        added: changeLines?.added || [],
+        updated: changeLines?.updated || [],
+        fixed: changeLines?.fixed || []
+      };
+
+  const hasStructuredChanges = (
+    normalizedGroups.added.length ||
+    normalizedGroups.updated.length ||
+    normalizedGroups.fixed.length
+  );
+
+  return card({
+    title: '🚀 Бот получил обновление',
+    color: THEME.gold,
+    description: `${versionLabel}\nСборка успешно развернута на сервере.`,
+    footer: 'BRHD • Phoenix • Updates'
+  }).addFields(
+    section('Версия', [`Лейбл: ${versionLabel}`, `Semver: ${semver}`, `Build: ${buildId}`].join('\n'), true),
+    section('Коммит', trimValue(commitMessage || 'Нет commit message в окружении Railway.', 1024), true),
+    section('Добавлено', formatUpdateSectionLines(normalizedGroups.added), true),
+    section('Обновлено', formatUpdateSectionLines(normalizedGroups.updated), true),
+    section('Исправлено', formatUpdateSectionLines(normalizedGroups.fixed)),
+    section(
+      'Итог',
+      hasStructuredChanges
+        ? 'Обновление успешно применено и разложено по ключевым изменениям.'
+        : 'Список изменений не передан, но сборка успешно развернута.'
+    )
+  );
+}
+
 function buildAutoroleStatusEmbed(roleId = '') {
   return card({
     title: '🪪 Autorole',

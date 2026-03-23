@@ -7,6 +7,7 @@ const {
   buildDebugConfigEmbed,
   buildFamilyEmbeds,
   buildFamilyMenuEmbed,
+  buildUpdateAnnouncementEmbed,
   buildWelcomeEmbed,
   panelButtons
 } = require('../embeds');
@@ -211,6 +212,32 @@ async function testFamilyMenuSummaryAndButtons() {
   assert.equal(rows[1].components.length, 5);
 }
 
+async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
+  const embed = buildUpdateAnnouncementEmbed({
+    versionLabel: 'BRHD/PHOENIX 0.1 BETA',
+    semver: '0.1.0-beta.1',
+    buildId: 'abc123',
+    commitMessage: 'add welcome autorole reaction roles and report schedule',
+    changeLines: {
+      added: ['welcome-сообщения', 'автороль'],
+      updated: ['reaction roles', 'расписание отчётов'],
+      fixed: ['синхронизация команд']
+    }
+  }).toJSON();
+
+  const fields = embed.fields || [];
+  const addedField = fields.find(field => field.name === 'Добавлено');
+  const updatedField = fields.find(field => field.name === 'Обновлено');
+  const fixedField = fields.find(field => field.name === 'Исправлено');
+
+  assert.ok(addedField);
+  assert.ok(updatedField);
+  assert.ok(fixedField);
+  assert.match(addedField.value, /welcome-сообщения/);
+  assert.match(updatedField.value, /reaction roles/);
+  assert.match(fixedField.value, /синхронизация команд/);
+}
+
 async function main() {
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
@@ -218,6 +245,7 @@ async function main() {
   await runTest('menu and applications embeds expose configured images', testMenuAndApplicationsEmbedsExposeConfiguredImages);
   await runTest('family menu summary and buttons render', testFamilyMenuSummaryAndButtons);
   await runTest('family panel does not duplicate member across roles', testFamilyPanelDoesNotDuplicateMemberAcrossRoles);
+  await runTest('update announcement embed shows structured changes', testUpdateAnnouncementEmbedShowsStructuredChanges);
   console.log('ALL EMBEDS TESTS PASSED');
 }
 
