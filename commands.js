@@ -191,18 +191,18 @@ async function registerCommands(guild) {
     new SlashCommandBuilder()
       .setName('clearallchannel')
       .setDescription(copy.commands.clearAllChannelDescription)
+      .addStringOption(option =>
+        option
+          .setName(copy.commands.confirmOptionName)
+          .setDescription(copy.commands.confirmOptionDescription)
+          .setRequired(true)
+      )
       .addChannelOption(option =>
         option
           .setName(copy.commands.channelOptionName)
           .setDescription(copy.commands.channelOptionDescription)
           .addChannelTypes(ChannelType.GuildText)
           .setRequired(false)
-      )
-      .addStringOption(option =>
-        option
-          .setName(copy.commands.confirmOptionName)
-          .setDescription(copy.commands.confirmOptionDescription)
-          .setRequired(true)
       ),
     new SlashCommandBuilder()
       .setName('mute')

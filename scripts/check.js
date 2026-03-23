@@ -16,6 +16,7 @@ const files = [
   'roles.js',
   'storage.js',
   path.join('tests', 'applications.test.js'),
+  path.join('tests', 'commands.test.js'),
   path.join('tests', 'database.test.js'),
   path.join('tests', 'config.test.js'),
   path.join('tests', 'embeds.test.js'),

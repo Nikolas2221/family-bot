@@ -1,6 +1,7 @@
 async function main() {
   const { main: runAiTests } = require('./ai.test');
   const { main: runApplicationsTests } = require('./applications.test');
+  const { main: runCommandsTests } = require('./commands.test');
   const { main: runDatabaseTests } = require('./database.test');
   const { main: runConfigTests } = require('./config.test');
   const { main: runEmbedsTests } = require('./embeds.test');
@@ -10,6 +11,7 @@ async function main() {
 
   await runAiTests();
   await runApplicationsTests();
+  await runCommandsTests();
   await runDatabaseTests();
   await runConfigTests();
   await runEmbedsTests();
