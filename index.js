@@ -2230,7 +2230,9 @@ client.on('clientReady', async () => {
       }
     }
 
-    for (const guild of client.guilds.cache.values()) {
+    setImmediate(() => {
+      void (async () => {
+        for (const guild of client.guilds.cache.values()) {
       await guild.roles.fetch().catch(error => {
         console.error(`Не удалось получить роли guild ${guild.id}:`, error);
       });
@@ -2264,7 +2266,11 @@ client.on('clientReady', async () => {
       await runAfkWarnings(guild.id).catch(error => {
         console.error(`Ошибка AFK-проверки ${guild.id}:`, error);
       });
-    }
+        }
+      })().catch(error => {
+        console.error('Startup guild warmup failed:', error);
+      });
+    });
 
     setInterval(() => {
       doPanelUpdateAll(false).catch(error => {
