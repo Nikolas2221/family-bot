@@ -726,4 +726,95 @@ copy.automod.wordRemoved = function wordRemoved(word) {
 copy.automod.wordsCleared = 'Список стоп-слов automod очищен.';
 copy.automod.wordMissing = 'Укажи слово для этой операции.';
 
+copy.commands.roleTargetAutorole = 'Автороль';
+copy.commands.channelTargetWelcome = 'Welcome';
+copy.commands.channelTargetReports = 'Отчёты';
+copy.commands.messageOptionName = 'message';
+copy.commands.messageOptionDescription = 'Текст welcome-сообщения';
+copy.commands.messageIdOptionName = 'message_id';
+copy.commands.messageIdOptionDescription = 'ID сообщения для reaction role';
+copy.commands.emojiOptionName = 'emoji';
+copy.commands.emojiOptionDescription = 'Эмодзи реакции';
+
+copy.commands.welcomeDescription = 'Настроить welcome-сообщения сервера';
+copy.commands.welcomeStatusSubcommand = 'status';
+copy.commands.welcomeStatusDescription = 'Показать текущие настройки welcome';
+copy.commands.welcomeToggleSubcommand = 'toggle';
+copy.commands.welcomeToggleDescription = 'Включить или выключить welcome-сообщения';
+copy.commands.welcomeChannelSubcommand = 'channel';
+copy.commands.welcomeChannelDescription = 'Назначить канал для welcome-сообщений';
+copy.commands.welcomeDmSubcommand = 'dm';
+copy.commands.welcomeDmDescription = 'Включить или выключить welcome в личные сообщения';
+copy.commands.welcomeMessageSubcommand = 'message';
+copy.commands.welcomeMessageDescription = 'Изменить текст welcome-сообщения';
+copy.commands.welcomeTestSubcommand = 'test';
+copy.commands.welcomeTestDescription = 'Отправить тестовое welcome-сообщение';
+
+copy.commands.autoroleDescription = 'Настроить автоматическую выдачу роли новичкам';
+copy.commands.autoroleStatusSubcommand = 'status';
+copy.commands.autoroleStatusDescription = 'Показать текущую autorole';
+copy.commands.autoroleSetSubcommand = 'set';
+copy.commands.autoroleSetDescription = 'Назначить роль для autorole';
+copy.commands.autoroleClearSubcommand = 'clear';
+copy.commands.autoroleClearDescription = 'Отключить autorole';
+
+copy.commands.reactionRoleDescription = 'Настроить reaction roles';
+copy.commands.reactionRoleStatusSubcommand = 'status';
+copy.commands.reactionRoleStatusDescription = 'Показать все reaction roles';
+copy.commands.reactionRoleAddSubcommand = 'add';
+copy.commands.reactionRoleAddDescription = 'Добавить новую reaction role';
+copy.commands.reactionRoleRemoveSubcommand = 'remove';
+copy.commands.reactionRoleRemoveDescription = 'Удалить reaction role';
+
+copy.commands.reportScheduleDescription = 'Настроить автопост серверных отчётов';
+copy.commands.reportScheduleStatusSubcommand = 'status';
+copy.commands.reportScheduleStatusDescription = 'Показать статус weekly/monthly отчётов';
+copy.commands.reportScheduleSetSubcommand = 'set';
+copy.commands.reportScheduleSetDescription = 'Включить weekly или monthly отчёт';
+copy.commands.reportScheduleOffSubcommand = 'off';
+copy.commands.reportScheduleOffDescription = 'Выключить weekly или monthly отчёт';
+copy.commands.reportScheduleSendSubcommand = 'send';
+copy.commands.reportScheduleSendDescription = 'Отправить отчёт вручную сейчас';
+
+copy.welcome = copy.welcome || {};
+copy.welcome.statusTitle = '👋 Welcome';
+copy.welcome.enabled = 'Включено';
+copy.welcome.disabled = 'Выключено';
+copy.welcome.channel = 'Канал';
+copy.welcome.dm = 'ЛС';
+copy.welcome.message = 'Текст';
+copy.welcome.autorole = 'Автороль';
+copy.welcome.updated = function updated(label) {
+  return `Настройки welcome обновлены: ${label}.`;
+};
+copy.welcome.messageCleared = 'Текст welcome очищен.';
+copy.welcome.testSent = 'Тестовое welcome-сообщение отправлено.';
+
+copy.reactionRoles = copy.reactionRoles || {};
+copy.reactionRoles.title = '✨ Reaction Roles';
+copy.reactionRoles.empty = 'Связки реакций пока не настроены.';
+copy.reactionRoles.added = function added(emoji, roleId, messageId) {
+  return `Reaction role добавлена: ${emoji} -> <@&${roleId}> для сообщения \`${messageId}\`.`;
+};
+copy.reactionRoles.removed = function removed(emoji, messageId) {
+  return `Reaction role удалена: ${emoji} для сообщения \`${messageId}\`.`;
+};
+copy.reactionRoles.notFound = 'Такая reaction role не найдена.';
+copy.reactionRoles.messageMissing = 'Не удалось найти сообщение для этой reaction role.';
+
+copy.reports = copy.reports || {};
+copy.reports.title = '📆 Расписание отчётов';
+copy.reports.periodWeekly = 'Weekly';
+copy.reports.periodMonthly = 'Monthly';
+copy.reports.enabled = function enabled(period, channelId) {
+  return `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`;
+};
+copy.reports.disabled = function disabled(period) {
+  return `${period} отчёт выключен.`;
+};
+copy.reports.sent = function sent(period, channelId) {
+  return `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`;
+};
+copy.reports.channelMissing = 'Сначала укажи канал отчётов или передай канал в команду.';
+
 module.exports = copy;

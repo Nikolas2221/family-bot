@@ -61,6 +61,46 @@ function defaultModulesForMode(mode = 'hybrid') {
   };
 }
 
+function normalizeWelcomeConfig(welcome = {}) {
+  return {
+    enabled: welcome?.enabled !== false,
+    dmEnabled: Boolean(welcome?.dmEnabled),
+    message: String(welcome?.message || '').trim().slice(0, 1000)
+  };
+}
+
+function normalizeReactionRoles(entries = []) {
+  const seen = new Set();
+
+  return (Array.isArray(entries) ? entries : [])
+    .map(entry => ({
+      messageId: String(entry?.messageId || '').trim(),
+      channelId: String(entry?.channelId || '').trim(),
+      emoji: String(entry?.emoji || '').trim(),
+      roleId: String(entry?.roleId || '').trim()
+    }))
+    .filter(entry => entry.messageId && entry.emoji && entry.roleId)
+    .filter(entry => {
+      const key = `${entry.messageId}:${entry.emoji}:${entry.roleId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeReportSchedule(schedule = {}) {
+  return {
+    weekly: {
+      enabled: Boolean(schedule?.weekly?.enabled),
+      channelId: String(schedule?.weekly?.channelId || '').trim()
+    },
+    monthly: {
+      enabled: Boolean(schedule?.monthly?.enabled),
+      channelId: String(schedule?.monthly?.channelId || '').trim()
+    }
+  };
+}
+
 function normalizeGuildRecord(guildId, guild = {}) {
   const mode = guild.settings?.mode || 'hybrid';
   const defaultModules = defaultModulesForMode(mode);
@@ -85,9 +125,11 @@ function normalizeGuildRecord(guildId, guild = {}) {
       channels: {
         panel: guild.settings?.channels?.panel || '',
         applications: guild.settings?.channels?.applications || '',
+        welcome: guild.settings?.channels?.welcome || '',
         logs: guild.settings?.channels?.logs || '',
         disciplineLogs: guild.settings?.channels?.disciplineLogs || '',
-        updates: guild.settings?.channels?.updates || ''
+        updates: guild.settings?.channels?.updates || '',
+        reports: guild.settings?.channels?.reports || ''
       },
       roles: {
         leader: guild.settings?.roles?.leader || '',
@@ -95,7 +137,8 @@ function normalizeGuildRecord(guildId, guild = {}) {
         elder: guild.settings?.roles?.elder || '',
         member: guild.settings?.roles?.member || '',
         newbie: guild.settings?.roles?.newbie || '',
-        mute: guild.settings?.roles?.mute || ''
+        mute: guild.settings?.roles?.mute || '',
+        autorole: guild.settings?.roles?.autorole || ''
       },
       access: {
         applications: [...(guild.settings?.access?.applications || [])],
@@ -106,6 +149,9 @@ function normalizeGuildRecord(guildId, guild = {}) {
         familyBanner: guild.settings?.visuals?.familyBanner || '',
         applicationsBanner: guild.settings?.visuals?.applicationsBanner || ''
       },
+      welcome: normalizeWelcomeConfig(guild.settings?.welcome),
+      reactionRoles: normalizeReactionRoles(guild.settings?.reactionRoles),
+      reportSchedule: normalizeReportSchedule(guild.settings?.reportSchedule),
       automod: normalizeAutomodConfig(guild.settings?.automod),
       modules: {
         family: guild.settings?.modules?.family ?? defaultModules.family,
@@ -227,6 +273,22 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
           ...(guild.settings?.visuals || {}),
           ...(patch?.visuals || {})
         },
+        welcome: {
+          ...(guild.settings?.welcome || {}),
+          ...(patch?.welcome || {})
+        },
+        reportSchedule: {
+          ...(guild.settings?.reportSchedule || {}),
+          ...(patch?.reportSchedule || {}),
+          weekly: {
+            ...(guild.settings?.reportSchedule?.weekly || {}),
+            ...(patch?.reportSchedule?.weekly || {})
+          },
+          monthly: {
+            ...(guild.settings?.reportSchedule?.monthly || {}),
+            ...(patch?.reportSchedule?.monthly || {})
+          }
+        },
         automod: {
           ...(guild.settings?.automod || {}),
           ...(patch?.automod || {})
@@ -238,7 +300,8 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
         features: {
           ...(guild.settings?.features || {}),
           ...(patch?.features || {})
-        }
+        },
+        reactionRoles: Array.isArray(patch?.reactionRoles) ? patch.reactionRoles : guild.settings?.reactionRoles
       }
     }).settings;
     save();

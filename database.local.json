@@ -1,0 +1,83 @@
+{
+  "meta": {
+    "version": 1
+  },
+  "guilds": {
+    "998984136511459348": {
+      "guildId": "998984136511459348",
+      "guildName": "Los Santos Police Department | Unity RP",
+      "ownerId": "834805636315086919",
+      "plan": "free",
+      "setupCompleted": false,
+      "setupCompletedAt": "",
+      "subscriptionAssignedBy": "",
+      "subscriptionAssignedAt": "",
+      "maintenance": {
+        "lastRolelessCleanupAt": "",
+        "lastUpdateAnnouncementId": "0.1.0-beta.1:0.1.0-beta.1",
+        "lastCommandSignature": "6221a6a11ebd78215cac0e3c8104451b7fd38348"
+      },
+      "settings": {
+        "mode": "hybrid",
+        "familyTitle": "",
+        "channels": {
+          "panel": "",
+          "applications": "",
+          "logs": "",
+          "disciplineLogs": "",
+          "updates": ""
+        },
+        "roles": {
+          "leader": "",
+          "deputy": "",
+          "elder": "",
+          "member": "",
+          "newbie": "",
+          "mute": ""
+        },
+        "access": {
+          "applications": [],
+          "discipline": [],
+          "ranks": []
+        },
+        "visuals": {
+          "familyBanner": "",
+          "applicationsBanner": ""
+        },
+        "automod": {
+          "invitesEnabled": false,
+          "linksEnabled": false,
+          "capsEnabled": false,
+          "capsPercent": 75,
+          "capsMinLength": 12,
+          "mentionsEnabled": false,
+          "mentionLimit": 5,
+          "spamEnabled": false,
+          "spamCount": 6,
+          "spamWindowSeconds": 8,
+          "badWordsEnabled": false,
+          "badWords": []
+        },
+        "modules": {
+          "family": true,
+          "applications": true,
+          "moderation": true,
+          "security": true,
+          "analytics": true,
+          "ai": true,
+          "welcome": true,
+          "automod": true,
+          "subscriptions": false,
+          "customCommands": false,
+          "music": false
+        },
+        "features": {
+          "aiEnabled": false,
+          "autoRanksEnabled": false,
+          "leakGuardEnabled": false,
+          "channelGuardEnabled": false
+        }
+      }
+    }
+  }
+}

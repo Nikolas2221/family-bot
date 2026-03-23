@@ -175,7 +175,7 @@ function buildFamilyMenuEmbed({ imageUrl, summary } = {}) {
   });
 }
 
-function buildWelcomeEmbed(member, familyTitle, imageUrl = '') {
+function buildWelcomeEmbed(member, familyTitle, imageUrl = '', customMessage = '') {
   return card({
     title: 'Добро пожаловать в Phoenix',
     color: THEME.brand,
@@ -1030,6 +1030,189 @@ function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMes
   );
 }
 
+function buildWelcomeStatusEmbed({ enabled, channelId, dmEnabled, message = '', autoroleRoleId = '' } = {}) {
+  return card({
+    title: copy.welcome.statusTitle,
+    color: enabled ? THEME.emerald : THEME.slate,
+    description: enabled ? copy.welcome.enabled : copy.welcome.disabled,
+    footer: 'BRHD • Phoenix • Welcome'
+  }).addFields(
+    section(copy.welcome.channel, channelId ? `<#${channelId}>` : 'не задан', true),
+    section(copy.welcome.dm, dmEnabled ? 'включено' : 'выключено', true),
+    section(copy.welcome.autorole, autoroleRoleId ? `<@&${autoroleRoleId}>` : 'не задано', true),
+    section(copy.welcome.message, message || 'не задано')
+  );
+}
+
+function buildAutoroleStatusEmbed(roleId = '') {
+  return card({
+    title: '🪪 Autorole',
+    color: roleId ? THEME.emerald : THEME.slate,
+    description: roleId ? `Роль будет выдаваться автоматически: <@&${roleId}>` : 'Autorole сейчас выключена.',
+    footer: 'BRHD • Phoenix • Welcome'
+  });
+}
+
+function buildReactionRoleStatusEmbed(entries = []) {
+  const lines = entries.slice(0, 20).map((entry, index) => (
+    `${index + 1}. ${entry.emoji} • <@&${entry.roleId}> • \`${entry.messageId}\`${entry.channelId ? ` • <#${entry.channelId}>` : ''}`
+  ));
+
+  return card({
+    title: copy.reactionRoles.title,
+    color: entries.length ? THEME.brand : THEME.slate,
+    description: lines.length ? lines.join('\n') : copy.reactionRoles.empty,
+    footer: 'BRHD • Phoenix • Reaction Roles'
+  });
+}
+
+function buildReportScheduleEmbed(schedule = {}, channels = {}) {
+  const weekly = schedule.weekly || {};
+  const monthly = schedule.monthly || {};
+  const reportChannel = channels.reports || '';
+
+  return card({
+    title: copy.reports.title,
+    color: THEME.royal,
+    description: 'Автоматическая отправка weekly и monthly отчётов.',
+    footer: 'BRHD • Phoenix • Reports'
+  }).addFields(
+    section('Weekly', [
+      `Статус: ${weekly.enabled ? 'включён' : 'выключен'}`,
+      `Канал: ${weekly.channelId ? `<#${weekly.channelId}>` : (reportChannel ? `<#${reportChannel}>` : 'не задан')}`,
+      'Время: понедельник в 02:00'
+    ].join('\n'), true),
+    section('Monthly', [
+      `Статус: ${monthly.enabled ? 'включён' : 'выключен'}`,
+      `Канал: ${monthly.channelId ? `<#${monthly.channelId}>` : (reportChannel ? `<#${reportChannel}>` : 'не задан')}`,
+      'Время: 1 число в 02:00'
+    ].join('\n'), true)
+  );
+}
+
+function buildWelcomeEmbed(member, familyTitle, imageUrl = '', customMessage = '') {
+  return card({
+    title: 'Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ РІ Phoenix',
+    color: THEME.brand,
+    description: [
+      `<@${member.id}>, С‚С‹ С‚РѕР»СЊРєРѕ С‡С‚Рѕ Р·Р°С€С‘Р» РЅР° СЃРµСЂРІРµСЂ **${member.guild.name}**.`,
+      '',
+      `Р•СЃР»Рё С…РѕС‡РµС€СЊ РІСЃС‚СѓРїРёС‚СЊ РІ **${familyTitle}**, РЅР°Р¶РјРё РєРЅРѕРїРєСѓ РЅРёР¶Рµ Рё РѕС‚РїСЂР°РІСЊ Р·Р°СЏРІРєСѓ.`,
+      'РљР°СЂС‚РѕС‡РєР° СЃСЂР°Р·Сѓ СѓР№РґС‘С‚ СЂСѓРєРѕРІРѕРґСЃС‚РІСѓ РЅР° СЂР°СЃСЃРјРѕС‚СЂРµРЅРёРµ.'
+    ].join('\n'),
+    footer: 'BRHD вЂў Phoenix вЂў Welcome',
+    thumbnail: avatarUrl(member.user),
+    image: imageUrl
+  }).addFields(
+    section('Р§С‚Рѕ РґР°Р»СЊС€Рµ', ['1. РћС‚РєСЂРѕР№ Р°РЅРєРµС‚Сѓ', '2. Р—Р°РїРѕР»РЅРё РґР°РЅРЅС‹Рµ', '3. Р”РѕР¶РґРёСЃСЊ СЂРµС€РµРЅРёСЏ СЂСѓРєРѕРІРѕРґСЃС‚РІР°'].join('\n'), false),
+    ...(customMessage ? [section('РЎРѕРѕР±С‰РµРЅРёРµ СЃРµСЂРІРµСЂР°', customMessage, false)] : [])
+  );
+}
+
+function buildAdminPanelEmbed({ guildName, record }) {
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? copy.admin.panelPremium : copy.admin.panelFree;
+  const modules = record.settings.modules || {};
+  const mode = record.settings.mode || 'hybrid';
+  const automod = record.settings.automod || {};
+  const welcome = record.settings.welcome || {};
+  const reportSchedule = record.settings.reportSchedule || {};
+  const reactionRoles = record.settings.reactionRoles || [];
+  const moduleLines = [
+    `Family: ${modules.family ? 'ON' : 'OFF'}`,
+    `Applications: ${modules.applications ? 'ON' : 'OFF'}`,
+    `Moderation: ${modules.moderation ? 'ON' : 'OFF'}`,
+    `Security: ${modules.security ? 'ON' : 'OFF'}`,
+    `Analytics: ${modules.analytics ? 'ON' : 'OFF'}`,
+    `AI: ${modules.ai ? 'ON' : 'OFF'}`,
+    `Welcome: ${modules.welcome ? 'ON' : 'OFF'}`,
+    `Automod: ${modules.automod ? 'ON' : 'OFF'}`,
+    `Subscriptions: ${modules.subscriptions ? 'ON' : 'OFF'}`,
+    `Custom Commands: ${modules.customCommands ? 'ON' : 'OFF'}`,
+    `Music: ${modules.music ? 'ON' : 'OFF'}`
+  ];
+
+  return card({
+    title: copy.admin.panelTitle,
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `РЎРµСЂРІРµСЂ: **${guildName}**`,
+    footer: 'BRHD вЂў Phoenix вЂў Administration'
+  }).addFields(
+    section('РЎС‚Р°С‚СѓСЃ', [`РџР»Р°РЅ: ${planLabel}`, `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`, `Р РµР¶РёРј: ${mode}`].join('\n'), true),
+    section('Р’РѕР·РјРѕР¶РЅРѕСЃС‚Рё', copy.admin.panelFeatures(record.plan), true),
+    section(
+      copy.admin.panelFieldChannels,
+      [
+        channelLine('РџР°РЅРµР»СЊ', record.settings.channels.panel),
+        channelLine('РџРѕРґР°С‡Р° Р·Р°СЏРІРєРё', record.settings.channels.applications),
+        channelLine('Welcome', record.settings.channels.welcome),
+        channelLine('Р›РѕРіРё', record.settings.channels.logs),
+        channelLine('Р”РёСЃС†РёРїР»РёРЅР°', record.settings.channels.disciplineLogs),
+        channelLine('РђРїРґРµР№С‚С‹', record.settings.channels.updates),
+        channelLine('РћС‚С‡С‘С‚С‹', record.settings.channels.reports)
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldRoles,
+      [
+        roleLine('Р›РёРґРµСЂ', record.settings.roles.leader),
+        roleLine('Р—Р°Рј', record.settings.roles.deputy),
+        roleLine('РЎС‚Р°СЂС€РёР№', record.settings.roles.elder),
+        roleLine('РЈС‡Р°СЃС‚РЅРёРє', record.settings.roles.member),
+        roleLine('РќРѕРІРёС‡РѕРє', record.settings.roles.newbie),
+        roleLine('РњСѓС‚', record.settings.roles.mute),
+        roleLine('РђРІС‚РѕСЂРѕР»СЊ', record.settings.roles.autorole)
+      ].join('\n'),
+      false
+    ),
+    section('РњРѕРґСѓР»Рё', moduleLines.join('\n'), false),
+    section(
+      'Welcome',
+      [
+        `РЎС‚Р°С‚СѓСЃ: ${welcome.enabled ? 'ON' : 'OFF'}`,
+        `Р›РЎ: ${welcome.dmEnabled ? 'ON' : 'OFF'}`,
+        `РўРµРєСЃС‚: ${welcome.message ? 'Р·Р°РґР°РЅ' : 'РЅРµ Р·Р°РґР°РЅ'}`
+      ].join('\n'),
+      true
+    ),
+    section(
+      'Reaction Roles',
+      [`РЎРІСЏР·РѕРє: ${reactionRoles.length}`, `Premium: ${isPremium ? 'ON' : 'OFF'}`].join('\n'),
+      true
+    ),
+    section(
+      'Reports',
+      [
+        `Weekly: ${reportSchedule.weekly?.enabled ? 'ON' : 'OFF'}`,
+        `Monthly: ${reportSchedule.monthly?.enabled ? 'ON' : 'OFF'}`,
+        `РљР°РЅР°Р»: ${record.settings.channels.reports ? `<#${record.settings.channels.reports}>` : 'РЅРµ Р·Р°РґР°РЅ'}`
+      ].join('\n'),
+      false
+    ),
+    section(
+      'Automod',
+      [
+        `РРЅРІР°Р№С‚С‹: ${automod.invitesEnabled ? 'ON' : 'OFF'}`,
+        `РЎСЃС‹Р»РєРё: ${automod.linksEnabled ? 'ON' : 'OFF'}`,
+        `РљР°РїСЃ: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+ Р±СѓРєРІ)` : 'OFF'}`,
+        `РЈРїРѕРјРёРЅР°РЅРёСЏ: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`,
+        `Р¤Р»СѓРґ: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}СЃ)` : 'OFF'}`,
+        `РЎС‚РѕРї-СЃР»РѕРІР°: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldVisuals,
+      [
+        copy.admin.visualLine('РџР°РЅРµР»СЊ СЃРµРјСЊРё', record.settings.visuals?.familyBanner),
+        copy.admin.visualLine('РџРѕРґР°С‡Р° Р·Р°СЏРІРєРё', record.settings.visuals?.applicationsBanner)
+      ].join('\n'),
+      false
+    )
+  );
+}
+
 module.exports = {
   buildAcceptLogEmbed,
   buildApplicationButtons,
@@ -1050,12 +1233,16 @@ module.exports = {
   buildHelpEmbed,
   buildAutomodActionEmbed,
   buildAutomodStatusEmbed,
+  buildAutoroleStatusEmbed,
   buildLeaderboardEmbed,
   buildProfileEmbed,
   buildRankButtons,
+  buildReactionRoleStatusEmbed,
   buildRejectLogEmbed,
+  buildReportScheduleEmbed,
   buildUpdateAnnouncementEmbed,
   buildVoiceActivityEmbed,
+  buildWelcomeStatusEmbed,
   buildWelcomeEmbed,
   buildWarnLogEmbed,
   panelButtons

@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const path = require('path');
 const packageMeta = require('./package.json');
-const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, Partials, PermissionFlagsBits } = require('discord.js');
 const { createAIService } = require('./ai');
 const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('./automod');
 const { createApplicationsService } = require('./applications');
@@ -47,6 +47,7 @@ const CHANNEL_GUARD = config.channelGuard;
 const ROLELESS_CLEANUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const REPORT_SCHEDULE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const PRODUCT_VERSION_LABEL = 'BRHD/PHOENIX 0.1 BETA';
 const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.1';
 const DEPLOY_COMMIT_SHA = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || '').trim();
@@ -63,7 +64,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 const storage = createStorage({ dataFile: DATA_FILE });
@@ -127,9 +129,11 @@ function resolveGuildSettings(guildId) {
     channels: {
       panel,
       applications: settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
+      welcome: settings.channels?.welcome || settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
       logs,
       disciplineLogs: settings.channels?.disciplineLogs || DISCIPLINE_LOG_CHANNEL_ID || logs || '',
-      updates: settings.channels?.updates || ''
+      updates: settings.channels?.updates || '',
+      reports: settings.channels?.reports || logs || ''
     },
     roles,
     access: {
@@ -138,9 +142,26 @@ function resolveGuildSettings(guildId) {
       ranks: settings.access?.ranks?.length ? settings.access.ranks : ACCESS_RANKS
     },
     muteRoleId: settings.roles?.mute || '',
+    autoroleRoleId: settings.roles?.autorole || '',
     visuals: {
       familyBanner: settings.visuals?.familyBanner || '',
       applicationsBanner: settings.visuals?.applicationsBanner || ''
+    },
+    welcome: {
+      enabled: settings.welcome?.enabled !== false,
+      dmEnabled: Boolean(settings.welcome?.dmEnabled),
+      message: String(settings.welcome?.message || '').trim().slice(0, 1000)
+    },
+    reactionRoles: Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [],
+    reportSchedule: {
+      weekly: {
+        enabled: Boolean(settings.reportSchedule?.weekly?.enabled),
+        channelId: settings.reportSchedule?.weekly?.channelId || settings.channels?.reports || logs || ''
+      },
+      monthly: {
+        enabled: Boolean(settings.reportSchedule?.monthly?.enabled),
+        channelId: settings.reportSchedule?.monthly?.channelId || settings.channels?.reports || logs || ''
+      }
     },
     automod: normalizeAutomodConfig(settings.automod),
     modules: {
@@ -325,9 +346,11 @@ function buildGuildSettingsSnapshot(guild) {
       channels: {
         panel: settings.channels.panel,
         applications: settings.channels.applications,
+        welcome: settings.channels.welcome,
         logs: settings.channels.logs,
         disciplineLogs: settings.channels.disciplineLogs,
-        updates: settings.channels.updates
+        updates: settings.channels.updates,
+        reports: settings.channels.reports
       },
       roles: {
         leader: settings.roles.find(role => role.key === 'leader')?.id || '',
@@ -335,7 +358,8 @@ function buildGuildSettingsSnapshot(guild) {
         elder: settings.roles.find(role => role.key === 'elder')?.id || '',
         member: settings.roles.find(role => role.key === 'member')?.id || '',
         newbie: settings.roles.find(role => role.key === 'newbie')?.id || '',
-        mute: settings.muteRoleId || ''
+        mute: settings.muteRoleId || '',
+        autorole: settings.autoroleRoleId || ''
       },
       access: {
         applications: settings.access.applications,
@@ -346,6 +370,9 @@ function buildGuildSettingsSnapshot(guild) {
         familyBanner: settings.visuals.familyBanner,
         applicationsBanner: settings.visuals.applicationsBanner
       },
+      welcome: settings.welcome,
+      reactionRoles: settings.reactionRoles,
+      reportSchedule: settings.reportSchedule,
       automod: settings.automod,
       modules: {
         ...settings.modules
@@ -750,6 +777,61 @@ function formatMinutesLong(totalMinutes) {
   return `${hours}ч ${minutes}м`;
 }
 
+function normalizeReactionEmoji(emojiValue = '') {
+  const raw = String(emojiValue || '').trim();
+  if (!raw) return '';
+
+  const customMatch = raw.match(/^<?a?:[\w~]+:(\d+)>?$/i);
+  if (customMatch) {
+    return customMatch[1];
+  }
+
+  return raw;
+}
+
+function getReactionEmojiKey(emoji) {
+  if (!emoji) return '';
+  return String(emoji.id || emoji.name || '').trim();
+}
+
+function getReactionRoleEntries(guildId) {
+  return resolveGuildSettings(guildId).reactionRoles || [];
+}
+
+function findReactionRoleEntry(guildId, messageId, emojiKey) {
+  const normalizedEmoji = normalizeReactionEmoji(emojiKey);
+  return getReactionRoleEntries(guildId).find(
+    entry => entry.messageId === String(messageId) && normalizeReactionEmoji(entry.emoji) === normalizedEmoji
+  ) || null;
+}
+
+function getWeeklyReportKey(date = new Date()) {
+  const value = new Date(date);
+  const weekday = value.getDay() || 7;
+  value.setHours(0, 0, 0, 0);
+  value.setDate(value.getDate() - weekday + 1);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-W-${month}-${day}`;
+}
+
+function getMonthlyReportKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function isScheduledReportDue(period, now = new Date()) {
+  if (now.getHours() !== 2) return false;
+
+  if (period === 'monthly') {
+    return now.getDate() === 1;
+  }
+
+  return (now.getDay() || 7) === 1;
+}
+
 function getMemberLabel(guild, memberId) {
   const member = guild.members.cache.get(memberId);
   if (member) {
@@ -962,10 +1044,15 @@ function getCommandModule(commandName) {
     case 'voiceactivity':
     case 'activityreport':
     case 'serverreport':
+    case 'reportschedule':
       return 'analytics';
     case 'ai':
     case 'aiadvisor':
       return 'ai';
+    case 'welcome':
+    case 'autorole':
+    case 'reactionrole':
+      return 'welcome';
     case 'automod':
       return 'automod';
     default:
@@ -994,6 +1081,8 @@ function getHelpCatalog(interaction) {
     { name: 'setrole', description: copy.commands.setRoleDescription },
     { name: 'setchannel', description: copy.commands.setChannelDescription },
     { name: 'setfamilytitle', description: copy.commands.setFamilyTitleDescription },
+    { name: 'welcome', description: copy.commands.welcomeDescription },
+    { name: 'autorole', description: copy.commands.autoroleDescription },
     { name: 'setmode', description: copy.commands.setModeDescription },
     { name: 'setmodule', description: copy.commands.setModuleDescription },
     { name: 'setart', description: copy.commands.setArtDescription },
@@ -1031,7 +1120,9 @@ function getHelpCatalog(interaction) {
     { name: 'purgeuser', description: copy.commands.purgeUserDescription },
     { name: 'clearallchannel', description: copy.commands.clearAllChannelDescription },
     { name: 'kickroless', description: copy.commands.kickRolessDescription },
-    { name: 'clearwarns', description: copy.commands.clearWarnsDescription }
+    { name: 'clearwarns', description: copy.commands.clearWarnsDescription },
+    { name: 'reactionrole', description: copy.commands.reactionRoleDescription },
+    { name: 'reportschedule', description: copy.commands.reportScheduleDescription }
   ];
 
   if (isOwner(userId)) {
@@ -1068,6 +1159,9 @@ function canUseCommandInContext(commandName, interaction) {
     case 'setrole':
     case 'setchannel':
     case 'setfamilytitle':
+    case 'welcome':
+    case 'autorole':
+    case 'reactionrole':
     case 'setmode':
     case 'setmodule':
     case 'setart':
@@ -1102,6 +1196,7 @@ function canUseCommandInContext(commandName, interaction) {
       return isOwner(interaction.user.id);
     case 'serverreport':
     case 'activityreport':
+    case 'reportschedule':
       return canDebugConfig(interaction);
     default:
       return true;
@@ -1692,15 +1787,74 @@ async function sendAutomodLog(guild, payload) {
 }
 
 async function sendWelcomeInvite(member) {
-  const { channels, familyTitle, visuals } = resolveGuildSettings(member.guild.id);
-  const channel = (await fetchTextChannel(member.guild, channels.applications)) || (await fetchTextChannel(member.guild, channels.panel));
-  if (!channel) return;
+  const settings = resolveGuildSettings(member.guild.id);
+  if (!settings.welcome.enabled) return;
 
-  await channel.send({
-    content: `<@${member.id}>`,
-    embeds: [embeds.buildWelcomeEmbed(member, familyTitle, visuals.applicationsBanner)],
-    components: embeds.buildApplicationsPanelButtons()
-  }).catch(() => {});
+  const channel = (await fetchTextChannel(member.guild, settings.channels.welcome))
+    || (await fetchTextChannel(member.guild, settings.channels.applications))
+    || (await fetchTextChannel(member.guild, settings.channels.panel));
+
+  if (channel) {
+    await channel.send({
+      content: [`<@${member.id}>`, settings.welcome.message || ''].filter(Boolean).join('\n'),
+      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message)],
+      components: embeds.buildApplicationsPanelButtons()
+    }).catch(() => {});
+  }
+
+  if (settings.welcome.dmEnabled) {
+    await member.send({
+      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message)]
+    }).catch(() => {});
+  }
+}
+
+async function applyAutorole(member) {
+  const settings = resolveGuildSettings(member.guild.id);
+  if (!settings.autoroleRoleId) return false;
+
+  const role = member.guild.roles.cache.get(settings.autoroleRoleId)
+    || await member.guild.roles.fetch(settings.autoroleRoleId).catch(() => null);
+  if (!role) return false;
+
+  return member.roles.add(role, `Autorole via bot for ${member.id}`).then(() => true).catch(() => false);
+}
+
+async function sendScheduledReport(guild, period, channelId = '') {
+  const targetChannelId = channelId || resolveGuildSettings(guild.id).reportSchedule?.[period]?.channelId || resolveGuildSettings(guild.id).channels.reports;
+  if (!targetChannelId) return false;
+
+  const channel = await fetchTextChannel(guild, targetChannelId);
+  if (!channel) return false;
+
+  await channel.send({ embeds: [buildServerStatsReportEmbed(guild, period)] }).catch(() => null);
+  return true;
+}
+
+async function runScheduledReports(guildId, now = new Date()) {
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  if (!guild) return;
+
+  if (!isModuleEnabled(guildId, 'analytics') || !isPremiumGuild(guildId)) {
+    return;
+  }
+
+  const settings = resolveGuildSettings(guildId);
+  const schedule = settings.reportSchedule || {};
+  const plans = [
+    { period: 'weekly', key: getWeeklyReportKey(now), enabled: schedule.weekly?.enabled, channelId: schedule.weekly?.channelId },
+    { period: 'monthly', key: getMonthlyReportKey(now), enabled: schedule.monthly?.enabled, channelId: schedule.monthly?.channelId }
+  ];
+
+  for (const plan of plans) {
+    if (!plan.enabled || !isScheduledReportDue(plan.period, now)) continue;
+    if (getGuildStorage(guildId).getReportMarker(`scheduled:${plan.period}`) === plan.key) continue;
+
+    const sent = await sendScheduledReport(guild, plan.period, plan.channelId);
+    if (sent) {
+      getGuildStorage(guildId).setReportMarker(`scheduled:${plan.period}`, plan.key);
+    }
+  }
 }
 
 function getApplicationsService(guildId) {
@@ -2427,6 +2581,190 @@ client.on('guildMemberUpdate', (oldMember, newMember) => {
   const before = hasFamilyRole(oldMember);
   const after = hasFamilyRole(newMember);
   if (before !== after) setTimeout(() => doPanelUpdate(newMember.guild.id, false), 2000);
+});
+
+async function hydrateReaction(reaction) {
+  if (!reaction) return null;
+  if (reaction.partial) {
+    reaction = await reaction.fetch().catch(() => null);
+  }
+  if (!reaction?.message) return null;
+  if (reaction.message.partial) {
+    await reaction.message.fetch().catch(() => {});
+  }
+  if (!reaction.message?.guild) return null;
+  return reaction;
+}
+
+async function applyReactionRoleChange(reaction, user, action = 'add') {
+  if (!reaction || !user || user.bot) return;
+
+  const guild = reaction.message?.guild;
+  if (!guild) return;
+
+  const guildId = guild.id;
+  const entry = findReactionRoleEntry(guildId, reaction.message.id, getReactionEmojiKey(reaction.emoji));
+  if (!entry || !isPremiumGuild(guildId) || !isModuleEnabled(guildId, 'welcome')) return;
+
+  const member = guild.members.cache.get(user.id)
+    || await guild.members.fetch(user.id).catch(() => null);
+  if (!member) return;
+
+  const role = guild.roles.cache.get(entry.roleId)
+    || await guild.roles.fetch(entry.roleId).catch(() => null);
+  if (!role) return;
+
+  if (action === 'remove') {
+    await member.roles.remove(role, `Reaction role remove ${entry.emoji}`).catch(() => {});
+    return;
+  }
+
+  await member.roles.add(role, `Reaction role add ${entry.emoji}`).catch(() => {});
+}
+
+client.removeAllListeners('clientReady');
+client.on('clientReady', async () => {
+  try {
+    console.log(`Р‘РѕС‚ Р·Р°РїСѓС‰РµРЅ РєР°Рє ${client.user.tag}`);
+
+    const commandsPayload = buildCommands();
+    const commandsSignature = getCommandsSignature(commandsPayload);
+    const guilds = await client.guilds.fetch();
+    for (const guildData of guilds.values()) {
+      try {
+        const guild = await guildData.fetch();
+        const guildRecord = database.ensureGuild(guild.id, {
+          guildName: guild.name,
+          ownerId: guild.ownerId || ''
+        });
+        if (guildRecord.maintenance?.lastCommandSignature !== commandsSignature) {
+          await registerCommands(guild, commandsPayload);
+          database.updateGuildMaintenance(guild.id, {
+            lastCommandSignature: commandsSignature
+          });
+        }
+      } catch (error) {
+        console.error(`РћС€РёР±РєР° РёРЅРёС†РёР°Р»РёР·Р°С†РёРё guild ${guildData.id}:`, error);
+      }
+    }
+
+    setImmediate(() => {
+      void (async () => {
+        for (const guild of client.guilds.cache.values()) {
+          await guild.roles.fetch().catch(error => {
+            console.error(`РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СЂРѕР»Рё guild ${guild.id}:`, error);
+          });
+
+          await guild.members.fetch().catch(error => {
+            console.error(`РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ СѓС‡Р°СЃС‚РЅРёРєРѕРІ guild ${guild.id}:`, error);
+          });
+
+          for (const member of guild.members.cache.values()) {
+            if (member.voice?.channelId) {
+              startVoiceSession(member);
+            }
+          }
+
+          await syncAutoRanks(guild.id, 'startup').catch(error => {
+            console.error(`РћС€РёР±РєР° СЃС‚Р°СЂС‚РѕРІРѕР№ СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё Р°РІС‚Рѕ-СЂР°РЅРіРѕРІ ${guild.id}:`, error);
+          });
+
+          await doPanelUpdate(guild.id, true).catch(error => {
+            console.error(`РћС€РёР±РєР° СЃС‚Р°СЂС‚РѕРІРѕРіРѕ РѕР±РЅРѕРІР»РµРЅРёСЏ РїР°РЅРµР»Рё ${guild.id}:`, error);
+          });
+
+          await announceBuildUpdate(guild).catch(error => {
+            console.error(`РћС€РёР±РєР° Р°РЅРѕРЅСЃР° РѕР±РЅРѕРІР»РµРЅРёСЏ ${guild.id}:`, error);
+          });
+
+          await runRolelessCleanupDetailed(guild.id, 'startup').catch(error => {
+            console.error(`РћС€РёР±РєР° СЃС‚Р°СЂС‚РѕРІРѕР№ С‡РёСЃС‚РєРё ${guild.id}:`, error);
+          });
+
+          await runAfkWarnings(guild.id).catch(error => {
+            console.error(`РћС€РёР±РєР° AFK-РїСЂРѕРІРµСЂРєРё ${guild.id}:`, error);
+          });
+
+          await runScheduledReports(guild.id).catch(error => {
+            console.error(`РћС€РёР±РєР° startup РѕС‚С‡С‘С‚РѕРІ ${guild.id}:`, error);
+          });
+        }
+      })().catch(error => {
+        console.error('Startup guild warmup failed:', error);
+      });
+    });
+
+    setInterval(() => {
+      doPanelUpdateAll(false).catch(error => {
+        console.error('РћС€РёР±РєР° interval РѕР±РЅРѕРІР»РµРЅРёСЏ РїР°РЅРµР»Рё:', error);
+      });
+    }, UPDATE_INTERVAL_MS);
+
+    if (AUTO_RANKS.enabled) {
+      setInterval(() => {
+        syncAutoRanksAll('interval').catch(error => {
+          console.error('РћС€РёР±РєР° interval Р°РІС‚Рѕ-СЂР°РЅРіРѕРІ:', error);
+        });
+      }, AUTO_RANKS.intervalMs);
+    }
+
+    setInterval(() => {
+      for (const guild of client.guilds.cache.values()) {
+        runRolelessCleanupDetailed(guild.id, 'interval').catch(error => {
+          console.error(`РћС€РёР±РєР° interval РѕС‡РёСЃС‚РєРё ${guild.id}:`, error);
+        });
+        runAfkWarnings(guild.id).catch(error => {
+          console.error(`РћС€РёР±РєР° interval AFK-РїСЂРѕРІРµСЂРєРё ${guild.id}:`, error);
+        });
+      }
+    }, AFK_WARNING_CHECK_INTERVAL_MS);
+
+    setInterval(() => {
+      const now = new Date();
+      for (const guild of client.guilds.cache.values()) {
+        runScheduledReports(guild.id, now).catch(error => {
+          console.error(`РћС€РёР±РєР° interval РѕС‚С‡С‘С‚РѕРІ ${guild.id}:`, error);
+        });
+      }
+    }, REPORT_SCHEDULE_CHECK_INTERVAL_MS);
+  } catch (error) {
+    console.error('РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° clientReady:', error);
+  }
+});
+
+client.removeAllListeners('guildMemberAdd');
+client.on('guildMemberAdd', async member => {
+  if (member.user?.bot) return;
+  getGuildStorage(member.guild.id).trackJoin();
+  const blocked = await enforceBlacklist(member);
+  if (blocked) return;
+
+  if (isModuleEnabled(member.guild.id, 'welcome')) {
+    await applyAutorole(member).catch(() => {});
+    await sendWelcomeInvite(member).catch(() => {});
+  }
+});
+
+client.removeAllListeners('messageReactionAdd');
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (!user || user.bot) return;
+  const hydratedReaction = await hydrateReaction(reaction);
+  if (!hydratedReaction?.message?.guild) return;
+
+  const member = hydratedReaction.message.guild.members.cache.get(user.id)
+    || await hydratedReaction.message.guild.members.fetch(user.id).catch(() => null);
+  if (!member) return;
+
+  getGuildStorage(hydratedReaction.message.guild.id).addReaction(user.id);
+  await applyReactionRoleChange(hydratedReaction, user, 'add');
+});
+
+client.removeAllListeners('messageReactionRemove');
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (!user || user.bot) return;
+  const hydratedReaction = await hydrateReaction(reaction);
+  if (!hydratedReaction?.message?.guild) return;
+  await applyReactionRoleChange(hydratedReaction, user, 'remove');
 });
 
 client.on('channelDelete', async channel => {
@@ -3732,6 +4070,261 @@ client.on('interactionCreate', async interaction => {
     }
   } catch (error) {
     console.error('Ошибка interactionCreate:', error);
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+      await interaction.reply(ephemeral({ content: copy.common.unknownError })).catch(() => {});
+    }
+  }
+});
+
+client.on('interactionCreate', async interaction => {
+  try {
+    if (!interaction.isChatInputCommand() || interaction.replied || interaction.deferred) return;
+
+    const guildId = interaction.guild?.id;
+    if (!guildId) return;
+
+    const settings = resolveGuildSettings(guildId);
+    const recordReply = () => embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record: getGuildRecord(interaction.guild) });
+    const periodLabel = period => period === 'monthly' ? copy.reports.periodMonthly : copy.reports.periodWeekly;
+
+    if (interaction.commandName === 'welcome') {
+      if (!canDebugConfig(interaction)) {
+        return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      }
+
+      const subcommand = interaction.options.getSubcommand();
+
+      if (subcommand === copy.commands.welcomeStatusSubcommand) {
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildWelcomeStatusEmbed({
+            enabled: settings.welcome.enabled,
+            channelId: settings.channels.welcome,
+            dmEnabled: settings.welcome.dmEnabled,
+            message: settings.welcome.message,
+            autoroleRoleId: settings.autoroleRoleId
+          })]
+        }));
+      }
+
+      if (subcommand === copy.commands.welcomeToggleSubcommand) {
+        const enabled = interaction.options.getString(copy.commands.stateOptionName, true) === 'on';
+        database.updateGuildSettings(guildId, { welcome: { enabled } });
+        return interaction.reply(ephemeral({
+          content: copy.welcome.updated(enabled ? 'status: on' : 'status: off'),
+          embeds: [embeds.buildWelcomeStatusEmbed({
+            enabled,
+            channelId: resolveGuildSettings(guildId).channels.welcome,
+            dmEnabled: resolveGuildSettings(guildId).welcome.dmEnabled,
+            message: resolveGuildSettings(guildId).welcome.message,
+            autoroleRoleId: resolveGuildSettings(guildId).autoroleRoleId
+          }), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.welcomeChannelSubcommand) {
+        const channel = interaction.options.getChannel(copy.commands.channelValueOptionName, true);
+        database.updateGuildSettings(guildId, { channels: { welcome: channel.id } });
+        return interaction.reply(ephemeral({
+          content: copy.welcome.updated(`channel: <#${channel.id}>`),
+          embeds: [embeds.buildWelcomeStatusEmbed({
+            enabled: resolveGuildSettings(guildId).welcome.enabled,
+            channelId: channel.id,
+            dmEnabled: resolveGuildSettings(guildId).welcome.dmEnabled,
+            message: resolveGuildSettings(guildId).welcome.message,
+            autoroleRoleId: resolveGuildSettings(guildId).autoroleRoleId
+          }), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.welcomeDmSubcommand) {
+        const dmEnabled = interaction.options.getString(copy.commands.stateOptionName, true) === 'on';
+        database.updateGuildSettings(guildId, { welcome: { dmEnabled } });
+        return interaction.reply(ephemeral({
+          content: copy.welcome.updated(dmEnabled ? 'dm: on' : 'dm: off'),
+          embeds: [embeds.buildWelcomeStatusEmbed({
+            enabled: resolveGuildSettings(guildId).welcome.enabled,
+            channelId: resolveGuildSettings(guildId).channels.welcome,
+            dmEnabled,
+            message: resolveGuildSettings(guildId).welcome.message,
+            autoroleRoleId: resolveGuildSettings(guildId).autoroleRoleId
+          }), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.welcomeMessageSubcommand) {
+        const rawMessage = interaction.options.getString(copy.commands.messageOptionName, true).trim();
+        const nextMessage = ['off', 'clear', 'none'].includes(rawMessage.toLowerCase()) ? '' : rawMessage.slice(0, 1000);
+        database.updateGuildSettings(guildId, { welcome: { message: nextMessage } });
+        return interaction.reply(ephemeral({
+          content: nextMessage ? copy.welcome.updated('message') : copy.welcome.messageCleared,
+          embeds: [embeds.buildWelcomeStatusEmbed({
+            enabled: resolveGuildSettings(guildId).welcome.enabled,
+            channelId: resolveGuildSettings(guildId).channels.welcome,
+            dmEnabled: resolveGuildSettings(guildId).welcome.dmEnabled,
+            message: nextMessage,
+            autoroleRoleId: resolveGuildSettings(guildId).autoroleRoleId
+          }), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.welcomeTestSubcommand) {
+        const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (member) {
+          await sendWelcomeInvite(member).catch(() => {});
+        }
+        return interaction.reply(ephemeral({ content: copy.welcome.testSent }));
+      }
+    }
+
+    if (interaction.commandName === 'autorole') {
+      if (!canDebugConfig(interaction)) {
+        return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      }
+
+      const subcommand = interaction.options.getSubcommand();
+      if (subcommand === copy.commands.autoroleStatusSubcommand) {
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildAutoroleStatusEmbed(settings.autoroleRoleId)]
+        }));
+      }
+
+      if (subcommand === copy.commands.autoroleSetSubcommand) {
+        const role = interaction.options.getRole(copy.commands.roleValueOptionName, true);
+        database.updateGuildSettings(guildId, { roles: { autorole: role.id } });
+        return interaction.reply(ephemeral({
+          content: `Autorole настроена: <@&${role.id}>`,
+          embeds: [embeds.buildAutoroleStatusEmbed(role.id), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.autoroleClearSubcommand) {
+        database.updateGuildSettings(guildId, { roles: { autorole: '' } });
+        return interaction.reply(ephemeral({
+          content: 'Autorole отключена.',
+          embeds: [embeds.buildAutoroleStatusEmbed(''), recordReply()]
+        }));
+      }
+    }
+
+    if (interaction.commandName === 'reactionrole') {
+      if (!isPremiumGuild(guildId)) {
+        return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+      }
+      if (!canDebugConfig(interaction)) {
+        return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      }
+
+      const subcommand = interaction.options.getSubcommand();
+      if (subcommand === copy.commands.reactionRoleStatusSubcommand) {
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildReactionRoleStatusEmbed(getReactionRoleEntries(guildId))]
+        }));
+      }
+
+      const messageId = interaction.options.getString(copy.commands.messageIdOptionName, true).trim();
+      const emoji = interaction.options.getString(copy.commands.emojiOptionName, true).trim();
+      const emojiKey = normalizeReactionEmoji(emoji);
+
+      if (subcommand === copy.commands.reactionRoleAddSubcommand) {
+        const role = interaction.options.getRole(copy.commands.roleValueOptionName, true);
+        const channel = interaction.options.getChannel(copy.commands.channelOptionName) || interaction.channel;
+        if (!channel?.isTextBased?.() || typeof channel.messages?.fetch !== 'function') {
+          return interaction.reply(ephemeral({ content: copy.reactionRoles.messageMissing }));
+        }
+
+        const targetMessage = await channel.messages.fetch(messageId).catch(() => null);
+        if (!targetMessage) {
+          return interaction.reply(ephemeral({ content: copy.reactionRoles.messageMissing }));
+        }
+
+        const nextEntries = getReactionRoleEntries(guildId)
+          .filter(entry => !(entry.messageId === messageId && entry.emojiKey === emojiKey))
+          .concat([{ messageId, channelId: channel.id, roleId: role.id, emoji, emojiKey }]);
+
+        database.updateGuildSettings(guildId, { reactionRoles: nextEntries });
+        await targetMessage.react(emoji).catch(() => {});
+
+        return interaction.reply(ephemeral({
+          content: copy.reactionRoles.added(emoji, role.id, messageId),
+          embeds: [embeds.buildReactionRoleStatusEmbed(nextEntries), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.reactionRoleRemoveSubcommand) {
+        const currentEntries = getReactionRoleEntries(guildId);
+        const nextEntries = currentEntries.filter(entry => !(entry.messageId === messageId && entry.emojiKey === emojiKey));
+        if (nextEntries.length === currentEntries.length) {
+          return interaction.reply(ephemeral({ content: copy.reactionRoles.notFound }));
+        }
+
+        database.updateGuildSettings(guildId, { reactionRoles: nextEntries });
+        return interaction.reply(ephemeral({
+          content: copy.reactionRoles.removed(emoji, messageId),
+          embeds: [embeds.buildReactionRoleStatusEmbed(nextEntries), recordReply()]
+        }));
+      }
+    }
+
+    if (interaction.commandName === 'reportschedule') {
+      if (!isPremiumGuild(guildId)) {
+        return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+      }
+      if (!canDebugConfig(interaction)) {
+        return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      }
+
+      const subcommand = interaction.options.getSubcommand();
+      if (subcommand === copy.commands.reportScheduleStatusSubcommand) {
+        return interaction.reply(ephemeral({
+          embeds: [embeds.buildReportScheduleEmbed(settings.reportSchedule, settings.channels)]
+        }));
+      }
+
+      const period = interaction.options.getString(copy.commands.periodOptionName, true);
+
+      if (subcommand === copy.commands.reportScheduleSetSubcommand) {
+        const channel = interaction.options.getChannel(copy.commands.channelValueOptionName);
+        const patch = {
+          reportSchedule: {
+            [period]: {
+              enabled: true,
+              channelId: channel?.id || settings.reportSchedule?.[period]?.channelId || settings.channels.reports || ''
+            }
+          }
+        };
+        if (channel?.id) {
+          patch.channels = { reports: channel.id };
+        }
+        database.updateGuildSettings(guildId, patch);
+        return interaction.reply(ephemeral({
+          content: copy.reports.enabled(periodLabel(period), patch.reportSchedule[period].channelId || settings.channels.reports),
+          embeds: [embeds.buildReportScheduleEmbed(resolveGuildSettings(guildId).reportSchedule, resolveGuildSettings(guildId).channels), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.reportScheduleOffSubcommand) {
+        database.updateGuildSettings(guildId, { reportSchedule: { [period]: { enabled: false } } });
+        return interaction.reply(ephemeral({
+          content: copy.reports.disabled(periodLabel(period)),
+          embeds: [embeds.buildReportScheduleEmbed(resolveGuildSettings(guildId).reportSchedule, resolveGuildSettings(guildId).channels), recordReply()]
+        }));
+      }
+
+      if (subcommand === copy.commands.reportScheduleSendSubcommand) {
+        const channelId = settings.reportSchedule?.[period]?.channelId || settings.channels.reports || interaction.channelId;
+        const sent = await sendScheduledReport(interaction.guild, period, channelId);
+        if (!sent) {
+          return interaction.reply(ephemeral({ content: copy.reports.channelMissing }));
+        }
+
+        return interaction.reply(ephemeral({
+          content: copy.reports.sent(periodLabel(period), channelId),
+          embeds: [embeds.buildReportScheduleEmbed(resolveGuildSettings(guildId).reportSchedule, resolveGuildSettings(guildId).channels)]
+        }));
+      }
+    }
+  } catch (error) {
+    console.error('Extended interactionCreate error:', error);
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
       await interaction.reply(ephemeral({ content: copy.common.unknownError })).catch(() => {});
     }

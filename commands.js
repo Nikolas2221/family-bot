@@ -25,7 +25,8 @@ function buildCommands() {
             { name: copy.commands.roleTargetElder, value: 'elder' },
             { name: copy.commands.roleTargetMember, value: 'member' },
             { name: copy.commands.roleTargetNewbie, value: 'newbie' },
-            { name: copy.commands.roleTargetMute, value: 'mute' }
+            { name: copy.commands.roleTargetMute, value: 'mute' },
+            { name: copy.commands.roleTargetAutorole, value: 'autorole' }
           )
       )
       .addRoleOption(option =>
@@ -42,9 +43,11 @@ function buildCommands() {
           .addChoices(
             { name: copy.commands.channelTargetPanel, value: 'panel' },
             { name: copy.commands.channelTargetApplications, value: 'applications' },
+            { name: copy.commands.channelTargetWelcome, value: 'welcome' },
             { name: copy.commands.channelTargetLogs, value: 'logs' },
             { name: copy.commands.channelTargetDiscipline, value: 'disciplineLogs' },
-            { name: copy.commands.channelTargetUpdates, value: 'updates' }
+            { name: copy.commands.channelTargetUpdates, value: 'updates' },
+            { name: copy.commands.channelTargetReports, value: 'reports' }
           )
       )
       .addChannelOption(option =>
@@ -211,6 +214,211 @@ function buildCommands() {
           .setName(copy.commands.artUrlOptionName)
           .setDescription(copy.commands.artUrlDescription)
           .setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('welcome')
+      .setDescription(copy.commands.welcomeDescription)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.welcomeStatusSubcommand)
+          .setDescription(copy.commands.welcomeStatusDescription)
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.welcomeToggleSubcommand)
+          .setDescription(copy.commands.welcomeToggleDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.stateOptionName)
+              .setDescription(copy.commands.stateOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.stateOn, value: 'on' },
+                { name: copy.commands.stateOff, value: 'off' }
+              )
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.welcomeChannelSubcommand)
+          .setDescription(copy.commands.welcomeChannelDescription)
+          .addChannelOption(option =>
+            option
+              .setName(copy.commands.channelValueOptionName)
+              .setDescription(copy.commands.channelValueDescription)
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.welcomeDmSubcommand)
+          .setDescription(copy.commands.welcomeDmDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.stateOptionName)
+              .setDescription(copy.commands.stateOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.stateOn, value: 'on' },
+                { name: copy.commands.stateOff, value: 'off' }
+              )
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.welcomeMessageSubcommand)
+          .setDescription(copy.commands.welcomeMessageDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.messageOptionName)
+              .setDescription(copy.commands.messageOptionDescription)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.welcomeTestSubcommand)
+          .setDescription(copy.commands.welcomeTestDescription)
+      ),
+    new SlashCommandBuilder()
+      .setName('autorole')
+      .setDescription(copy.commands.autoroleDescription)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.autoroleStatusSubcommand)
+          .setDescription(copy.commands.autoroleStatusDescription)
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.autoroleSetSubcommand)
+          .setDescription(copy.commands.autoroleSetDescription)
+          .addRoleOption(option =>
+            option
+              .setName(copy.commands.roleValueOptionName)
+              .setDescription(copy.commands.roleValueDescription)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.autoroleClearSubcommand)
+          .setDescription(copy.commands.autoroleClearDescription)
+      ),
+    new SlashCommandBuilder()
+      .setName('reactionrole')
+      .setDescription(copy.commands.reactionRoleDescription)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.reactionRoleStatusSubcommand)
+          .setDescription(copy.commands.reactionRoleStatusDescription)
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.reactionRoleAddSubcommand)
+          .setDescription(copy.commands.reactionRoleAddDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.messageIdOptionName)
+              .setDescription(copy.commands.messageIdOptionDescription)
+              .setRequired(true)
+          )
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.emojiOptionName)
+              .setDescription(copy.commands.emojiOptionDescription)
+              .setRequired(true)
+          )
+          .addRoleOption(option =>
+            option
+              .setName(copy.commands.roleValueOptionName)
+              .setDescription(copy.commands.roleValueDescription)
+              .setRequired(true)
+          )
+          .addChannelOption(option =>
+            option
+              .setName(copy.commands.channelOptionName)
+              .setDescription(copy.commands.channelOptionDescription)
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.reactionRoleRemoveSubcommand)
+          .setDescription(copy.commands.reactionRoleRemoveDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.messageIdOptionName)
+              .setDescription(copy.commands.messageIdOptionDescription)
+              .setRequired(true)
+          )
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.emojiOptionName)
+              .setDescription(copy.commands.emojiOptionDescription)
+              .setRequired(true)
+          )
+      ),
+    new SlashCommandBuilder()
+      .setName('reportschedule')
+      .setDescription(copy.commands.reportScheduleDescription)
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.reportScheduleStatusSubcommand)
+          .setDescription(copy.commands.reportScheduleStatusDescription)
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.reportScheduleSetSubcommand)
+          .setDescription(copy.commands.reportScheduleSetDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.periodOptionName)
+              .setDescription(copy.commands.periodOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.periodWeekly, value: 'weekly' },
+                { name: copy.commands.periodMonthly, value: 'monthly' }
+              )
+          )
+          .addChannelOption(option =>
+            option
+              .setName(copy.commands.channelValueOptionName)
+              .setDescription(copy.commands.channelValueDescription)
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.reportScheduleOffSubcommand)
+          .setDescription(copy.commands.reportScheduleOffDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.periodOptionName)
+              .setDescription(copy.commands.periodOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.periodWeekly, value: 'weekly' },
+                { name: copy.commands.periodMonthly, value: 'monthly' }
+              )
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.reportScheduleSendSubcommand)
+          .setDescription(copy.commands.reportScheduleSendDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.periodOptionName)
+              .setDescription(copy.commands.periodOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.periodWeekly, value: 'weekly' },
+                { name: copy.commands.periodMonthly, value: 'monthly' }
+              )
+          )
       ),
     new SlashCommandBuilder().setName('leaderboard').setDescription(copy.commands.leaderboardDescription),
     new SlashCommandBuilder().setName('voiceactivity').setDescription(copy.commands.voiceActivityDescription),

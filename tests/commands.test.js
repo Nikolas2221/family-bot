@@ -62,11 +62,24 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   const automod = commands.find(command => command.name === 'automod');
   const serverReport = commands.find(command => command.name === 'serverreport');
   const setChannel = commands.find(command => command.name === 'setchannel');
+  const setRole = commands.find(command => command.name === 'setrole');
+  const welcome = commands.find(command => command.name === 'welcome');
+  const autorole = commands.find(command => command.name === 'autorole');
+  const reactionRole = commands.find(command => command.name === 'reactionrole');
+  const reportSchedule = commands.find(command => command.name === 'reportschedule');
 
   assert.ok(automod);
   assert.ok(serverReport);
   assert.ok(setChannel);
+  assert.ok(setRole);
+  assert.ok(welcome);
+  assert.ok(autorole);
+  assert.ok(reactionRole);
+  assert.ok(reportSchedule);
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'updates'), true);
+  assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'welcome'), true);
+  assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'reports'), true);
+  assert.equal((setRole.options[0].choices || []).some(choice => choice.value === 'autorole'), true);
 }
 
 async function testCommandSignatureIsStable() {
