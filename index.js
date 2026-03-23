@@ -130,10 +130,12 @@ function resolveGuildSettings(guildId) {
       panel,
       applications: settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
       welcome: settings.channels?.welcome || settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
+      rules: settings.channels?.rules || '',
       logs,
       disciplineLogs: settings.channels?.disciplineLogs || DISCIPLINE_LOG_CHANNEL_ID || logs || '',
       updates: settings.channels?.updates || '',
-      reports: settings.channels?.reports || logs || ''
+      reports: settings.channels?.reports || logs || '',
+      automod: settings.channels?.automod || logs || ''
     },
     roles,
     access: {
@@ -143,6 +145,7 @@ function resolveGuildSettings(guildId) {
     },
     muteRoleId: settings.roles?.mute || '',
     autoroleRoleId: settings.roles?.autorole || '',
+    verificationRoleId: settings.roles?.verification || '',
     visuals: {
       familyBanner: settings.visuals?.familyBanner || '',
       applicationsBanner: settings.visuals?.applicationsBanner || ''
@@ -152,7 +155,13 @@ function resolveGuildSettings(guildId) {
       dmEnabled: Boolean(settings.welcome?.dmEnabled),
       message: String(settings.welcome?.message || '').trim().slice(0, 1000)
     },
+    verification: {
+      enabled: Boolean(settings.verification?.enabled),
+      questionnaireEnabled: Boolean(settings.verification?.questionnaireEnabled),
+      roleId: String(settings.verification?.roleId || settings.roles?.verification || settings.roles?.autorole || '').trim()
+    },
     reactionRoles: Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [],
+    roleMenus: Array.isArray(settings.roleMenus) ? settings.roleMenus : [],
     reportSchedule: {
       weekly: {
         enabled: Boolean(settings.reportSchedule?.weekly?.enabled),
@@ -163,6 +172,7 @@ function resolveGuildSettings(guildId) {
         channelId: settings.reportSchedule?.monthly?.channelId || settings.channels?.reports || logs || ''
       }
     },
+    customCommands: Array.isArray(settings.customCommands) ? settings.customCommands : [],
     automod: normalizeAutomodConfig(settings.automod),
     modules: {
       family: settings.modules?.family ?? defaultModules.family,
@@ -347,10 +357,12 @@ function buildGuildSettingsSnapshot(guild) {
         panel: settings.channels.panel,
         applications: settings.channels.applications,
         welcome: settings.channels.welcome,
+        rules: settings.channels.rules,
         logs: settings.channels.logs,
         disciplineLogs: settings.channels.disciplineLogs,
         updates: settings.channels.updates,
-        reports: settings.channels.reports
+        reports: settings.channels.reports,
+        automod: settings.channels.automod
       },
       roles: {
         leader: settings.roles.find(role => role.key === 'leader')?.id || '',
@@ -359,7 +371,8 @@ function buildGuildSettingsSnapshot(guild) {
         member: settings.roles.find(role => role.key === 'member')?.id || '',
         newbie: settings.roles.find(role => role.key === 'newbie')?.id || '',
         mute: settings.muteRoleId || '',
-        autorole: settings.autoroleRoleId || ''
+        autorole: settings.autoroleRoleId || '',
+        verification: settings.verificationRoleId || ''
       },
       access: {
         applications: settings.access.applications,
@@ -371,8 +384,11 @@ function buildGuildSettingsSnapshot(guild) {
         applicationsBanner: settings.visuals.applicationsBanner
       },
       welcome: settings.welcome,
+      verification: settings.verification,
       reactionRoles: settings.reactionRoles,
+      roleMenus: settings.roleMenus,
       reportSchedule: settings.reportSchedule,
+      customCommands: settings.customCommands,
       automod: settings.automod,
       modules: {
         ...settings.modules
@@ -1052,9 +1068,13 @@ function getCommandModule(commandName) {
     case 'welcome':
     case 'autorole':
     case 'reactionrole':
+    case 'verification':
+    case 'rolemenu':
       return 'welcome';
     case 'automod':
       return 'automod';
+    case 'customcommand':
+      return 'customCommands';
     default:
       return null;
   }
@@ -1940,7 +1960,12 @@ async function announceBuildUpdate(guild) {
 
 async function sendAutomodLog(guild, payload) {
   const embed = embeds.buildAutomodActionEmbed(payload);
-  await sendServerLogEmbed(guild, embed);
+  const settings = resolveGuildSettings(guild.id);
+  const channelId = settings.channels.automod || settings.channels.logs;
+  if (!channelId) return;
+  const channel = await fetchTextChannel(guild, channelId);
+  if (!channel) return;
+  await channel.send({ embeds: [embed] }).catch(() => {});
 }
 
 async function sendWelcomeInvite(member) {
@@ -1954,14 +1979,24 @@ async function sendWelcomeInvite(member) {
   if (channel) {
     await channel.send({
       content: [`<@${member.id}>`, settings.welcome.message || ''].filter(Boolean).join('\n'),
-      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message)],
-      components: embeds.buildApplicationsPanelButtons()
+      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message, {
+        rulesChannelId: settings.channels.rules,
+        panelChannelId: settings.channels.panel,
+        applicationsChannelId: settings.channels.applications,
+        verificationEnabled: settings.verification.enabled
+      })],
+      components: embeds.buildWelcomeButtons()
     }).catch(() => {});
   }
 
   if (settings.welcome.dmEnabled) {
     await member.send({
-      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message)]
+      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message, {
+        rulesChannelId: settings.channels.rules,
+        panelChannelId: settings.channels.panel,
+        applicationsChannelId: settings.channels.applications,
+        verificationEnabled: settings.verification.enabled
+      })]
     }).catch(() => {});
   }
 }
@@ -1975,6 +2010,78 @@ async function applyAutorole(member) {
   if (!role) return false;
 
   return member.roles.add(role, `Autorole via bot for ${member.id}`).then(() => true).catch(() => false);
+}
+
+function getVerificationRoleId(guildId) {
+  const settings = resolveGuildSettings(guildId);
+  return settings.verification.roleId || settings.verificationRoleId || settings.autoroleRoleId || '';
+}
+
+async function applyVerificationRole(member) {
+  const roleId = getVerificationRoleId(member.guild.id);
+  if (!roleId) return { ok: false, roleId: '' };
+
+  const role = member.guild.roles.cache.get(roleId)
+    || await member.guild.roles.fetch(roleId).catch(() => null);
+  if (!role) return { ok: false, roleId };
+
+  const hasRole = member.roles.cache.has(role.id);
+  if (hasRole) return { ok: true, roleId: role.id, already: true };
+
+  const ok = await member.roles.add(role, `Verification via bot for ${member.id}`).then(() => true).catch(() => false);
+  return { ok, roleId: role.id };
+}
+
+function getRoleMenuEntries(guildId) {
+  return resolveGuildSettings(guildId).roleMenus || [];
+}
+
+function findRoleMenu(guildId, menuId) {
+  const normalized = String(menuId || '').trim().toLowerCase();
+  return getRoleMenuEntries(guildId).find(menu => menu.menuId === normalized) || null;
+}
+
+function saveRoleMenu(guildId, nextMenu) {
+  const current = getRoleMenuEntries(guildId).filter(menu => menu.menuId !== nextMenu.menuId);
+  database.updateGuildSettings(guildId, { roleMenus: [...current, nextMenu] });
+  return findRoleMenu(guildId, nextMenu.menuId);
+}
+
+function removeRoleMenuItem(guildId, menuId, roleId) {
+  const menu = findRoleMenu(guildId, menuId);
+  if (!menu) return null;
+  const nextMenu = {
+    ...menu,
+    items: (menu.items || []).filter(item => item.roleId !== roleId)
+  };
+  saveRoleMenu(guildId, nextMenu);
+  return nextMenu;
+}
+
+function getCustomCommands(guildId) {
+  return resolveGuildSettings(guildId).customCommands || [];
+}
+
+function matchCustomCommand(command, content) {
+  const haystack = String(content || '').trim().toLowerCase();
+  const trigger = String(command?.trigger || '').trim().toLowerCase();
+  if (!haystack || !trigger) return false;
+  if (command.mode === 'exact') return haystack === trigger;
+  if (command.mode === 'startsWith') return haystack.startsWith(trigger);
+  return haystack.includes(trigger);
+}
+
+async function handleCustomTriggerMessage(message) {
+  if (!message.guild || message.author?.bot) return false;
+  const guildId = message.guild.id;
+  if (!isModuleEnabled(guildId, 'customCommands')) return false;
+  if (!isPremiumGuild(guildId)) return false;
+
+  const match = getCustomCommands(guildId).find(command => matchCustomCommand(command, message.content));
+  if (!match) return false;
+
+  await message.channel.send({ content: match.response }).catch(() => {});
+  return true;
 }
 
 async function sendScheduledReport(guild, period, channelId = '') {
@@ -2065,6 +2172,14 @@ async function handleAutomodMessage(message) {
   }
 
   await message.delete().catch(() => {});
+  let punishmentLabel = 'soft';
+  if (automod.actionMode === 'hard' && message.member?.moderatable) {
+    const timeoutMs = Math.max(1, Number(automod.timeoutMinutes) || 10) * 60 * 1000;
+    const timedOut = await message.member.timeout(timeoutMs, `Automod: ${triggered.rule}`).then(() => true).catch(() => false);
+    if (timedOut) {
+      punishmentLabel = `hard/${automod.timeoutMinutes || 10}m`;
+    }
+  }
   const notice = await message.channel.send({
     content: copy.automod.notice(message.author.id, copy.automod.ruleLabel(triggered.rule), triggered.detail)
   }).catch(() => null);
@@ -2076,7 +2191,7 @@ async function handleAutomodMessage(message) {
   await sendAutomodLog(message.guild, {
     member: message.member,
     rule: triggered.rule,
-    detail: triggered.detail,
+    detail: [triggered.detail, punishmentLabel].filter(Boolean).join(' • '),
     channelId: message.channel.id,
     content: message.content
   }).catch(() => {});
@@ -2678,6 +2793,7 @@ client.on('messageCreate', async message => {
   }
 
   guildStorage.trackAnalyticsMessage(message.member.id, message.channel.id);
+  await handleCustomTriggerMessage(message).catch(() => {});
 
   if (!hasFamilyRole(message.member)) return;
   guildStorage.trackMessage(message.member.id);
@@ -2897,7 +3013,10 @@ client.on('guildMemberAdd', async member => {
   if (blocked) return;
 
   if (isModuleEnabled(member.guild.id, 'welcome')) {
-    await applyAutorole(member).catch(() => {});
+    const settings = resolveGuildSettings(member.guild.id);
+    if (!settings.verification.enabled) {
+      await applyAutorole(member).catch(() => {});
+    }
     await sendWelcomeInvite(member).catch(() => {});
   }
 });
@@ -3149,7 +3268,7 @@ client.on('interactionCreate', async interaction => {
 
         if (subcommand === copy.commands.automodStatusSubcommand) {
           return interaction.reply(ephemeral({
-            embeds: [embeds.buildAutomodStatusEmbed(current)]
+            embeds: [embeds.buildAutomodStatusEmbed(current, resolveGuildSettings(guildId).channels.automod)]
           }));
         }
 
@@ -3165,7 +3284,7 @@ client.on('interactionCreate', async interaction => {
           return interaction.reply(ephemeral({
             content: copy.automod.toggleDone(copy.automod.ruleLabel(rule), enabled),
             embeds: [
-              embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod),
+              embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod),
               embeds.buildAdminPanelEmbed({ guildName: interaction.guild.name, record })
             ]
           }));
@@ -3182,7 +3301,16 @@ client.on('interactionCreate', async interaction => {
           database.updateGuildSettings(guildId, { automod: patch });
           return interaction.reply(ephemeral({
             content: copy.automod.limitDone(copy.automod.targetLabel(target), Object.values(patch)[0]),
-            embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+            embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
+          }));
+        }
+
+        if (subcommand === copy.commands.automodActionSubcommand) {
+          const mode = interaction.options.getString(copy.commands.actionModeOptionName, true);
+          database.updateGuildSettings(guildId, { automod: { actionMode: mode } });
+          return interaction.reply(ephemeral({
+            content: copy.automod.actionUpdated(mode === 'hard' ? 'жёсткий' : 'мягкий'),
+            embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
           }));
         }
 
@@ -3206,7 +3334,7 @@ client.on('interactionCreate', async interaction => {
             database.updateGuildSettings(guildId, { automod: { badWords: [] } });
             return interaction.reply(ephemeral({
               content: copy.automod.wordsCleared,
-              embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+              embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
             }));
           }
 
@@ -3219,7 +3347,7 @@ client.on('interactionCreate', async interaction => {
             database.updateGuildSettings(guildId, { automod: { badWords: nextWords, badWordsEnabled: true } });
             return interaction.reply(ephemeral({
               content: copy.automod.wordAdded(word),
-              embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+              embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
             }));
           }
 
@@ -3227,7 +3355,7 @@ client.on('interactionCreate', async interaction => {
           database.updateGuildSettings(guildId, { automod: { badWords: nextWords } });
           return interaction.reply(ephemeral({
             content: copy.automod.wordRemoved(word),
-            embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod)]
+            embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
           }));
         }
       }
@@ -4482,6 +4610,300 @@ client.on('interactionCreate', async interaction => {
     }
   } catch (error) {
     console.error('Extended interactionCreate error:', error);
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+      await interaction.reply(ephemeral({ content: copy.common.unknownError })).catch(() => {});
+    }
+  }
+});
+
+client.on('interactionCreate', async interaction => {
+  try {
+    const guildId = interaction.guild?.id;
+    if (!guildId) return;
+    const settings = resolveGuildSettings(guildId);
+
+    if (interaction.isChatInputCommand() && !interaction.replied && !interaction.deferred) {
+      if (interaction.commandName === 'verification') {
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        if (subcommand === copy.commands.verificationStatusSubcommand) {
+          return interaction.reply(ephemeral({
+            embeds: [embeds.buildVerificationStatusEmbed(settings.verification)]
+          }));
+        }
+
+        if (subcommand === copy.commands.verificationToggleSubcommand) {
+          const enabled = interaction.options.getString(copy.commands.stateOptionName, true) === 'on';
+          database.updateGuildSettings(guildId, { verification: { enabled } });
+          return interaction.reply(ephemeral({
+            content: copy.verification.updated(enabled ? 'status: on' : 'status: off'),
+            embeds: [embeds.buildVerificationStatusEmbed(resolveGuildSettings(guildId).verification)]
+          }));
+        }
+
+        if (subcommand === copy.commands.verificationRoleSubcommand) {
+          const role = interaction.options.getRole(copy.commands.roleValueOptionName, true);
+          database.updateGuildSettings(guildId, {
+            verification: { roleId: role.id },
+            roles: { verification: role.id }
+          });
+          return interaction.reply(ephemeral({
+            content: copy.verification.updated(`role: <@&${role.id}>`),
+            embeds: [embeds.buildVerificationStatusEmbed(resolveGuildSettings(guildId).verification)]
+          }));
+        }
+
+        if (subcommand === copy.commands.verificationQuestionnaireSubcommand) {
+          const questionnaireEnabled = interaction.options.getString(copy.commands.stateOptionName, true) === 'on';
+          database.updateGuildSettings(guildId, { verification: { questionnaireEnabled } });
+          return interaction.reply(ephemeral({
+            content: copy.verification.updated(questionnaireEnabled ? 'questionnaire: on' : 'questionnaire: off'),
+            embeds: [embeds.buildVerificationStatusEmbed(resolveGuildSettings(guildId).verification)]
+          }));
+        }
+      }
+
+      if (interaction.commandName === 'rolemenu') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        if (subcommand === copy.commands.roleMenuStatusSubcommand) {
+          return interaction.reply(ephemeral({
+            embeds: [embeds.buildRoleMenuStatusEmbed(getRoleMenuEntries(guildId))]
+          }));
+        }
+
+        const menuId = interaction.options.getString(copy.commands.menuOptionName, true).trim().toLowerCase();
+
+        if (subcommand === copy.commands.roleMenuCreateSubcommand) {
+          const title = interaction.options.getString(copy.commands.titleOptionName, true).trim().slice(0, 80);
+          const description = (interaction.options.getString(copy.commands.descriptionOptionName) || '').trim().slice(0, 400);
+          const category = (interaction.options.getString(copy.commands.categoryOptionName) || '').trim().slice(0, 40);
+          const channel = interaction.options.getChannel(copy.commands.channelValueOptionName);
+          const nextMenu = {
+            menuId,
+            title,
+            description,
+            category,
+            channelId: channel?.id || '',
+            messageId: '',
+            items: findRoleMenu(guildId, menuId)?.items || []
+          };
+          saveRoleMenu(guildId, nextMenu);
+          return interaction.reply(ephemeral({
+            content: copy.roleMenus.created(menuId),
+            embeds: [embeds.buildRoleMenuStatusEmbed(getRoleMenuEntries(guildId))]
+          }));
+        }
+
+        const menu = findRoleMenu(guildId, menuId);
+        if (!menu) {
+          return interaction.reply(ephemeral({ content: copy.roleMenus.notFound }));
+        }
+
+        if (subcommand === copy.commands.roleMenuAddSubcommand) {
+          const role = interaction.options.getRole(copy.commands.roleValueOptionName, true);
+          const label = interaction.options.getString(copy.commands.titleOptionName, true).trim().slice(0, 80);
+          const emoji = (interaction.options.getString(copy.commands.emojiOptionName) || '').trim().slice(0, 32);
+          const description = (interaction.options.getString(copy.commands.descriptionOptionName) || '').trim().slice(0, 120);
+          const nextMenu = {
+            ...menu,
+            items: [...(menu.items || []).filter(item => item.roleId !== role.id), { roleId: role.id, label, emoji, description }]
+          };
+          saveRoleMenu(guildId, nextMenu);
+          return interaction.reply(ephemeral({
+            content: copy.roleMenus.itemAdded(menuId, role.id),
+            embeds: [embeds.buildRoleMenuStatusEmbed(getRoleMenuEntries(guildId))]
+          }));
+        }
+
+        if (subcommand === copy.commands.roleMenuRemoveSubcommand) {
+          const role = interaction.options.getRole(copy.commands.roleValueOptionName, true);
+          removeRoleMenuItem(guildId, menuId, role.id);
+          return interaction.reply(ephemeral({
+            content: copy.roleMenus.itemRemoved(menuId, role.id),
+            embeds: [embeds.buildRoleMenuStatusEmbed(getRoleMenuEntries(guildId))]
+          }));
+        }
+
+        if (subcommand === copy.commands.roleMenuPublishSubcommand) {
+          const targetChannel = interaction.options.getChannel(copy.commands.channelValueOptionName)
+            || (menu.channelId ? await fetchTextChannel(interaction.guild, menu.channelId) : null)
+            || interaction.channel;
+          if (!targetChannel?.isTextBased?.()) {
+            return interaction.reply(ephemeral({ content: copy.reactionRoles.messageMissing }));
+          }
+
+          const published = await targetChannel.send({
+            embeds: [embeds.buildRoleMenuEmbed(menu)],
+            components: embeds.buildRoleMenuComponents(menu)
+          }).catch(() => null);
+
+          if (!published) {
+            return interaction.reply(ephemeral({ content: copy.common.unknownError }));
+          }
+
+          saveRoleMenu(guildId, { ...menu, channelId: targetChannel.id, messageId: published.id });
+          return interaction.reply(ephemeral({
+            content: copy.roleMenus.published(menuId, targetChannel.id),
+            embeds: [embeds.buildRoleMenuStatusEmbed(getRoleMenuEntries(guildId))]
+          }));
+        }
+      }
+
+      if (interaction.commandName === 'customcommand') {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+        if (!canDebugConfig(interaction)) {
+          return interaction.reply(ephemeral({ content: copy.common.noAccess }));
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        const current = getCustomCommands(guildId);
+
+        if (subcommand === copy.commands.customCommandStatusSubcommand) {
+          return interaction.reply(ephemeral({
+            embeds: [embeds.buildCustomCommandsEmbed(current)]
+          }));
+        }
+
+        if (subcommand === copy.commands.customCommandAddSubcommand) {
+          const name = interaction.options.getString(copy.commands.titleOptionName, true).trim().toLowerCase().slice(0, 32);
+          const trigger = interaction.options.getString(copy.commands.triggerOptionName, true).trim().toLowerCase().slice(0, 120);
+          const response = interaction.options.getString(copy.commands.responseOptionName, true).trim().slice(0, 1500);
+          const mode = interaction.options.getString(copy.commands.modeChoiceOptionName) || 'contains';
+          const next = current.filter(item => item.name !== name).concat([{ name, trigger, response, mode }]);
+          database.updateGuildSettings(guildId, { customCommands: next });
+          return interaction.reply(ephemeral({
+            content: copy.customCommands.added(name),
+            embeds: [embeds.buildCustomCommandsEmbed(resolveGuildSettings(guildId).customCommands)]
+          }));
+        }
+
+        if (subcommand === copy.commands.customCommandRemoveSubcommand) {
+          const name = interaction.options.getString(copy.commands.titleOptionName, true).trim().toLowerCase();
+          const next = current.filter(item => item.name !== name);
+          if (next.length === current.length) {
+            return interaction.reply(ephemeral({ content: copy.customCommands.notFound }));
+          }
+          database.updateGuildSettings(guildId, { customCommands: next });
+          return interaction.reply(ephemeral({
+            content: copy.customCommands.removed(name),
+            embeds: [embeds.buildCustomCommandsEmbed(resolveGuildSettings(guildId).customCommands)]
+          }));
+        }
+      }
+    }
+
+    if (interaction.isButton() && !interaction.replied && !interaction.deferred) {
+      if (interaction.customId === 'welcome_rules') {
+        return interaction.reply(ephemeral({
+          content: [
+            settings.channels.rules ? `Правила: <#${settings.channels.rules}>` : '',
+            settings.channels.panel ? `Панель семьи: <#${settings.channels.panel}>` : '',
+            settings.channels.applications ? `Подача заявки: <#${settings.channels.applications}>` : ''
+          ].filter(Boolean).join('\n') || 'Каналы правил и навигации пока не настроены.'
+        }));
+      }
+
+      if (interaction.customId === 'welcome_verify') {
+        if (!settings.verification.enabled) {
+          return interaction.reply(ephemeral({ content: copy.verification.disabled }));
+        }
+
+        const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!member) {
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+        }
+
+        const targetRoleId = getVerificationRoleId(guildId);
+        if (!targetRoleId) {
+          return interaction.reply(ephemeral({ content: copy.verification.roleMissing }));
+        }
+
+        if (member.roles.cache.has(targetRoleId)) {
+          return interaction.reply(ephemeral({ content: copy.verification.alreadyVerified }));
+        }
+
+        if (settings.verification.questionnaireEnabled) {
+          return interaction.showModal(embeds.buildVerificationModal());
+        }
+
+        const result = await applyVerificationRole(member);
+        return interaction.reply(ephemeral({
+          content: result.ok ? copy.verification.success(result.roleId) : copy.verification.noPermission
+        }));
+      }
+
+      if (interaction.customId.startsWith('rolemenu_toggle:')) {
+        if (!isPremiumGuild(guildId)) {
+          return interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        }
+
+        const [, menuId, roleId] = interaction.customId.split(':');
+        const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!member) {
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+        }
+
+        const role = interaction.guild.roles.cache.get(roleId) || await interaction.guild.roles.fetch(roleId).catch(() => null);
+        if (!role) {
+          return interaction.reply(ephemeral({ content: copy.common.unknownError }));
+        }
+
+        if (member.roles.cache.has(role.id)) {
+          await member.roles.remove(role, `Role menu ${menuId}`).catch(() => {});
+          return interaction.reply(ephemeral({ content: copy.roleMenus.roleRemoved(role.id) }));
+        }
+
+        await member.roles.add(role, `Role menu ${menuId}`).catch(() => {});
+        return interaction.reply(ephemeral({ content: copy.roleMenus.roleAdded(role.id) }));
+      }
+    }
+
+    if (interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
+      if (interaction.customId === 'welcome_verification_modal') {
+        const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!member) {
+          return interaction.reply(ephemeral({ content: copy.profile.notFound }));
+        }
+
+        const result = await applyVerificationRole(member);
+        const logsChannel = await fetchTextChannel(interaction.guild, settings.channels.logs).catch(() => null);
+        if (logsChannel) {
+          await logsChannel.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x10b981)
+                .setTitle('✅ Новичок прошёл verification')
+                .setDescription([
+                  `Пользователь: <@${interaction.user.id}>`,
+                  `Ник: ${interaction.fields.getTextInputValue('verify_nick')}`,
+                  `Причина: ${interaction.fields.getTextInputValue('verify_reason')}`,
+                  `Правила: ${interaction.fields.getTextInputValue('verify_rules')}`
+                ].join('\n'))
+                .setFooter({ text: 'BRHD • Phoenix • Verification' })
+                .setTimestamp()
+            ]
+          }).catch(() => {});
+        }
+
+        return interaction.reply(ephemeral({
+          content: result.ok ? copy.verification.success(result.roleId) : copy.verification.noPermission
+        }));
+      }
+    }
+  } catch (error) {
+    console.error('Welcome/rolemenu/custom interaction error:', error);
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
       await interaction.reply(ephemeral({ content: copy.common.unknownError })).catch(() => {});
     }

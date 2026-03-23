@@ -817,4 +817,117 @@ copy.reports.sent = function sent(period, channelId) {
 };
 copy.reports.channelMissing = 'Сначала укажи канал отчётов или передай канал в команду.';
 
+copy.commands.roleTargetVerification = 'Роль после подтверждения';
+copy.commands.channelTargetRules = 'Правила';
+copy.commands.channelTargetAutomod = 'Логи automod';
+
+copy.commands.verificationDescription = 'Настроить проверку новичков';
+copy.commands.verificationStatusSubcommand = 'status';
+copy.commands.verificationToggleSubcommand = 'toggle';
+copy.commands.verificationRoleSubcommand = 'role';
+copy.commands.verificationQuestionnaireSubcommand = 'questionnaire';
+
+copy.commands.roleMenuDescription = 'Настроить role-menu с кнопками';
+copy.commands.roleMenuStatusSubcommand = 'status';
+copy.commands.roleMenuCreateSubcommand = 'create';
+copy.commands.roleMenuAddSubcommand = 'add';
+copy.commands.roleMenuRemoveSubcommand = 'remove';
+copy.commands.roleMenuPublishSubcommand = 'publish';
+
+copy.commands.customCommandDescription = 'Настроить свои автоответы и триггеры';
+copy.commands.customCommandStatusSubcommand = 'status';
+copy.commands.customCommandAddSubcommand = 'add';
+copy.commands.customCommandRemoveSubcommand = 'remove';
+
+copy.commands.automodActionSubcommand = 'action';
+copy.commands.automodActionDescription = 'Выбрать мягкое или жёсткое наказание';
+copy.commands.automodActionModeSoft = 'Мягкий режим';
+copy.commands.automodActionModeHard = 'Жёсткий режим';
+
+copy.commands.menuOptionName = 'menu';
+copy.commands.menuOptionDescription = 'ID или имя меню';
+copy.commands.titleOptionName = 'title';
+copy.commands.titleOptionDescription = 'Заголовок';
+copy.commands.descriptionOptionName = 'description';
+copy.commands.descriptionOptionDescription = 'Описание';
+copy.commands.categoryOptionName = 'category';
+copy.commands.categoryOptionDescription = 'Категория';
+copy.commands.triggerOptionName = 'trigger';
+copy.commands.triggerOptionDescription = 'Ключевое слово или фраза';
+copy.commands.responseOptionName = 'response';
+copy.commands.responseOptionDescription = 'Ответ бота';
+copy.commands.modeChoiceOptionName = 'mode';
+copy.commands.modeChoiceOptionDescription = 'Как искать совпадение';
+copy.commands.modeContains = 'Содержит';
+copy.commands.modeStartsWith = 'Начинается с';
+copy.commands.modeExact = 'Точное совпадение';
+copy.commands.actionModeOptionName = 'mode';
+copy.commands.actionModeOptionDescription = 'Режим наказания';
+
+copy.verification = copy.verification || {};
+copy.verification.title = 'Проверка новичков';
+copy.verification.enabled = 'Проверка включена.';
+copy.verification.disabled = 'Проверка выключена.';
+copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+  return [
+    `Статус: ${enabled ? 'включено' : 'выключено'}`,
+    `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
+    `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
+  ].join('\n');
+};
+copy.verification.updated = function updated(label) {
+  return `Настройки verification обновлены: ${label}.`;
+};
+copy.verification.alreadyVerified = 'Ты уже прошёл подтверждение.';
+copy.verification.roleMissing = 'Сначала укажи роль после подтверждения или autorole.';
+copy.verification.success = function success(roleId) {
+  return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
+};
+copy.verification.noPermission = 'Бот не смог выдать роль после подтверждения. Проверь права и иерархию ролей.';
+copy.verification.modalTitle = 'Стартовая анкета';
+copy.verification.modalNick = 'Игровой ник';
+copy.verification.modalReason = 'Зачем пришёл';
+copy.verification.modalRules = 'Подтверди, что ознакомился с правилами';
+copy.verification.rulesButton = 'Правила';
+copy.verification.verifyButton = 'Подтвердить';
+copy.verification.applyButton = 'Подать заявку';
+
+copy.roleMenus = copy.roleMenus || {};
+copy.roleMenus.title = 'Role Menus';
+copy.roleMenus.empty = 'Role-menu пока не созданы.';
+copy.roleMenus.created = function created(menuId) {
+  return `Role-menu \`${menuId}\` создано.`;
+};
+copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+  return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
+};
+copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+  return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
+};
+copy.roleMenus.published = function published(menuId, channelId) {
+  return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
+};
+copy.roleMenus.notFound = 'Такое role-menu не найдено.';
+copy.roleMenus.roleAdded = function roleAdded(roleId) {
+  return `Роль <@&${roleId}> выдана.`;
+};
+copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+  return `Роль <@&${roleId}> снята.`;
+};
+
+copy.customCommands = copy.customCommands || {};
+copy.customCommands.title = 'Custom Commands';
+copy.customCommands.empty = 'Пользовательские триггеры пока не настроены.';
+copy.customCommands.added = function added(name) {
+  return `Триггер \`${name}\` сохранён.`;
+};
+copy.customCommands.removed = function removed(name) {
+  return `Триггер \`${name}\` удалён.`;
+};
+copy.customCommands.notFound = 'Такой триггер не найден.';
+
+copy.automod.actionUpdated = function actionUpdated(mode) {
+  return `Режим наказания automod обновлён: ${mode}.`;
+};
+
 module.exports = copy;

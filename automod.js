@@ -11,7 +11,9 @@ function defaultAutomodConfig() {
     spamCount: 6,
     spamWindowSeconds: 8,
     badWordsEnabled: false,
-    badWords: []
+    badWords: [],
+    actionMode: 'soft',
+    timeoutMinutes: 10
   };
 }
 
@@ -35,7 +37,9 @@ function normalizeAutomodConfig(raw = {}) {
     spamCount: clampNumber(raw.spamCount, 3, 20, defaults.spamCount),
     spamWindowSeconds: clampNumber(raw.spamWindowSeconds, 3, 60, defaults.spamWindowSeconds),
     badWordsEnabled: raw.badWordsEnabled ?? defaults.badWordsEnabled,
-    badWords: normalizeBadWords(raw.badWords)
+    badWords: normalizeBadWords(raw.badWords),
+    actionMode: raw.actionMode === 'hard' ? 'hard' : defaults.actionMode,
+    timeoutMinutes: clampNumber(raw.timeoutMinutes, 1, 1440, defaults.timeoutMinutes)
   };
 }
 

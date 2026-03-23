@@ -41,7 +41,7 @@ function defaultModulesForMode(mode = 'hybrid') {
       welcome: true,
       automod: true,
       subscriptions: false,
-      customCommands: false,
+      customCommands: true,
       music: false
     };
   }
@@ -56,7 +56,7 @@ function defaultModulesForMode(mode = 'hybrid') {
     welcome: true,
     automod: true,
     subscriptions: false,
-    customCommands: false,
+    customCommands: true,
     music: false
   };
 }
@@ -66,6 +66,14 @@ function normalizeWelcomeConfig(welcome = {}) {
     enabled: welcome?.enabled !== false,
     dmEnabled: Boolean(welcome?.dmEnabled),
     message: String(welcome?.message || '').trim().slice(0, 1000)
+  };
+}
+
+function normalizeVerificationConfig(verification = {}) {
+  return {
+    enabled: Boolean(verification?.enabled),
+    questionnaireEnabled: Boolean(verification?.questionnaireEnabled),
+    roleId: String(verification?.roleId || '').trim()
   };
 }
 
@@ -101,6 +109,39 @@ function normalizeReportSchedule(schedule = {}) {
   };
 }
 
+function normalizeRoleMenus(menus = []) {
+  return (Array.isArray(menus) ? menus : [])
+    .map(menu => ({
+      menuId: String(menu?.menuId || '').trim().slice(0, 32).toLowerCase(),
+      title: String(menu?.title || '').trim().slice(0, 80),
+      description: String(menu?.description || '').trim().slice(0, 400),
+      category: String(menu?.category || '').trim().slice(0, 40),
+      channelId: String(menu?.channelId || '').trim(),
+      messageId: String(menu?.messageId || '').trim(),
+      items: (Array.isArray(menu?.items) ? menu.items : [])
+        .map(item => ({
+          roleId: String(item?.roleId || '').trim(),
+          label: String(item?.label || '').trim().slice(0, 80),
+          emoji: String(item?.emoji || '').trim().slice(0, 32),
+          description: String(item?.description || '').trim().slice(0, 120)
+        }))
+        .filter(item => item.roleId && item.label)
+        .slice(0, 25)
+    }))
+    .filter(menu => menu.menuId && menu.title);
+}
+
+function normalizeCustomCommands(commands = []) {
+  return (Array.isArray(commands) ? commands : [])
+    .map(command => ({
+      name: String(command?.name || '').trim().slice(0, 32).toLowerCase(),
+      trigger: String(command?.trigger || '').trim().slice(0, 120).toLowerCase(),
+      response: String(command?.response || '').trim().slice(0, 1500),
+      mode: ['contains', 'startsWith', 'exact'].includes(command?.mode) ? command.mode : 'contains'
+    }))
+    .filter(command => command.name && command.trigger && command.response);
+}
+
 function normalizeGuildRecord(guildId, guild = {}) {
   const mode = guild.settings?.mode || 'hybrid';
   const defaultModules = defaultModulesForMode(mode);
@@ -126,10 +167,12 @@ function normalizeGuildRecord(guildId, guild = {}) {
         panel: guild.settings?.channels?.panel || '',
         applications: guild.settings?.channels?.applications || '',
         welcome: guild.settings?.channels?.welcome || '',
+        rules: guild.settings?.channels?.rules || '',
         logs: guild.settings?.channels?.logs || '',
         disciplineLogs: guild.settings?.channels?.disciplineLogs || '',
         updates: guild.settings?.channels?.updates || '',
-        reports: guild.settings?.channels?.reports || ''
+        reports: guild.settings?.channels?.reports || '',
+        automod: guild.settings?.channels?.automod || ''
       },
       roles: {
         leader: guild.settings?.roles?.leader || '',
@@ -138,7 +181,8 @@ function normalizeGuildRecord(guildId, guild = {}) {
         member: guild.settings?.roles?.member || '',
         newbie: guild.settings?.roles?.newbie || '',
         mute: guild.settings?.roles?.mute || '',
-        autorole: guild.settings?.roles?.autorole || ''
+        autorole: guild.settings?.roles?.autorole || '',
+        verification: guild.settings?.roles?.verification || ''
       },
       access: {
         applications: [...(guild.settings?.access?.applications || [])],
@@ -150,8 +194,11 @@ function normalizeGuildRecord(guildId, guild = {}) {
         applicationsBanner: guild.settings?.visuals?.applicationsBanner || ''
       },
       welcome: normalizeWelcomeConfig(guild.settings?.welcome),
+      verification: normalizeVerificationConfig(guild.settings?.verification),
       reactionRoles: normalizeReactionRoles(guild.settings?.reactionRoles),
       reportSchedule: normalizeReportSchedule(guild.settings?.reportSchedule),
+      roleMenus: normalizeRoleMenus(guild.settings?.roleMenus),
+      customCommands: normalizeCustomCommands(guild.settings?.customCommands),
       automod: normalizeAutomodConfig(guild.settings?.automod),
       modules: {
         family: guild.settings?.modules?.family ?? defaultModules.family,
@@ -277,6 +324,10 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
           ...(guild.settings?.welcome || {}),
           ...(patch?.welcome || {})
         },
+        verification: {
+          ...(guild.settings?.verification || {}),
+          ...(patch?.verification || {})
+        },
         reportSchedule: {
           ...(guild.settings?.reportSchedule || {}),
           ...(patch?.reportSchedule || {}),
@@ -301,7 +352,9 @@ function createDatabase({ dataFile, saveDelayMs = 500 }) {
           ...(guild.settings?.features || {}),
           ...(patch?.features || {})
         },
-        reactionRoles: Array.isArray(patch?.reactionRoles) ? patch.reactionRoles : guild.settings?.reactionRoles
+        reactionRoles: Array.isArray(patch?.reactionRoles) ? patch.reactionRoles : guild.settings?.reactionRoles,
+        roleMenus: Array.isArray(patch?.roleMenus) ? patch.roleMenus : guild.settings?.roleMenus,
+        customCommands: Array.isArray(patch?.customCommands) ? patch.customCommands : guild.settings?.customCommands
       }
     }).settings;
     save();

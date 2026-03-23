@@ -26,7 +26,8 @@ function buildCommands() {
             { name: copy.commands.roleTargetMember, value: 'member' },
             { name: copy.commands.roleTargetNewbie, value: 'newbie' },
             { name: copy.commands.roleTargetMute, value: 'mute' },
-            { name: copy.commands.roleTargetAutorole, value: 'autorole' }
+            { name: copy.commands.roleTargetAutorole, value: 'autorole' },
+            { name: copy.commands.roleTargetVerification, value: 'verification' }
           )
       )
       .addRoleOption(option =>
@@ -44,8 +45,10 @@ function buildCommands() {
             { name: copy.commands.channelTargetPanel, value: 'panel' },
             { name: copy.commands.channelTargetApplications, value: 'applications' },
             { name: copy.commands.channelTargetWelcome, value: 'welcome' },
+            { name: copy.commands.channelTargetRules, value: 'rules' },
             { name: copy.commands.channelTargetLogs, value: 'logs' },
             { name: copy.commands.channelTargetDiscipline, value: 'disciplineLogs' },
+            { name: copy.commands.channelTargetAutomod, value: 'automod' },
             { name: copy.commands.channelTargetUpdates, value: 'updates' },
             { name: copy.commands.channelTargetReports, value: 'reports' }
           )
@@ -194,6 +197,21 @@ function buildCommands() {
               .setName(copy.commands.wordOptionName)
               .setDescription(copy.commands.wordOptionDescription)
               .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.automodActionSubcommand)
+          .setDescription(copy.commands.automodActionDescription)
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.actionModeOptionName)
+              .setDescription(copy.commands.actionModeOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.automodActionModeSoft, value: 'soft' },
+                { name: copy.commands.automodActionModeHard, value: 'hard' }
+              )
           )
       ),
     new SlashCommandBuilder()
@@ -419,6 +437,121 @@ function buildCommands() {
                 { name: copy.commands.periodMonthly, value: 'monthly' }
               )
           )
+      ),
+    new SlashCommandBuilder()
+      .setName('verification')
+      .setDescription(copy.commands.verificationDescription)
+      .addSubcommand(subcommand =>
+        subcommand.setName(copy.commands.verificationStatusSubcommand).setDescription('Показать статус verification')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.verificationToggleSubcommand)
+          .setDescription('Включить или выключить verification')
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.stateOptionName)
+              .setDescription(copy.commands.stateOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.stateOn, value: 'on' },
+                { name: copy.commands.stateOff, value: 'off' }
+              )
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.verificationRoleSubcommand)
+          .setDescription('Указать роль после подтверждения')
+          .addRoleOption(option =>
+            option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.verificationQuestionnaireSubcommand)
+          .setDescription('Включить или выключить стартовую анкету')
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.stateOptionName)
+              .setDescription(copy.commands.stateOptionDescription)
+              .setRequired(true)
+              .addChoices(
+                { name: copy.commands.stateOn, value: 'on' },
+                { name: copy.commands.stateOff, value: 'off' }
+              )
+          )
+      ),
+    new SlashCommandBuilder()
+      .setName('rolemenu')
+      .setDescription(copy.commands.roleMenuDescription)
+      .addSubcommand(subcommand =>
+        subcommand.setName(copy.commands.roleMenuStatusSubcommand).setDescription('Показать все role-menu')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.roleMenuCreateSubcommand)
+          .setDescription('Создать новое role-menu')
+          .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
+          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription(copy.commands.titleOptionDescription).setRequired(true))
+          .addStringOption(option => option.setName(copy.commands.descriptionOptionName).setDescription(copy.commands.descriptionOptionDescription).setRequired(false))
+          .addStringOption(option => option.setName(copy.commands.categoryOptionName).setDescription(copy.commands.categoryOptionDescription).setRequired(false))
+          .addChannelOption(option => option.setName(copy.commands.channelValueOptionName).setDescription(copy.commands.channelValueDescription).addChannelTypes(ChannelType.GuildText).setRequired(false))
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.roleMenuAddSubcommand)
+          .setDescription('Добавить роль в menu')
+          .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
+          .addRoleOption(option => option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true))
+          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('Текст кнопки').setRequired(true))
+          .addStringOption(option => option.setName(copy.commands.emojiOptionName).setDescription(copy.commands.emojiOptionDescription).setRequired(false))
+          .addStringOption(option => option.setName(copy.commands.descriptionOptionName).setDescription(copy.commands.descriptionOptionDescription).setRequired(false))
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.roleMenuRemoveSubcommand)
+          .setDescription('Удалить роль из menu')
+          .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
+          .addRoleOption(option => option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true))
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.roleMenuPublishSubcommand)
+          .setDescription('Опубликовать role-menu в канал')
+          .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
+          .addChannelOption(option => option.setName(copy.commands.channelValueOptionName).setDescription(copy.commands.channelValueDescription).addChannelTypes(ChannelType.GuildText).setRequired(false))
+      ),
+    new SlashCommandBuilder()
+      .setName('customcommand')
+      .setDescription(copy.commands.customCommandDescription)
+      .addSubcommand(subcommand =>
+        subcommand.setName(copy.commands.customCommandStatusSubcommand).setDescription('Показать настроенные триггеры')
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.customCommandAddSubcommand)
+          .setDescription('Добавить новый триггер')
+          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('Короткое имя триггера').setRequired(true))
+          .addStringOption(option => option.setName(copy.commands.triggerOptionName).setDescription(copy.commands.triggerOptionDescription).setRequired(true))
+          .addStringOption(option => option.setName(copy.commands.responseOptionName).setDescription(copy.commands.responseOptionDescription).setRequired(true))
+          .addStringOption(option =>
+            option
+              .setName(copy.commands.modeChoiceOptionName)
+              .setDescription(copy.commands.modeChoiceOptionDescription)
+              .setRequired(false)
+              .addChoices(
+                { name: copy.commands.modeContains, value: 'contains' },
+                { name: copy.commands.modeStartsWith, value: 'startsWith' },
+                { name: copy.commands.modeExact, value: 'exact' }
+              )
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName(copy.commands.customCommandRemoveSubcommand)
+          .setDescription('Удалить триггер')
+          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('Имя триггера').setRequired(true))
       ),
     new SlashCommandBuilder().setName('leaderboard').setDescription(copy.commands.leaderboardDescription),
     new SlashCommandBuilder().setName('voiceactivity').setDescription(copy.commands.voiceActivityDescription),
