@@ -80,6 +80,20 @@ const releaseNotes = {
       'дубли логики ephemeral, guild settings и access между JS и TS слоями',
       'сигнатура сборки теперь собирается через общий runtime-meta'
     ]
+  },
+  '0.1.0-beta.7': {
+    added: [
+      'плоский dist-ts layout для runtime-модулей TypeScript',
+      'hotfix-релиз для Railway-старта после подключения TS runtime'
+    ],
+    updated: [
+      'tsconfig теперь собирает runtime-модули напрямую в папку dist-ts',
+      'путь npm start и JS-runtime выровнен под Railway и Node require'
+    ],
+    fixed: [
+      'ошибка Cannot find module ./dist-ts/access при запуске',
+      'layout dist-ts после сборки TypeScript'
+    ]
   }
 };
 

@@ -3,7 +3,7 @@ import { getReleaseNotes, normalizeReleaseGroups } from './release-notes';
 import type { ReleaseNoteGroups } from './types';
 
 export const PRODUCT_VERSION_LABEL = 'BRHD/PHOENIX 0.1 BETA';
-export const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.6';
+export const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.7';
 
 const FALLBACK_ADDED_PREFIXES = ['add', 'create', 'introduce', 'implement', 'new'];
 const FALLBACK_UPDATED_PREFIXES = ['update', 'improve', 'refactor', 'optimize', 'polish', 'migrate'];
