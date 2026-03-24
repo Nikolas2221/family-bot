@@ -163,6 +163,18 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
       'регрессия reactionrole add/remove после переноса interactionCreate в TypeScript',
       'дублирование базового command-flow между legacy index.js и новым TS runtime'
     ]
+  },
+  '0.1.0-beta.13': {
+    added: [
+      'очистка legacy-слушателей ready, events и interaction из JS-runtime'
+    ],
+    updated: [
+      'index.js теперь опирается на TS-managed client-ready, event и interaction слои без мёртвых дублей',
+      'runtime-поток подготовлен к следующему этапу полного старта через dist-ts/index.js'
+    ],
+    fixed: [
+      'риск скрытых дублей и регрессий из-за сохранённого legacy runtime в index.js'
+    ]
   }
 };
 
