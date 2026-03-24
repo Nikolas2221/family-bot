@@ -96,6 +96,48 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
       'ошибка Cannot find module ./dist-ts/access при запуске',
       'layout dist-ts после сборки TypeScript'
     ]
+  },
+  '0.1.0-beta.8': {
+    added: [
+      'TypeScript-модуль client-ready-runtime для старта, фоновых задач и guild warmup',
+      'typed-регистрация central runtime для clientReady поверх текущего JS entrypoint'
+    ],
+    updated: [
+      'главный startup pipeline теперь уходит через dist-ts/client-ready-runtime',
+      'подготовка проекта к переносу оставшегося index.js runtime в src-ts/index.ts'
+    ],
+    fixed: [
+      'дублирование startup-логики между подготовленным TS-слоем и боевым рантаймом',
+      'точка подключения typed clientReady без ручной правки всего index.js за один релиз'
+    ]
+  },
+  '0.1.0-beta.9': {
+    added: [
+      'TypeScript-модуль event-runtime для сообщений, участников, реакций и channel guard',
+      'central runtime-регистрация событийного слоя поверх текущего JS entrypoint'
+    ],
+    updated: [
+      'событийный runtime теперь подключается через dist-ts/event-runtime',
+      'подготовка index.js к переносу interaction и remaining listeners в TypeScript'
+    ],
+    fixed: [
+      'разрозненная регистрация message/member/reaction listeners между JS и TS слоями',
+      'безопасный перенос событийной логики без остановки рабочего рантайма'
+    ]
+  },
+  '0.1.0-beta.10': {
+    added: [
+      'TypeScript-РјРѕРґСѓР»СЊ interaction-runtime РґР»СЏ unified interactionCreate-РѕР±СЂР°Р±РѕС‚РєРё',
+      'central runtime-РѕР±С‘СЂС‚РєР° РґР»СЏ welcome, autorole, verification, role menus Рё custom commands'
+    ],
+    updated: [
+      'interactionCreate С‚РµРїРµСЂСЊ СѓРїСЂР°РІР»СЏРµС‚СЃСЏ С‡РµСЂРµР· dist-ts/interaction-runtime',
+      'index.js РїРµСЂРµРІРµРґС‘РЅ РЅР° РµРґРёРЅСѓСЋ TS-managed С‚РѕС‡РєСѓ СЂРµРіРёСЃС‚СЂР°С†РёРё interaction-СЃР»РѕСЏ'
+    ],
+    fixed: [
+      'РїР°СЂР°Р»Р»РµР»СЊРЅС‹Рµ interactionCreate listeners РјРµР¶РґСѓ РєРѕРјР°РЅРґРЅС‹РјРё Рё UI-РјРѕРґСѓР»СЏРјРё',
+      'РїРѕСЌС‚Р°РїРЅР°СЏ РјРёРіСЂР°С†РёСЏ interaction runtime Р±РµР· РѕС‚РєР»СЋС‡РµРЅРёСЏ Р±РѕРµРІРѕРіРѕ entrypoint'
+    ]
   }
 };
 

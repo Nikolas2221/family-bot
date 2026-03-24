@@ -16,6 +16,9 @@ const ROLES = require('./roles');
 const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
 const { createAccessApi } = require('./dist-ts/access');
+const { registerClientReadyRuntime } = require('./dist-ts/client-ready-runtime');
+const { registerEventRuntime } = require('./dist-ts/event-runtime');
+const { registerInteractionRuntime } = require('./dist-ts/interaction-runtime');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./dist-ts/guild-runtime');
 const {
   editReplyAndAutoDelete: editReplyAndAutoDeleteHelper,
@@ -2690,6 +2693,24 @@ client.on('clientReady', async () => {
   }
 });
 
+registerClientReadyRuntime({
+  client,
+  database,
+  updateIntervalMs: UPDATE_INTERVAL_MS,
+  autoRanks: AUTO_RANKS,
+  afkWarningCheckIntervalMs: AFK_WARNING_CHECK_INTERVAL_MS,
+  reportScheduleCheckIntervalMs: REPORT_SCHEDULE_CHECK_INTERVAL_MS,
+  syncAutoRanks,
+  syncAutoRanksAll,
+  doPanelUpdate,
+  doPanelUpdateAll,
+  announceBuildUpdate,
+  runRolelessCleanupDetailed,
+  runAfkWarnings,
+  runScheduledReports,
+  startVoiceSession
+});
+
 client.removeAllListeners('guildMemberAdd');
 client.on('guildMemberAdd', async member => {
   if (member.user?.bot) return;
@@ -2749,6 +2770,34 @@ client.on('channelDelete', async channel => {
   }
 });
 
+registerEventRuntime({
+  client,
+  leakGuard: LEAK_GUARD,
+  channelGuard: CHANNEL_GUARD,
+  copySecurity: copy.security,
+  getGuildStorage,
+  isPremiumGuild,
+  isModuleEnabled,
+  hasFamilyRole,
+  containsDiscordInvite,
+  canBypassLeakGuard,
+  handleAutomodMessage,
+  handleCustomTriggerMessage,
+  sendSecurityLog,
+  startVoiceSession,
+  stopVoiceSession,
+  enforceBlacklist,
+  sendWelcomeInvite,
+  applyAutorole,
+  resolveGuildSettings,
+  findReactionRoleEntry,
+  getReactionEmojiKey,
+  canBypassChannelGuard,
+  fetchDeletedChannelExecutor,
+  restoreDeletedChannel,
+  doPanelUpdate
+});
+
 process.on('SIGINT', () => {
   flushVoiceSessions();
   database.flush();
@@ -2777,7 +2826,7 @@ process.on('uncaughtException', error => {
   console.error('Uncaught exception:', error);
 });
 
-client.on('interactionCreate', async interaction => {
+async function handlePrimaryInteraction(interaction) {
   try {
     if (interaction.isChatInputCommand()) {
       const guildId = interaction.guild.id;
@@ -4044,7 +4093,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.reply(ephemeral({ content: copy.common.unknownError })).catch(() => {});
     }
   }
-});
+}
 
 client.on('interactionCreate', async interaction => {
   try {
@@ -4593,6 +4642,30 @@ client.on('interactionCreate', async interaction => {
       await interaction.reply(ephemeral({ content: copy.common.unknownError })).catch(() => {});
     }
   }
+});
+
+registerInteractionRuntime({
+  client,
+  handlePrimaryInteraction,
+  ephemeral,
+  copy,
+  embeds,
+  database,
+  EmbedBuilderCtor: EmbedBuilder,
+  resolveGuildSettings,
+  getGuildRecord,
+  canDebugConfig,
+  isPremiumGuild,
+  fetchTextChannel,
+  sendWelcomeInvite,
+  getVerificationRoleId,
+  applyVerificationRole,
+  getRoleMenuEntries,
+  findRoleMenu,
+  saveRoleMenu,
+  removeRoleMenuItem,
+  getCustomCommands,
+  sendScheduledReport
 });
 
 client.login(config.token);

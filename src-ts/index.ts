@@ -16,6 +16,9 @@ export * from './runtime-meta';
 export * from './interaction-helpers';
 export * from './guild-runtime';
 export * from './access';
+export * from './client-ready-runtime';
+export * from './event-runtime';
+export * from './interaction-runtime';
 
 export function startLegacyRuntime(): void {
   require('../index');
