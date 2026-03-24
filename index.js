@@ -19,6 +19,7 @@ const { createAccessApi } = require('./dist-ts/access');
 const { registerClientReadyRuntime } = require('./dist-ts/client-ready-runtime');
 const { registerEventRuntime } = require('./dist-ts/event-runtime');
 const { registerInteractionRuntime } = require('./dist-ts/interaction-runtime');
+const { handleCommandRuntime } = require('./dist-ts/command-runtime');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./dist-ts/guild-runtime');
 const {
   editReplyAndAutoDelete: editReplyAndAutoDeleteHelper,
@@ -2839,6 +2840,27 @@ async function handlePrimaryInteraction(interaction) {
         return interaction.reply(ephemeral({ content: copy.common.moduleDisabled }));
       }
 
+      if (await handleCommandRuntime(interaction, {
+        APPLICATION_COOLDOWN_MS,
+        copy,
+        embeds,
+        database,
+        ephemeral,
+        resolveGuildSettings,
+        buildFamilyDashboardStats,
+        canApplications,
+        canDebugConfig,
+        buildGuildSettingsSnapshot,
+        getGuildRecord,
+        doPanelUpdate,
+        defaultModulesForMode,
+        getHelpCatalog,
+        guildStorage,
+        applicationsService
+      })) {
+        return;
+      }
+
       if (interaction.commandName === 'family') {
         const settings = resolveGuildSettings(guildId);
         const summary = buildFamilyDashboardStats(interaction.guild);
@@ -4665,6 +4687,8 @@ registerInteractionRuntime({
   saveRoleMenu,
   removeRoleMenuItem,
   getCustomCommands,
+  getReactionRoleEntries,
+  normalizeReactionEmoji,
   sendScheduledReport
 });
 

@@ -19,6 +19,7 @@ export * from './access';
 export * from './client-ready-runtime';
 export * from './event-runtime';
 export * from './interaction-runtime';
+export * from './command-runtime';
 
 export function startLegacyRuntime(): void {
   require('../index');

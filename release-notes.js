@@ -147,6 +147,20 @@ const releaseNotes = {
       'кракозябры в блоках Добавлено, Обновлено и Исправлено',
       'рассинхронизация текста changelog между semver-релизами'
     ]
+  },
+  '0.1.0-beta.12': {
+    added: [
+      'TypeScript-модуль command-runtime для базовых семейных и админских slash-команд',
+      'полная TS-обработка reactionrole add/remove внутри unified interaction runtime'
+    ],
+    updated: [
+      'handlePrimaryInteraction теперь передаёт family/apply/help/setup/setrole/setchannel/setfamilytitle/setmode/setmodule/setart в TS-слой',
+      'interaction runtime использует единый источник reaction-role записей и нормализации эмодзи'
+    ],
+    fixed: [
+      'регрессия reactionrole add/remove после переноса interactionCreate в TypeScript',
+      'дублирование базового command-flow между legacy index.js и новым TS runtime'
+    ]
   }
 };
 

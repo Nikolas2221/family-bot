@@ -22,6 +22,8 @@ interface InteractionRuntimeOptions {
   saveRoleMenu(guildId: string, menu: any): void;
   removeRoleMenuItem(guildId: string, menuId: string, roleId: string): void;
   getCustomCommands(guildId: string): any[];
+  getReactionRoleEntries(guildId: string): any[];
+  normalizeReactionEmoji(emojiValue?: string): string;
   sendScheduledReport(guild: any, period: string, channelId: string): Promise<boolean>;
 }
 
@@ -183,7 +185,55 @@ async function handleReactionRoleCommands(interaction: any, options: Interaction
   const subcommand = interaction.options.getSubcommand();
   if (subcommand === options.copy.commands.reactionRoleStatusSubcommand) {
     await interaction.reply(options.ephemeral({
-      embeds: [options.embeds.buildReactionRoleStatusEmbed(options.resolveGuildSettings(guildId).reactionRoles || [])]
+      embeds: [options.embeds.buildReactionRoleStatusEmbed(options.getReactionRoleEntries(guildId))]
+    }));
+    return true;
+  }
+
+  const messageId = interaction.options.getString(options.copy.commands.messageIdOptionName, true).trim();
+  const emoji = interaction.options.getString(options.copy.commands.emojiOptionName, true).trim();
+  const emojiKey = options.normalizeReactionEmoji(emoji);
+
+  if (subcommand === options.copy.commands.reactionRoleAddSubcommand) {
+    const role = interaction.options.getRole(options.copy.commands.roleValueOptionName, true);
+    const channel = interaction.options.getChannel(options.copy.commands.channelOptionName) || interaction.channel;
+    if (!channel?.isTextBased?.() || typeof channel.messages?.fetch !== 'function') {
+      await interaction.reply(options.ephemeral({ content: options.copy.reactionRoles.messageMissing }));
+      return true;
+    }
+
+    const targetMessage = await channel.messages.fetch(messageId).catch(() => null);
+    if (!targetMessage) {
+      await interaction.reply(options.ephemeral({ content: options.copy.reactionRoles.messageMissing }));
+      return true;
+    }
+
+    const nextEntries = options.getReactionRoleEntries(guildId)
+      .filter((entry: any) => !(entry.messageId === messageId && entry.emojiKey === emojiKey))
+      .concat([{ messageId, channelId: channel.id, roleId: role.id, emoji, emojiKey }]);
+
+    options.database.updateGuildSettings(guildId, { reactionRoles: nextEntries });
+    await targetMessage.react(emoji).catch(() => null);
+
+    await interaction.reply(options.ephemeral({
+      content: options.copy.reactionRoles.added(emoji, role.id, messageId),
+      embeds: [options.embeds.buildReactionRoleStatusEmbed(nextEntries)]
+    }));
+    return true;
+  }
+
+  if (subcommand === options.copy.commands.reactionRoleRemoveSubcommand) {
+    const currentEntries = options.getReactionRoleEntries(guildId);
+    const nextEntries = currentEntries.filter((entry: any) => !(entry.messageId === messageId && entry.emojiKey === emojiKey));
+    if (nextEntries.length === currentEntries.length) {
+      await interaction.reply(options.ephemeral({ content: options.copy.reactionRoles.notFound }));
+      return true;
+    }
+
+    options.database.updateGuildSettings(guildId, { reactionRoles: nextEntries });
+    await interaction.reply(options.ephemeral({
+      content: options.copy.reactionRoles.removed(emoji, messageId),
+      embeds: [options.embeds.buildReactionRoleStatusEmbed(nextEntries)]
     }));
     return true;
   }
