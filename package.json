@@ -1,14 +1,14 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "0.1.0-beta.13",
-  "main": "index.js",
+  "version": "0.1.0-beta.15",
+  "main": "dist-ts/index.js",
   "scripts": {
-    "start": "npm run build:ts && node index.js",
+    "start": "npm run build:ts && node dist-ts/index.js",
     "test": "node tests/run.js",
     "check": "npm run typecheck && node scripts/check.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:ts": "tsc -p tsconfig.json",
-    "start:ts": "npm run build:ts && node dist-ts/index.js"
+    "start:ts": "node dist-ts/index.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",

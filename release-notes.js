@@ -77,8 +77,7 @@ const releaseNotes = {
       'стартовый путь подготовлен к поэтапному переносу index.js в index.ts'
     ],
     fixed: [
-      'дубли логики ephemeral, guild settings и access между JS и TS слоями',
-      'сигнатура сборки теперь собирается через общий runtime-meta'
+      'дубли логики ephemeral, guild settings и access между JS и TS слоями'
     ]
   },
   '0.1.0-beta.7': {
@@ -172,6 +171,33 @@ const releaseNotes = {
     ],
     fixed: [
       'риск скрытых дублей и регрессий из-за сохранённого legacy runtime в index.js'
+    ]
+  },
+  '0.1.0-beta.14': {
+    added: [
+      'TypeScript-обработка оставшихся moderation, security, reports, discipline и AI slash-команд'
+    ],
+    updated: [
+      'handleCommandRuntime теперь покрывает практически весь боевой slash-command слой',
+      'TS command-runtime получил полный набор runtime helper-функций для moderation, blacklist, отчётов и AI'
+    ],
+    fixed: [
+      'риск расхождения логики между ранними TS-командами и оставшимся legacy slash-command хвостом'
+    ]
+  },
+  '0.1.0-beta.15': {
+    added: [
+      'TypeScript-обработка оставшихся moderation, security, reports, discipline и AI slash-команд',
+      'боевой запуск через TS entrypoint bridge dist-ts/index.js'
+    ],
+    updated: [
+      'handleCommandRuntime теперь покрывает практически весь боевой slash-command слой',
+      'npm start теперь идёт через TypeScript entrypoint bridge вместо прямого node index.js',
+      'main-точка пакета переведена на dist-ts/index.js для следующего полного TS-релиза'
+    ],
+    fixed: [
+      'расхождение между build-путём TypeScript и фактическим стартом бота в production',
+      'риск расхождения логики между ранними TS-командами и оставшимся legacy slash-command хвостом'
     ]
   }
 };
