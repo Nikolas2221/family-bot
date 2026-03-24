@@ -27,7 +27,7 @@ const releaseNotes = {
       'автопроверка наличия changelog для текущего semver'
     ],
     updated: [
-      'структура проекта для поэтапной миграции JS -> TypeScript',
+      'структура проекта для поэтапной миграции JS в TypeScript',
       'система changelog по semver',
       'карточка обновления для технических релизов'
     ],
@@ -125,16 +125,27 @@ const releaseNotes = {
   },
   '0.1.0-beta.10': {
     added: [
-      'TypeScript-РјРѕРґСѓР»СЊ interaction-runtime РґР»СЏ unified interactionCreate-РѕР±СЂР°Р±РѕС‚РєРё',
-      'central runtime-РѕР±С‘СЂС‚РєР° РґР»СЏ welcome, autorole, verification, role menus Рё custom commands'
+      'TypeScript-модуль interaction-runtime для unified interactionCreate-обработки',
+      'central runtime-обёртка для welcome, autorole, verification, role menus и custom commands'
     ],
     updated: [
-      'interactionCreate С‚РµРїРµСЂСЊ СѓРїСЂР°РІР»СЏРµС‚СЃСЏ С‡РµСЂРµР· dist-ts/interaction-runtime',
-      'index.js РїРµСЂРµРІРµРґС‘РЅ РЅР° РµРґРёРЅСѓСЋ TS-managed С‚РѕС‡РєСѓ СЂРµРіРёСЃС‚СЂР°С†РёРё interaction-СЃР»РѕСЏ'
+      'interactionCreate теперь управляется через dist-ts/interaction-runtime',
+      'index.js переведён на единую TS-managed точку регистрации interaction-слоя'
     ],
     fixed: [
-      'РїР°СЂР°Р»Р»РµР»СЊРЅС‹Рµ interactionCreate listeners РјРµР¶РґСѓ РєРѕРјР°РЅРґРЅС‹РјРё Рё UI-РјРѕРґСѓР»СЏРјРё',
-      'РїРѕСЌС‚Р°РїРЅР°СЏ РјРёРіСЂР°С†РёСЏ interaction runtime Р±РµР· РѕС‚РєР»СЋС‡РµРЅРёСЏ Р±РѕРµРІРѕРіРѕ entrypoint'
+      'параллельные interactionCreate listeners между командными и UI-модулями',
+      'поэтапная миграция interaction runtime без отключения боевого entrypoint'
+    ]
+  },
+  '0.1.0-beta.11': {
+    added: [],
+    updated: [
+      'карточка обновления теперь берёт чистый UTF-8 changelog без битой кодировки',
+      'релизные заметки выровнены между JS и TS слоями'
+    ],
+    fixed: [
+      'кракозябры в блоках Добавлено, Обновлено и Исправлено',
+      'рассинхронизация текста changelog между semver-релизами'
     ]
   }
 };
