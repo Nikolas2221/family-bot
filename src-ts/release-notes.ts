@@ -31,7 +31,7 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
     updated: [
       'структура проекта для поэтапной миграции JS -> TypeScript',
       'система changelog по semver',
-      'карточка обновления для текущих технических релизов'
+      'карточка обновления для технических релизов'
     ],
     fixed: [
       'рассинхронизация между реальным обновлением и текстом changelog'
@@ -50,6 +50,37 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
     ],
     fixed: [
       'разрывы типизации между модулями перед следующим этапом миграции'
+    ]
+  },
+  '0.1.0-beta.5': {
+    added: [
+      'TS-entrypoint src-ts/index.ts',
+      'typed runtime-meta для версий и changelog',
+      'команда start:ts для запуска через собранный TS-билд'
+    ],
+    updated: [
+      'npm run check теперь автоматически включает typecheck',
+      'маршрут миграции проекта к полноценному TS-runtime',
+      'структура сборки dist-ts для следующих этапов перевода index'
+    ],
+    fixed: [
+      'подготовка точки входа перед переносом главного index.js'
+    ]
+  },
+  '0.1.0-beta.6': {
+    added: [
+      'TypeScript-модули interaction helpers, guild runtime и access API',
+      'TS-фабрика guild settings и guild storage, подключённая к текущему JS runtime',
+      'автоматическая сборка TypeScript перед npm start'
+    ],
+    updated: [
+      'index.js теперь использует TS runtime-meta и shared helper-слой',
+      'changelog группируется через единый typed runtime-meta',
+      'стартовый путь подготовлен к поэтапному переносу index.js в index.ts'
+    ],
+    fixed: [
+      'дубли логики ephemeral, guild settings и access между JS и TS слоями',
+      'сигнатура сборки теперь собирается через общий runtime-meta'
     ]
   }
 };

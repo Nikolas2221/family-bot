@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const path = require('path');
-const packageMeta = require('./package.json');
 const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, Partials, PermissionFlagsBits } = require('discord.js');
 const { createAIService } = require('./ai');
 const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('./automod');
@@ -16,6 +15,20 @@ const { getReleaseNotes } = require('./release-notes');
 const ROLES = require('./roles');
 const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
+const { createAccessApi } = require('./dist-ts/access');
+const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./dist-ts/guild-runtime');
+const {
+  editReplyAndAutoDelete: editReplyAndAutoDeleteHelper,
+  ephemeral: makeEphemeral,
+  replyAndAutoDelete: replyAndAutoDeleteHelper,
+  scheduleDeleteReply: scheduleDeleteReplyHelper
+} = require('./dist-ts/interaction-helpers');
+const {
+  PRODUCT_VERSION_LABEL,
+  PRODUCT_VERSION_SEMVER,
+  buildCurrentBuildSignature,
+  getCurrentReleaseChangeGroups
+} = require('./dist-ts/runtime-meta');
 
 const config = createConfig(process.env);
 const diagnostics = validateConfig(config);
@@ -49,12 +62,10 @@ const ROLELESS_CLEANUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const REPORT_SCHEDULE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
-const PRODUCT_VERSION_LABEL = 'BRHD/PHOENIX 0.1 BETA';
-const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.2';
 const DEPLOY_COMMIT_SHA = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || '').trim();
 const DEPLOY_COMMIT_MESSAGE = (process.env.RAILWAY_GIT_COMMIT_MESSAGE || process.env.GIT_COMMIT_MESSAGE || '').trim();
 const DEPLOY_BUILD_ID = (DEPLOY_COMMIT_SHA ? DEPLOY_COMMIT_SHA.slice(0, 7) : (process.env.RAILWAY_DEPLOYMENT_ID || PRODUCT_VERSION_SEMVER));
-const CURRENT_BUILD_SIGNATURE = `${PRODUCT_VERSION_SEMVER}:${DEPLOY_BUILD_ID}`;
+const CURRENT_BUILD_SIGNATURE = buildCurrentBuildSignature(DEPLOY_BUILD_ID);
 
 const client = new Client({
   intents: [
@@ -74,242 +85,66 @@ const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
 const ROLE_TEMPLATES = ROLES.map(role => ({ ...role }));
 const automodState = new Map();
+const guildRuntime = createGuildRuntimeApi({
+  database,
+  storage,
+  roleTemplates: ROLE_TEMPLATES,
+  defaults: {
+    channelId: CHANNEL_ID,
+    applicationsChannelId: APPLICATIONS_CHANNEL_ID,
+    logChannelId: LOG_CHANNEL_ID,
+    disciplineLogChannelId: DISCIPLINE_LOG_CHANNEL_ID,
+    familyTitle: FAMILY_TITLE,
+    accessApplications: ACCESS_APPLICATIONS,
+    accessDiscipline: ACCESS_DISCIPLINE,
+    accessRanks: ACCESS_RANKS,
+    applicationDefaultRole: APPLICATION_DEFAULT_ROLE,
+    features: {
+      aiEnabled: AI_ENABLED,
+      autoRanksEnabled: AUTO_RANKS.enabled,
+      leakGuardEnabled: LEAK_GUARD.enabled,
+      channelGuardEnabled: CHANNEL_GUARD.enabled
+    },
+    normalizeAutomodConfig
+  }
+});
+const accessApi = createAccessApi({
+  ownerIds: config.ownerIds,
+  leakGuard: LEAK_GUARD,
+  channelGuard: CHANNEL_GUARD,
+  resolveGuildSettings: guildRuntime.resolveGuildSettings
+});
 
 function ephemeral(payload = {}) {
-  return { ...payload, flags: MessageFlags.Ephemeral };
+  return makeEphemeral(payload);
 }
 
 function scheduleDeleteReply(interaction, delayMs = 5000) {
-  setTimeout(async () => {
-    try {
-      await interaction.deleteReply();
-      return;
-    } catch (_) {
-      // Fall through to webhook cleanup.
-    }
-
-    try {
-      await interaction.webhook?.deleteMessage('@original');
-    } catch (_) {
-      // Ignore cleanup failures for temporary moderation replies.
-    }
-  }, delayMs);
+  return scheduleDeleteReplyHelper(interaction, delayMs);
 }
 
 async function replyAndAutoDelete(interaction, payload, delayMs = 5000) {
-  const response = await interaction.reply(ephemeral(payload));
-  scheduleDeleteReply(interaction, delayMs);
-  return response;
+  return replyAndAutoDeleteHelper(interaction, payload, delayMs);
 }
 
 async function editReplyAndAutoDelete(interaction, payload, delayMs = 5000) {
-  const response = await interaction.editReply(payload);
-  scheduleDeleteReply(interaction, delayMs);
-  return response;
+  return editReplyAndAutoDeleteHelper(interaction, payload, delayMs);
 }
 
 function memberSessionKey(guildId, memberId) {
-  return `${guildId}:${memberId}`;
+  return buildMemberSessionKey(guildId, memberId);
 }
 
 function resolveGuildSettings(guildId) {
-  const guild = database.getGuild(guildId);
-  const settings = guild.settings || {};
-  const mode = settings.mode || 'hybrid';
-  const defaultModules = defaultModulesForMode(mode);
-  const roles = ROLE_TEMPLATES.map(role => ({
-    ...role,
-    id: settings.roles?.[role.key] || role.id || ''
-  }));
-  const panel = settings.channels?.panel || CHANNEL_ID;
-  const logs = settings.channels?.logs || LOG_CHANNEL_ID;
-
-  return {
-    mode,
-    familyTitle: settings.familyTitle || FAMILY_TITLE,
-    channels: {
-      panel,
-      applications: settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
-      welcome: settings.channels?.welcome || settings.channels?.applications || APPLICATIONS_CHANNEL_ID || panel,
-      rules: settings.channels?.rules || '',
-      logs,
-      disciplineLogs: settings.channels?.disciplineLogs || DISCIPLINE_LOG_CHANNEL_ID || logs || '',
-      updates: settings.channels?.updates || '',
-      reports: settings.channels?.reports || logs || '',
-      automod: settings.channels?.automod || logs || ''
-    },
-    roles,
-    access: {
-      applications: settings.access?.applications?.length ? settings.access.applications : ACCESS_APPLICATIONS,
-      discipline: settings.access?.discipline?.length ? settings.access.discipline : ACCESS_DISCIPLINE,
-      ranks: settings.access?.ranks?.length ? settings.access.ranks : ACCESS_RANKS
-    },
-    muteRoleId: settings.roles?.mute || '',
-    autoroleRoleId: settings.roles?.autorole || '',
-    verificationRoleId: settings.roles?.verification || '',
-    visuals: {
-      familyBanner: settings.visuals?.familyBanner || '',
-      applicationsBanner: settings.visuals?.applicationsBanner || ''
-    },
-    welcome: {
-      enabled: settings.welcome?.enabled !== false,
-      dmEnabled: Boolean(settings.welcome?.dmEnabled),
-      message: String(settings.welcome?.message || '').trim().slice(0, 1000)
-    },
-    verification: {
-      enabled: Boolean(settings.verification?.enabled),
-      questionnaireEnabled: Boolean(settings.verification?.questionnaireEnabled),
-      roleId: String(settings.verification?.roleId || settings.roles?.verification || settings.roles?.autorole || '').trim()
-    },
-    reactionRoles: Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [],
-    roleMenus: Array.isArray(settings.roleMenus) ? settings.roleMenus : [],
-    reportSchedule: {
-      weekly: {
-        enabled: Boolean(settings.reportSchedule?.weekly?.enabled),
-        channelId: settings.reportSchedule?.weekly?.channelId || settings.channels?.reports || logs || ''
-      },
-      monthly: {
-        enabled: Boolean(settings.reportSchedule?.monthly?.enabled),
-        channelId: settings.reportSchedule?.monthly?.channelId || settings.channels?.reports || logs || ''
-      }
-    },
-    customCommands: Array.isArray(settings.customCommands) ? settings.customCommands : [],
-    automod: normalizeAutomodConfig(settings.automod),
-    modules: {
-      family: settings.modules?.family ?? defaultModules.family,
-      applications: settings.modules?.applications ?? defaultModules.applications,
-      moderation: settings.modules?.moderation ?? defaultModules.moderation,
-      security: settings.modules?.security ?? defaultModules.security,
-      analytics: settings.modules?.analytics ?? defaultModules.analytics,
-      ai: settings.modules?.ai ?? defaultModules.ai,
-      welcome: settings.modules?.welcome ?? defaultModules.welcome,
-      automod: settings.modules?.automod ?? defaultModules.automod,
-      subscriptions: settings.modules?.subscriptions ?? defaultModules.subscriptions,
-      customCommands: settings.modules?.customCommands ?? defaultModules.customCommands,
-      music: settings.modules?.music ?? defaultModules.music
-    },
-    applicationDefaultRole: settings.roles?.newbie || APPLICATION_DEFAULT_ROLE
-  };
+  return guildRuntime.resolveGuildSettings(guildId);
 }
 
 function getRoleIds(guildId) {
-  return resolveGuildSettings(guildId).roles.map(role => role.id).filter(Boolean);
+  return guildRuntime.getRoleIds(guildId);
 }
 
 function getGuildStorage(guildId) {
-  return {
-    ensureMember(memberId) {
-      return storage.ensureGuildMember(guildId, memberId);
-    },
-    activityScore(memberId) {
-      return storage.guildActivityScore(guildId, memberId);
-    },
-    pointsScore(memberId) {
-      return storage.guildPointsScore(guildId, memberId);
-    },
-    voiceMinutes(memberId) {
-      return storage.guildVoiceMinutes(guildId, memberId);
-    },
-    addVoiceMinutes(memberId, minutes) {
-      return storage.addGuildVoiceMinutes(guildId, memberId, minutes);
-    },
-    addVoiceMinutesInChannel(memberId, minutes, channelId) {
-      return storage.addGuildVoiceMinutes(guildId, memberId, minutes, channelId);
-    },
-    trackMessage(memberId) {
-      return storage.trackGuildMessage(guildId, memberId);
-    },
-    trackMessageInChannel(memberId, channelId) {
-      return storage.trackGuildMessage(guildId, memberId, channelId);
-    },
-    trackAnalyticsMessage(memberId, channelId) {
-      return storage.trackGuildAnalyticsMessage(guildId, memberId, channelId);
-    },
-    trackPresence(memberId) {
-      return storage.trackGuildPresence(guildId, memberId);
-    },
-    addReaction(memberId) {
-      return storage.addGuildReaction(guildId, memberId);
-    },
-    addWarn({ userId, moderatorId, reason }) {
-      return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
-    },
-    listWarns(userId, limit = 10) {
-      return storage.listGuildWarnsForUser(guildId, userId, limit);
-    },
-    clearWarns(userId) {
-      return storage.clearGuildWarnsForUser(guildId, userId);
-    },
-    addCommend({ userId, moderatorId, reason }) {
-      return storage.addGuildCommend({ guildId, userId, moderatorId, reason });
-    },
-    getCooldown(userId) {
-      return storage.getGuildCooldown(guildId, userId);
-    },
-    setCooldown(userId, value) {
-      return storage.setGuildCooldown(guildId, userId, value);
-    },
-    createApplication({ userId, nickname, level, inviter, discovery, about, age, text }) {
-      return storage.createGuildApplication({
-        guildId,
-        userId,
-        nickname,
-        level,
-        inviter,
-        discovery,
-        about,
-        age,
-        text
-      });
-    },
-    findApplication(applicationId) {
-      return storage.findGuildApplication(guildId, applicationId);
-    },
-    setApplicationTicketInfo(application, ticketInfo) {
-      return storage.setApplicationTicketInfo(application, ticketInfo);
-    },
-    listRecentApplications(limit) {
-      return storage.listGuildRecentApplications(guildId, limit);
-    },
-    listBlacklist() {
-      return storage.listGuildBlacklist(guildId);
-    },
-    getBlacklistEntry(userId) {
-      return storage.getGuildBlacklistEntry(guildId, userId);
-    },
-    isBlacklisted(userId) {
-      return storage.isGuildBlacklisted(guildId, userId);
-    },
-    addBlacklistEntry({ userId, moderatorId, reason }) {
-      return storage.addGuildBlacklistEntry({ guildId, userId, moderatorId, reason });
-    },
-    removeBlacklistEntry(userId) {
-      return storage.removeGuildBlacklistEntry(guildId, userId);
-    },
-    markAfkWarningSent(memberId, value) {
-      return storage.markGuildAfkWarningSent(guildId, memberId, value);
-    },
-    clearAfkWarningSent(memberId) {
-      return storage.clearGuildAfkWarningSent(guildId, memberId);
-    },
-    trackJoin() {
-      return storage.trackGuildJoin(guildId);
-    },
-    trackLeave() {
-      return storage.trackGuildLeave(guildId);
-    },
-    getPeriodAnalytics(days, now) {
-      return storage.getGuildPeriodAnalytics(guildId, days, now);
-    },
-    getReportMarker(markerKey) {
-      return storage.getGuildReportMarker(guildId, markerKey);
-    },
-    setReportMarker(markerKey, value) {
-      return storage.setGuildReportMarker(guildId, markerKey, value);
-    },
-    sanitizeApplicationInput: storage.sanitizeApplicationInput,
-    setApplicationStatus: storage.setApplicationStatus
-  };
+  return guildRuntime.getGuildStorage(guildId);
 }
 
 function getRankService(guildId) {
@@ -326,82 +161,27 @@ function hasFamilyRole(member) {
 }
 
 function hasPermission(member, permission) {
-  return Boolean(member?.permissions?.has(permission));
+  return accessApi.hasPermission(member, permission);
 }
 
 function hasAnyRole(member, roleIds) {
-  return Boolean(member?.roles?.cache?.some(role => roleIds.includes(role.id)));
+  return accessApi.hasAnyRole(member, roleIds);
 }
 
 function isOwner(userId) {
-  return config.ownerIds.includes(userId);
+  return accessApi.isOwner(userId);
 }
 
 function getGuildPlan(guildId) {
-  return database.getSubscription(guildId);
+  return guildRuntime.getGuildPlan(guildId);
 }
 
 function isPremiumGuild(guildId) {
-  return database.isPremium(guildId);
+  return guildRuntime.isPremiumGuild(guildId);
 }
 
 function buildGuildSettingsSnapshot(guild) {
-  const settings = resolveGuildSettings(guild.id);
-
-  return {
-    guildName: guild.name,
-    ownerId: guild.ownerId || '',
-    settings: {
-      familyTitle: settings.familyTitle,
-      mode: settings.mode,
-      channels: {
-        panel: settings.channels.panel,
-        applications: settings.channels.applications,
-        welcome: settings.channels.welcome,
-        rules: settings.channels.rules,
-        logs: settings.channels.logs,
-        disciplineLogs: settings.channels.disciplineLogs,
-        updates: settings.channels.updates,
-        reports: settings.channels.reports,
-        automod: settings.channels.automod
-      },
-      roles: {
-        leader: settings.roles.find(role => role.key === 'leader')?.id || '',
-        deputy: settings.roles.find(role => role.key === 'deputy')?.id || '',
-        elder: settings.roles.find(role => role.key === 'elder')?.id || '',
-        member: settings.roles.find(role => role.key === 'member')?.id || '',
-        newbie: settings.roles.find(role => role.key === 'newbie')?.id || '',
-        mute: settings.muteRoleId || '',
-        autorole: settings.autoroleRoleId || '',
-        verification: settings.verificationRoleId || ''
-      },
-      access: {
-        applications: settings.access.applications,
-        discipline: settings.access.discipline,
-        ranks: settings.access.ranks
-      },
-      visuals: {
-        familyBanner: settings.visuals.familyBanner,
-        applicationsBanner: settings.visuals.applicationsBanner
-      },
-      welcome: settings.welcome,
-      verification: settings.verification,
-      reactionRoles: settings.reactionRoles,
-      roleMenus: settings.roleMenus,
-      reportSchedule: settings.reportSchedule,
-      customCommands: settings.customCommands,
-      automod: settings.automod,
-      modules: {
-        ...settings.modules
-      },
-      features: {
-        aiEnabled: AI_ENABLED,
-        autoRanksEnabled: AUTO_RANKS.enabled,
-        leakGuardEnabled: LEAK_GUARD.enabled,
-        channelGuardEnabled: CHANNEL_GUARD.enabled
-      }
-    }
-  };
+  return guildRuntime.buildGuildSettingsSnapshot(guild);
 }
 
 function formatVoiceHours(minutes) {
@@ -1082,8 +862,7 @@ function getCommandModule(commandName) {
 }
 
 function isModuleEnabled(guildId, moduleName) {
-  if (!moduleName) return true;
-  return resolveGuildSettings(guildId).modules?.[moduleName] !== false;
+  return guildRuntime.isModuleEnabled(guildId, moduleName);
 }
 
 function getHelpCatalog(interaction) {
@@ -1397,55 +1176,7 @@ function extractUpdateParts(body) {
 }
 
 function splitUpdateChangeLines() {
-  const releaseGroups = getReleaseNotes(PRODUCT_VERSION_SEMVER);
-  if (releaseGroups) {
-    return releaseGroups;
-  }
-
-  const rawLines = DEPLOY_COMMIT_MESSAGE
-    .split(/\r?\n|;|,(?=\s*(?:add|added|feat|feature|introduce|implemented|fix|fixed|bugfix|update|updated|upgrade|improve|optimi[sz]e|refactor|polish|adjust|change|rework|move|cleanup|remove)\b)/i)
-    .map(item => item.replace(/^[-*]\s*/, '').trim())
-    .filter(Boolean);
-
-  if (!rawLines.length) {
-    return {
-      added: ['новая сборка развернута на сервере'],
-      updated: ['команды и модули синхронизированы'],
-      fixed: []
-    };
-  }
-
-  const groups = {
-    added: [],
-    updated: [],
-    fixed: []
-  };
-
-  for (const line of rawLines) {
-    const bucket = detectUpdateBucket(line);
-    const parts = extractUpdateParts(stripUpdatePrefix(line));
-    if (!parts.length) continue;
-
-    for (const part of parts) {
-      if (!groups[bucket].includes(part)) {
-        groups[bucket].push(part);
-      }
-    }
-  }
-
-  if (!groups.added.length && !groups.updated.length && !groups.fixed.length) {
-    groups.updated.push('сервисное обновление и синхронизация модулей');
-  }
-
-  if (!groups.added.length && !groups.fixed.length && groups.updated.length === 1 && /^embed update$/i.test(DEPLOY_COMMIT_MESSAGE.trim())) {
-    groups.updated = ['окно обновлений'];
-  }
-
-  groups.added = groups.added.slice(0, 6);
-  groups.updated = groups.updated.slice(0, 6);
-  groups.fixed = groups.fixed.slice(0, 6);
-
-  return groups;
+  return getCurrentReleaseChangeGroups(DEPLOY_COMMIT_MESSAGE);
 }
 
 function getAutomodStateKey(guildId, userId) {
@@ -1497,47 +1228,23 @@ function isPremiumAutomodTarget(target) {
 }
 
 function canApplications(member) {
-  if (!member) return false;
-  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
-  const accessRoles = resolveGuildSettings(member.guild.id).access.applications;
-  if (!accessRoles.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
-  return hasAnyRole(member, accessRoles) || hasPermission(member, PermissionFlagsBits.ManageRoles);
+  return accessApi.canApplications(member);
 }
 
 function canDiscipline(member) {
-  if (!member) return false;
-  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
-  const accessRoles = resolveGuildSettings(member.guild.id).access.discipline;
-  if (!accessRoles.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
-  return hasAnyRole(member, accessRoles) || hasPermission(member, PermissionFlagsBits.ManageRoles);
+  return accessApi.canDiscipline(member);
 }
 
 function canManageRanks(member) {
-  if (!member) return false;
-  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
-  const accessRoles = resolveGuildSettings(member.guild.id).access.ranks;
-  if (!accessRoles.length) return hasPermission(member, PermissionFlagsBits.ManageRoles);
-  return hasAnyRole(member, accessRoles) || hasPermission(member, PermissionFlagsBits.ManageRoles);
+  return accessApi.canManageRanks(member);
 }
 
 function canModerate(member) {
-  if (!member) return false;
-  return (
-    hasPermission(member, PermissionFlagsBits.Administrator) ||
-    hasPermission(member, PermissionFlagsBits.ManageMessages) ||
-    hasPermission(member, PermissionFlagsBits.ManageChannels) ||
-    hasPermission(member, PermissionFlagsBits.ManageRoles) ||
-    hasPermission(member, PermissionFlagsBits.ModerateMembers)
-  );
+  return accessApi.canModerate(member);
 }
 
 function canManageNicknames(member) {
-  if (!member) return false;
-  return (
-    hasPermission(member, PermissionFlagsBits.Administrator) ||
-    hasPermission(member, PermissionFlagsBits.ManageNicknames) ||
-    hasPermission(member, PermissionFlagsBits.ManageGuild)
-  );
+  return accessApi.canManageNicknames(member);
 }
 
 function canDebugConfig(interaction) {
@@ -1552,36 +1259,15 @@ function canDebugConfig(interaction) {
 }
 
 function canUseSecurity(member) {
-  if (!member) return false;
-  return hasPermission(member, PermissionFlagsBits.Administrator);
+  return accessApi.canUseSecurity(member);
 }
 
 function canBypassLeakGuard(member) {
-  if (!LEAK_GUARD.enabled) return true;
-  if (!member) return false;
-  if (!LEAK_GUARD.allowedRoles.length) {
-    return hasPermission(member, PermissionFlagsBits.ManageGuild) || hasPermission(member, PermissionFlagsBits.ManageMessages);
-  }
-
-  return (
-    hasAnyRole(member, LEAK_GUARD.allowedRoles) ||
-    hasPermission(member, PermissionFlagsBits.ManageGuild) ||
-    hasPermission(member, PermissionFlagsBits.ManageMessages)
-  );
+  return accessApi.canBypassLeakGuard(member);
 }
 
 function canBypassChannelGuard(member) {
-  if (!CHANNEL_GUARD.enabled) return true;
-  if (!member) return false;
-  if (!CHANNEL_GUARD.allowedRoles.length) {
-    return hasPermission(member, PermissionFlagsBits.ManageGuild) || hasPermission(member, PermissionFlagsBits.ManageChannels);
-  }
-
-  return (
-    hasAnyRole(member, CHANNEL_GUARD.allowedRoles) ||
-    hasPermission(member, PermissionFlagsBits.ManageGuild) ||
-    hasPermission(member, PermissionFlagsBits.ManageChannels)
-  );
+  return accessApi.canBypassChannelGuard(member);
 }
 
 async function fetchTextChannel(guild, id) {
@@ -1601,14 +1287,7 @@ function resolveTargetTextChannel(interaction) {
 }
 
 function canManageTargetChannel(member, channel) {
-  if (!member || !channel) return false;
-  if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
-
-  const permissions = channel.permissionsFor(member);
-  return Boolean(
-    permissions?.has(PermissionFlagsBits.ManageMessages) ||
-    permissions?.has(PermissionFlagsBits.ManageChannels)
-  );
+  return accessApi.canManageTargetChannel(member, channel);
 }
 
 function formatModerationTimestamp(timestamp) {
