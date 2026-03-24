@@ -5,10 +5,15 @@
   "scripts": {
     "start": "node index.js",
     "test": "node tests/run.js",
-    "check": "node scripts/check.js"
+    "check": "node scripts/check.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build:ts": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
   }
 }
