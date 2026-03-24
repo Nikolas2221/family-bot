@@ -36,6 +36,21 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
     fixed: [
       'рассинхронизация между реальным обновлением и текстом changelog'
     ]
+  },
+  '0.1.0-beta.4': {
+    added: [
+      'typed-обёртки для commands, copy, automod, security и ai',
+      'typed-обёртки для embeds, applications и ranks',
+      'новые TS-контракты для automod, AI, security и rank-сервисов'
+    ],
+    updated: [
+      'слой src-ts для среднего и бизнес-модульного уровня',
+      'типизация API вокруг действующего JS runtime',
+      'подготовка проекта к переносу главного index на TypeScript'
+    ],
+    fixed: [
+      'разрывы типизации между модулями перед следующим этапом миграции'
+    ]
   }
 };
 

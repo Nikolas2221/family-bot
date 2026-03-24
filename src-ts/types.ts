@@ -69,6 +69,189 @@ export interface ReleaseNoteGroups {
   fixed: string[];
 }
 
+export interface CopyCatalog {
+  defaults: {
+    familyTitle: string;
+  };
+  commands: Record<string, unknown>;
+  [section: string]: unknown;
+}
+
+export type AutomodActionMode = 'soft' | 'hard';
+export type AutomodRuleName = 'badWords' | 'invites' | 'links' | 'caps' | 'mentions';
+
+export interface AutomodConfig {
+  invitesEnabled: boolean;
+  linksEnabled: boolean;
+  capsEnabled: boolean;
+  capsPercent: number;
+  capsMinLength: number;
+  mentionsEnabled: boolean;
+  mentionLimit: number;
+  spamEnabled: boolean;
+  spamCount: number;
+  spamWindowSeconds: number;
+  badWordsEnabled: boolean;
+  badWords: string[];
+  actionMode: AutomodActionMode;
+  timeoutMinutes: number;
+}
+
+export interface AutomodMessageInput {
+  content?: string;
+  mentionCount?: number;
+  config?: Partial<AutomodConfig>;
+}
+
+export interface AutomodMessageMatch {
+  rule: AutomodRuleName;
+  detail?: string;
+}
+
+export interface AutomodSpamEvaluation {
+  recent: number[];
+  triggered: boolean;
+}
+
+export interface CommandJson {
+  [key: string]: unknown;
+}
+
+export interface CommandGuildLike {
+  commands: {
+    set(commands: CommandJson[]): Promise<unknown>;
+  };
+}
+
+export interface ApplicationAnalysisInput {
+  text?: string;
+  [key: string]: unknown;
+}
+
+export interface MemberRecommendationInput {
+  points?: number;
+  warns?: number;
+  commends?: number;
+  messageCount?: number;
+  activityScore?: number;
+  voiceMinutes?: number;
+  lastSeenAt?: number;
+  currentRoleName?: string;
+  autoTargetRoleName?: string;
+  displayName?: string;
+  [key: string]: unknown;
+}
+
+export interface AIService {
+  aiText(systemPrompt: string, userPrompt: string): Promise<string>;
+  analyzeApplication(application: ApplicationAnalysisInput): Promise<string>;
+  analyzeMember(profile: MemberRecommendationInput): Promise<string>;
+}
+
+export type EmbedFactory = (...args: any[]) => unknown;
+
+export interface EmbedsApi {
+  panelButtons: unknown;
+  [key: string]: EmbedFactory | unknown;
+}
+
+export interface ApplicationsService {
+  accept(interaction: unknown, applicationId: string, userId: string, details?: Record<string, unknown>): Promise<unknown>;
+  closeTicket(interaction: unknown, applicationId: string): Promise<unknown>;
+  getCooldownSecondsLeft(userId: string, cooldownMs: number): number;
+  moveToReview(interaction: unknown, applicationId: string, userId: string): Promise<unknown>;
+  reject(interaction: unknown, applicationId: string, userId: string): Promise<unknown>;
+  sendApplyPanel(interaction: unknown): Promise<unknown>;
+  submitApplication(interaction: unknown): Promise<unknown>;
+}
+
+export interface RankDescription {
+  currentRole: unknown;
+  score: number;
+  autoEnabled: boolean;
+  manualOnly: boolean;
+  canPromote: boolean;
+  canDemote: boolean;
+  canAutoSync: boolean;
+  autoTargetRole: unknown;
+}
+
+export interface RankActionResult {
+  ok: boolean;
+  code: string;
+  currentRole?: unknown;
+  fromRole?: unknown;
+  toRole?: unknown;
+  score?: number;
+  targetRole?: unknown;
+}
+
+export interface RankSyncResult {
+  enabled: boolean;
+  changes: Array<{
+    memberId: string;
+    fromRole: unknown;
+    toRole: unknown;
+    score: number;
+  }>;
+  failures: Array<{
+    memberId: string;
+    error: unknown;
+  }>;
+}
+
+export interface RankService {
+  applyAutoRank(member: unknown): Promise<RankActionResult>;
+  demote(member: unknown): Promise<RankActionResult>;
+  describeMember(member: unknown): RankDescription;
+  getCurrentRole(member: unknown): unknown;
+  promote(member: unknown): Promise<RankActionResult>;
+  syncAutoRanks(guild: { members: { cache: Map<string, unknown> } }): Promise<RankSyncResult>;
+}
+
+export interface ChannelOverwriteSnapshot {
+  id: string;
+  allow: bigint | number | string;
+  deny: bigint | number | string;
+  type: unknown;
+}
+
+export interface ChannelCreateOptionsShape {
+  name?: string;
+  type?: unknown;
+  position?: number;
+  parent?: string;
+  permissionOverwrites?: ChannelOverwriteSnapshot[];
+  reason?: string;
+  topic?: string;
+  nsfw?: boolean;
+  rateLimitPerUser?: number;
+  bitrate?: number;
+  userLimit?: number;
+}
+
+export interface SecurityMemberLike {
+  id?: string;
+  guild?: {
+    ownerId?: string;
+    channels?: {
+      create?(options: ChannelCreateOptionsShape): Promise<unknown>;
+    };
+    fetchAuditLogs?(options: { type: unknown; limit: number }): Promise<{
+      entries: Map<unknown, { target?: { id?: string }; createdTimestamp: number; executor?: unknown }>;
+    } | null>;
+  };
+  permissions?: {
+    has?(permission: unknown): boolean;
+  };
+  roles?: {
+    highest?: {
+      position?: number;
+    };
+  };
+  kickable?: boolean;
+}
+
 export interface ModuleFlags {
   family: boolean;
   applications: boolean;
