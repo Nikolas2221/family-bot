@@ -13,6 +13,7 @@ const files = [
   'database.js',
   'embeds.js',
   'index.js',
+  'release-notes.js',
   'ranks.js',
   'roles.js',
   'storage.js',
@@ -22,6 +23,7 @@ const files = [
   path.join('tests', 'database.test.js'),
   path.join('tests', 'config.test.js'),
   path.join('tests', 'embeds.test.js'),
+  path.join('tests', 'release-notes.test.js'),
   path.join('tests', 'ranks.test.js'),
   path.join('tests', 'storage.test.js'),
   path.join('tests', 'run.js')

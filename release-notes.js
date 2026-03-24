@@ -17,6 +17,23 @@ const releaseNotes = {
       'синхронизация команд на старте',
       'критический путь запуска guild warmup'
     ]
+  },
+  '0.1.0-beta.3': {
+    added: [
+      'TypeScript-инфраструктура проекта',
+      'команды typecheck и build:ts',
+      'typed-слой src-ts для config, roles и release notes',
+      'typed-контракты для database и storage',
+      'автопроверка наличия changelog для текущего semver'
+    ],
+    updated: [
+      'структура проекта для поэтапной миграции JS -> TypeScript',
+      'система changelog по semver',
+      'карточка обновления для текущих технических релизов'
+    ],
+    fixed: [
+      'рассинхронизация между реальным обновлением и текстом changelog'
+    ]
   }
 };
 
