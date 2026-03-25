@@ -21,10 +21,10 @@ export * from './event-runtime';
 export * from './interaction-runtime';
 export * from './command-runtime';
 
-export function startLegacyRuntime(): void {
+export function startRuntimeBridge(): void {
   require('../index');
 }
 
 if (require.main === module) {
-  startLegacyRuntime();
+  startRuntimeBridge();
 }

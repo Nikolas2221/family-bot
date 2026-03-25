@@ -3,18 +3,29 @@ interface InteractionRuntimeOptions {
     removeAllListeners(event: string): unknown;
     on(event: string, listener: (...args: any[]) => unknown): unknown;
   };
-  handlePrimaryInteraction(interaction: any): Promise<unknown>;
+  handleCommand(interaction: any): Promise<boolean>;
+  applicationCooldownMs: number;
   ephemeral(payload: Record<string, unknown>): Record<string, unknown>;
   copy: any;
   embeds: any;
   database: any;
+  aiService: any;
   EmbedBuilderCtor: new () => any;
   resolveGuildSettings(guildId: string): any;
   getGuildRecord(guild: any): any;
+  getGuildStorage(guildId: string): any;
+  getApplicationsService(guildId: string): any;
+  getRankService(guildId: string): any;
   canDebugConfig(interaction: any): boolean;
+  canApplications(member: any): boolean;
+  canManageRanks(member: any): boolean;
+  canUseSecurity(member: any): boolean;
   isPremiumGuild(guildId: string): boolean;
   fetchTextChannel(guild: any, channelId?: string | null): Promise<any>;
+  fetchMemberFast(guild: any, userId: string): Promise<any>;
+  refreshMember(member: any): Promise<any>;
   sendWelcomeInvite(member: any): Promise<unknown>;
+  sendRankDm(guild: any, member: any, result: any): Promise<unknown>;
   getVerificationRoleId(guildId: string): string;
   applyVerificationRole(member: any): Promise<{ ok: boolean; roleId?: string }>;
   getRoleMenuEntries(guildId: string): any[];
@@ -24,6 +35,17 @@ interface InteractionRuntimeOptions {
   getCustomCommands(guildId: string): any[];
   getReactionRoleEntries(guildId: string): any[];
   normalizeReactionEmoji(emojiValue?: string): string;
+  buildProfilePayload(member: any, allowRankButtons: boolean, content?: string): any;
+  buildLeaderboardLines(guild: any, limit?: number): string[];
+  buildLeaderboardSummary(guild: any): string;
+  buildVoiceActivityLines(guild: any, limit?: number): string[];
+  buildVoiceActivitySummary(guild: any): string;
+  buildPremiumActivityReportEmbed(guild: any, targetMember?: any): any;
+  buildAiAdvisorEmbed(guild: any, member: any): Promise<any>;
+  resolveMemberQuery(guild: any, query: string, fallbackUserId?: string): Promise<any>;
+  formatRankResult(userId: string, result: any): string;
+  syncAutoRanks(guildId: string, reason?: string): Promise<unknown>;
+  doPanelUpdate(guildId: string, force?: boolean): Promise<unknown>;
   sendScheduledReport(guild: any, period: string, channelId: string): Promise<boolean>;
 }
 
@@ -531,10 +553,345 @@ async function handleCustomCommandCommands(interaction: any, options: Interactio
   return false;
 }
 
+async function handleFamilyAndAdminButtons(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+  const guildId = interaction.guild?.id;
+  if (!guildId || !interaction.isButton?.()) return false;
+
+  const guildStorage = options.getGuildStorage(guildId);
+  const applicationsService = options.getApplicationsService(guildId);
+  const rankService = options.getRankService(guildId);
+
+  if (interaction.customId === 'family_refresh') {
+    await interaction.deferReply({ flags: 64 });
+    await options.syncAutoRanks(guildId, 'manual-refresh');
+    await options.doPanelUpdate(guildId, true);
+    await interaction.editReply({ content: options.copy.family.panelUpdated });
+    setTimeout(() => {
+      interaction.deleteReply().catch(() => null);
+    }, 3000);
+    return true;
+  }
+
+  if (interaction.customId === 'family_profile') {
+    await interaction.reply(options.ephemeral(
+      options.buildProfilePayload(interaction.member, options.canManageRanks(interaction.member))
+    ));
+    return true;
+  }
+
+  if (interaction.customId === 'family_leaderboard') {
+    if (!options.isPremiumGuild(guildId)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+      return true;
+    }
+
+    await interaction.reply(options.ephemeral({
+      embeds: [options.embeds.buildLeaderboardEmbed(
+        options.buildLeaderboardLines(interaction.guild, 15),
+        options.buildLeaderboardSummary(interaction.guild)
+      )]
+    }));
+    return true;
+  }
+
+  if (interaction.customId === 'family_voice') {
+    if (!options.isPremiumGuild(guildId)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+      return true;
+    }
+
+    await interaction.reply(options.ephemeral({
+      embeds: [options.embeds.buildVoiceActivityEmbed(
+        options.buildVoiceActivityLines(interaction.guild, 15),
+        options.buildVoiceActivitySummary(interaction.guild)
+      )]
+    }));
+    return true;
+  }
+
+  if (interaction.customId === 'family_apply') {
+    const secondsLeft = applicationsService.getCooldownSecondsLeft(interaction.user.id, options.applicationCooldownMs);
+    if (secondsLeft > 0) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.cooldown(secondsLeft) }));
+      return true;
+    }
+
+    await interaction.showModal(options.embeds.buildApplyModal());
+    return true;
+  }
+
+  if (interaction.customId === 'admin_applications') {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    await interaction.reply(options.ephemeral({
+      embeds: [options.embeds.buildApplicationsListEmbed(guildStorage.listRecentApplications(10))]
+    }));
+    return true;
+  }
+
+  if (interaction.customId === 'admin_aiadvisor') {
+    if (!options.isPremiumGuild(guildId)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!options.canDebugConfig(interaction)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    await interaction.showModal(options.embeds.buildAiAdvisorModal());
+    return true;
+  }
+
+  if (interaction.customId === 'admin_panel') {
+    if (!options.canDebugConfig(interaction)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    await interaction.reply(options.ephemeral({
+      embeds: [options.embeds.buildAdminPanelEmbed({
+        guildName: interaction.guild.name,
+        record: options.getGuildRecord(interaction.guild)
+      })]
+    }));
+    return true;
+  }
+
+  if (interaction.customId === 'admin_blacklist') {
+    if (!options.isPremiumGuild(guildId)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!options.canUseSecurity(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.security.noSecurityAccess }));
+      return true;
+    }
+
+    await interaction.reply(options.ephemeral({
+      embeds: [options.embeds.buildBlacklistEmbed(guildStorage.listBlacklist().slice(0, 25))]
+    }));
+    return true;
+  }
+
+  if (interaction.customId === 'admin_activityreport') {
+    if (!options.isPremiumGuild(guildId)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!options.canDebugConfig(interaction)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    await interaction.reply(options.ephemeral({
+      embeds: [options.buildPremiumActivityReportEmbed(interaction.guild)]
+    }));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('rank_')) {
+    if (!options.canManageRanks(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [action, userId] = interaction.customId.split(':');
+    const member = await options.fetchMemberFast(interaction.guild, userId);
+    if (!member) {
+      await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
+      return true;
+    }
+
+    let result: any;
+    try {
+      if (action === 'rank_promote') {
+        result = await rankService.promote(member);
+      } else if (action === 'rank_demote') {
+        result = await rankService.demote(member);
+      } else {
+        if (!options.isPremiumGuild(guildId)) {
+          await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+          return true;
+        }
+        result = await rankService.applyAutoRank(member);
+      }
+    } catch (error) {
+      console.error('Ошибка изменения ранга:', error);
+      await interaction.reply(options.ephemeral({ content: options.copy.ranks.permissionFailed }));
+      return true;
+    }
+
+    const refreshedMember = await options.refreshMember(member);
+    await options.sendRankDm(interaction.guild, refreshedMember, result).catch(() => null);
+    await interaction.update(options.buildProfilePayload(
+      refreshedMember,
+      true,
+      options.formatRankResult(userId, result)
+    ));
+    await options.doPanelUpdate(guildId, false);
+    return true;
+  }
+
+  if (interaction.customId.startsWith('app_accept:')) {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [, applicationId, userId] = interaction.customId.split(':');
+    await interaction.showModal(options.embeds.buildAcceptModal(applicationId, userId, interaction.message.id));
+    return true;
+  }
+
+  if (interaction.customId.startsWith('app_ai:')) {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    if (!options.isPremiumGuild(guildId)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+      return true;
+    }
+
+    const [, applicationId] = interaction.customId.split(':');
+    const application = guildStorage.findApplication(applicationId);
+    if (!application) {
+      await interaction.reply(options.ephemeral({ content: options.copy.applications.notFound }));
+      return true;
+    }
+
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const analysis = await options.aiService.analyzeApplication(application);
+      const embed = new options.EmbedBuilderCtor()
+        .setColor(0x3b82f6)
+        .setTitle(options.copy.ai.buttonTitle)
+        .setDescription(String(analysis || '').slice(0, 3900))
+        .setFooter({ text: options.copy.ai.buttonFooter(applicationId) })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+    } catch (error: any) {
+      await interaction.editReply({ content: options.copy.ai.unavailable(error?.message) });
+    }
+    return true;
+  }
+
+  if (interaction.customId.startsWith('app_review:')) {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [, applicationId, userId] = interaction.customId.split(':');
+    await applicationsService.moveToReview(interaction, applicationId, userId);
+    return true;
+  }
+
+  if (interaction.customId.startsWith('app_reject:')) {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [, applicationId, userId] = interaction.customId.split(':');
+    await applicationsService.reject(interaction, applicationId, userId);
+    return true;
+  }
+
+  if (interaction.customId.startsWith('app_close:')) {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [, applicationId] = interaction.customId.split(':');
+    await applicationsService.closeTicket(interaction, applicationId);
+    return true;
+  }
+
+  return false;
+}
+
+async function handleFamilyAndAdminModals(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+  const guildId = interaction.guild?.id;
+  if (!guildId || !interaction.isModalSubmit?.()) return false;
+
+  if (interaction.customId === 'family_apply_modal') {
+    await options.getApplicationsService(guildId).submitApplication(interaction);
+    return true;
+  }
+
+  if (interaction.customId === 'family_aiadvisor_modal') {
+    if (!options.isPremiumGuild(guildId)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!options.canDebugConfig(interaction)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const member = await options.resolveMemberQuery(
+      interaction.guild,
+      interaction.fields.getTextInputValue('aiadvisor_member'),
+      interaction.user.id
+    );
+    if (!member) {
+      await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
+      return true;
+    }
+
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const embed = await options.buildAiAdvisorEmbed(interaction.guild, member);
+      await interaction.editReply({ embeds: [embed] });
+    } catch (error: any) {
+      await interaction.editReply({ content: options.copy.ai.unavailable(error?.message || options.copy.ai.advisorUnavailable) });
+    }
+    return true;
+  }
+
+  if (interaction.customId.startsWith('app_accept_modal:')) {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [, applicationId, userId, messageId] = interaction.customId.split(':');
+    await options.getApplicationsService(guildId).accept(interaction, applicationId, userId, {
+      reason: interaction.fields.getTextInputValue('accept_reason'),
+      rankName: interaction.fields.getTextInputValue('accept_rank'),
+      messageId
+    });
+    await options.doPanelUpdate(guildId, false);
+    return true;
+  }
+
+  return false;
+}
+
 async function handleButtonsAndModals(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId) return false;
   const settings = options.resolveGuildSettings(guildId);
+
+  if (await handleFamilyAndAdminButtons(interaction, options)) {
+    return true;
+  }
+
+  if (await handleFamilyAndAdminModals(interaction, options)) {
+    return true;
+  }
 
   if (interaction.isButton() && !interaction.replied && !interaction.deferred) {
     if (interaction.customId === 'welcome_rules') {
@@ -653,17 +1010,13 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
 }
 
 export function registerInteractionRuntime(options: InteractionRuntimeOptions): void {
-  const { client, handlePrimaryInteraction } = options;
+  const { client } = options;
 
   client.removeAllListeners('interactionCreate');
   client.on('interactionCreate', async (interaction: any) => {
     try {
-      await handlePrimaryInteraction(interaction);
-      if (interaction.replied || interaction.deferred) {
-        return;
-      }
-
       if (interaction.isChatInputCommand && interaction.isChatInputCommand()) {
+        if (await options.handleCommand(interaction)) return;
         if (await handleWelcomeCommands(interaction, options)) return;
         if (await handleAutoroleCommands(interaction, options)) return;
         if (await handleReactionRoleCommands(interaction, options)) return;

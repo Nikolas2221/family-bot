@@ -1,4 +1,20 @@
 const releaseNotes = {
+  '1.0.0': {
+    added: [
+      'полноценный релиз BRHD/PHOENIX 1.0',
+      'TypeScript-managed runtime для команд, interaction-сценариев, событий и clientReady',
+      'стабильный production-старт через dist-ts/index.js'
+    ],
+    updated: [
+      'index.js превращён в тонкий bootstrap-слой над TypeScript runtime',
+      'основной command, event и interaction-flow выровнен под единый runtime-контур',
+      'система версий и changelog переведена с beta-цикла на полноценный релизный semver'
+    ],
+    fixed: [
+      'скрытые legacy-дубли interaction runtime и command-flow',
+      'расхождения между JS bootstrap и TS-managed runtime слоями'
+    ]
+  },
   '0.1.0-beta.2': {
     added: [
       'автопост недельных и месячных отчётов',

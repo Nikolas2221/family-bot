@@ -2,8 +2,15 @@ import packageMeta from '../package.json';
 import { getReleaseNotes, normalizeReleaseGroups } from './release-notes';
 import type { ReleaseNoteGroups } from './types';
 
-export const PRODUCT_VERSION_LABEL = 'BRHD/PHOENIX 0.1 BETA';
-export const PRODUCT_VERSION_SEMVER = packageMeta.version || '0.1.0-beta.15';
+export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.0';
+
+function resolveProductVersionLabel(version: string): string {
+  if (/beta/i.test(version)) return 'BRHD/PHOENIX 0.1 BETA';
+  if (/\brc\b/i.test(version)) return 'BRHD/PHOENIX 1.0 RC';
+  return 'BRHD/PHOENIX 1.0 RELEASE';
+}
+
+export const PRODUCT_VERSION_LABEL = resolveProductVersionLabel(PRODUCT_VERSION_SEMVER);
 
 const FALLBACK_ADDED_PREFIXES = ['add', 'create', 'introduce', 'implement', 'new'];
 const FALLBACK_UPDATED_PREFIXES = ['update', 'improve', 'refactor', 'optimize', 'polish', 'migrate'];
