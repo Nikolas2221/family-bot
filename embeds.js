@@ -2059,3 +2059,329 @@ module.exports = {
   buildWarnLogEmbed,
   panelButtons
 };
+
+function roleLine(label, roleId) {
+  return `${label}: ${roleId ? `<@&${roleId}>` : 'не задано'}`;
+}
+
+function channelLine(label, channelId) {
+  return `${label}: ${channelId ? `<#${channelId}>` : 'не задан'}`;
+}
+
+function buildRoleMenuStatusEmbed(menus = []) {
+  const lines = (Array.isArray(menus) ? menus : []).flatMap(menu => {
+    const head = `• \`${menu.menuId}\` - ${menu.title}${menu.category ? ` [${menu.category}]` : ''}`;
+    const items = (menu.items || []).slice(0, 5).map(item => `  - ${item.emoji ? `${item.emoji} ` : ''}${item.label} -> <@&${item.roleId}>`);
+    return [head, ...items];
+  });
+
+  return card({
+    title: `🎛️ ${copy.roleMenus.title}`,
+    color: THEME.brand,
+    description: lines.length ? lines.join('\n') : copy.roleMenus.empty,
+    footer: 'BRHD • Phoenix • Role Menus'
+  });
+}
+
+function buildRoleMenuEmbed(menu = {}) {
+  const lines = (menu.items || []).map(item => {
+    const prefix = item.emoji ? `${item.emoji} ` : '';
+    const suffix = item.description ? ` - ${item.description}` : '';
+    return `• ${prefix}<@&${item.roleId}>${suffix}`;
+  });
+
+  return card({
+    title: menu.title || 'Role Menu',
+    color: THEME.brand,
+    description: [
+      menu.category ? `Категория: **${menu.category}**` : '',
+      menu.description || '',
+      '',
+      lines.length ? lines.join('\n') : 'Пункты пока не добавлены.'
+    ].filter(Boolean).join('\n'),
+    footer: 'BRHD • Phoenix • Role Menu'
+  });
+}
+
+function buildCustomCommandsEmbed(commands = []) {
+  const lines = (Array.isArray(commands) ? commands : []).map(command => `• \`${command.name}\` - ${command.trigger} (${command.mode})`);
+  return card({
+    title: `🧩 ${copy.customCommands.title}`,
+    color: THEME.royal,
+    description: lines.length ? lines.join('\n') : copy.customCommands.empty,
+    footer: 'BRHD • Phoenix • Custom Commands'
+  });
+}
+
+function buildWelcomeEmbed(member, familyTitle, imageUrl = '', customMessage = '', extras = {}) {
+  const guildName = member.guild?.name || familyTitle || 'Phoenix';
+  return card({
+    title: `👋 Добро пожаловать в ${guildName}`,
+    color: THEME.emerald,
+    description: [
+      `Привет, <@${member.id}>. Ты только что зашёл на сервер **${guildName}**.`,
+      '',
+      customMessage || `Используй кнопки ниже, чтобы изучить правила, пройти подтверждение и открыть доступ к панели **${familyTitle || guildName}**.`,
+      '',
+      extras.rulesChannelId ? `• Правила: <#${extras.rulesChannelId}>` : '',
+      extras.panelChannelId ? `• Панель семьи: <#${extras.panelChannelId}>` : '',
+      extras.applicationsChannelId ? `• Подача заявки: <#${extras.applicationsChannelId}>` : '',
+      extras.verificationEnabled ? '• Подтверди доступ кнопкой ниже, чтобы получить стартовую роль.' : ''
+    ].filter(Boolean).join('\n'),
+    footer: 'BRHD • Phoenix • Welcome',
+    thumbnail: avatarUrl(member.user),
+    image: imageUrl
+  }).addFields(
+    section(
+      'Старт',
+      [
+        '1. Изучи правила сервера',
+        '2. Пройди подтверждение',
+        '3. Открой панель семьи и подай заявку'
+      ].join('\n'),
+      false
+    )
+  );
+}
+
+function buildAutomodStatusEmbed(config = {}, automodChannelId = '') {
+  return card({
+    title: '🛡️ Automod',
+    color: THEME.ruby,
+    description: [
+      `Инвайты: ${config.invitesEnabled ? 'ON' : 'OFF'}`,
+      `Ссылки: ${config.linksEnabled ? 'ON' : 'OFF'}`,
+      `Капс: ${config.capsEnabled ? `ON (${config.capsPercent || 75}% / ${config.capsMinLength || 12}+)` : 'OFF'}`,
+      `Упоминания: ${config.mentionsEnabled ? `ON (${config.mentionLimit || 5})` : 'OFF'}`,
+      `Флуд: ${config.spamEnabled ? `ON (${config.spamCount || 6}/${config.spamWindowSeconds || 8}с)` : 'OFF'}`,
+      `Стоп-слова: ${config.badWordsEnabled ? `ON (${(config.badWords || []).length})` : 'OFF'}`,
+      `Наказание: ${config.actionMode === 'hard' ? 'жёсткое' : 'мягкое'}`,
+      `Логи automod: ${automodChannelId ? `<#${automodChannelId}>` : 'не заданы'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Automod'
+  });
+}
+
+function buildReportScheduleEmbed(schedule = {}, channels = {}) {
+  const weekly = schedule.weekly || {};
+  const monthly = schedule.monthly || {};
+  return card({
+    title: '📆 Расписание отчётов',
+    color: THEME.royal,
+    description: [
+      `Weekly: ${weekly.enabled ? 'ON' : 'OFF'}`,
+      `Канал weekly: ${weekly.channelId ? `<#${weekly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`,
+      '',
+      `Monthly: ${monthly.enabled ? 'ON' : 'OFF'}`,
+      `Канал monthly: ${monthly.channelId ? `<#${monthly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Reports'
+  });
+}
+
+function buildLeaderboardEmbed(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : copy.stats.leaderboardEmpty;
+
+  return card({
+    title: `${copy.stats.leaderboardTitle} • Phoenix`,
+    color: THEME.gold,
+    description: [
+      'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+      '',
+      `Участников в рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium — 5$'}`,
+      `Топ-игрок: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Leaderboard',
+    image: summary.imageUrl
+  }).addFields(
+    section(
+      'Сводка',
+      [
+        `Средняя репутация: ${summary.averagePoints ?? 0}/100`,
+        `Суммарная репутация: ${summary.totalPoints ?? 0}`,
+        `Голос семьи: ${summary.totalVoiceHours ?? 0} ч`
+      ].join('\n'),
+      true
+    ),
+    section('Рейтинг', content, false)
+  );
+}
+
+function buildVoiceActivityEmbed(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : copy.stats.voiceEmpty;
+
+  return card({
+    title: `${copy.stats.voiceTitle} • Phoenix`,
+    color: THEME.royal,
+    description: [
+      'Премиальный мониторинг голосовой активности семьи.',
+      '',
+      `Участников в голосовом рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium — 5$'}`,
+      `Лидер голоса: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Voice',
+    image: summary.imageUrl
+  }).addFields(
+    section(
+      'Сводка',
+      [
+        `Суммарно часов: ${summary.totalHours ?? 0} ч`,
+        `Среднее на участника: ${summary.averageHours ?? 0} ч`,
+        `Репутация ядра: ${summary.totalPoints ?? 0}`
+      ].join('\n'),
+      true
+    ),
+    section('Топ по голосу', content, false)
+  );
+}
+
+function buildAdminPanelEmbed({ guildName, record }) {
+  const settings = record.settings || {};
+  const channels = settings.channels || {};
+  const roles = settings.roles || {};
+  const visuals = settings.visuals || {};
+  const modules = settings.modules || {};
+  const automod = settings.automod || {};
+  const welcome = settings.welcome || {};
+  const verification = settings.verification || {};
+  const reportSchedule = settings.reportSchedule || {};
+  const reactionRoles = Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [];
+  const roleMenus = Array.isArray(settings.roleMenus) ? settings.roleMenus : [];
+  const customCommands = Array.isArray(settings.customCommands) ? settings.customCommands : [];
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? copy.admin.panelPremium : copy.admin.panelFree;
+  const mode = settings.mode || 'hybrid';
+
+  const moduleLines = [
+    `Family: ${modules.family ? 'ON' : 'OFF'}`,
+    `Applications: ${modules.applications ? 'ON' : 'OFF'}`,
+    `Moderation: ${modules.moderation ? 'ON' : 'OFF'}`,
+    `Security: ${modules.security ? 'ON' : 'OFF'}`,
+    `Analytics: ${modules.analytics ? 'ON' : 'OFF'}`,
+    `AI: ${modules.ai ? 'ON' : 'OFF'}`,
+    `Welcome: ${modules.welcome ? 'ON' : 'OFF'}`,
+    `Automod: ${modules.automod ? 'ON' : 'OFF'}`,
+    `Subscriptions: ${modules.subscriptions ? 'ON' : 'OFF'}`,
+    `Custom Commands: ${modules.customCommands ? 'ON' : 'OFF'}`,
+    `Music: ${modules.music ? 'ON' : 'OFF'}`
+  ];
+
+  return card({
+    title: copy.admin.panelTitle,
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `Сервер: **${guildName}**`,
+    footer: 'BRHD • Phoenix • Administration'
+  }).addFields(
+    section(
+      'Статус',
+      [
+        `Тариф: ${planLabel}`,
+        `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`,
+        `Режим: ${mode}`
+      ].join('\n'),
+      true
+    ),
+    section('Возможности', copy.admin.panelFeatures(record.plan), true),
+    section(
+      copy.admin.panelFieldChannels,
+      [
+        channelLine('Панель', channels.panel),
+        channelLine('Подача заявки', channels.applications),
+        channelLine('Welcome', channels.welcome),
+        channelLine('Правила', channels.rules),
+        channelLine('Логи', channels.logs),
+        channelLine('Дисциплина', channels.disciplineLogs),
+        channelLine('Апдейты', channels.updates),
+        channelLine('Отчёты', channels.reports),
+        channelLine('Automod', channels.automod)
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldRoles,
+      [
+        roleLine('Лидер', roles.leader),
+        roleLine('Зам', roles.deputy),
+        roleLine('Старший', roles.elder),
+        roleLine('Участник', roles.member),
+        roleLine('Новичок', roles.newbie),
+        roleLine('Мут', roles.mute),
+        roleLine('Автороль', roles.autorole),
+        roleLine('После подтверждения', roles.verification)
+      ].join('\n'),
+      false
+    ),
+    section('Модули', moduleLines.join('\n'), false),
+    section(
+      'Welcome',
+      [
+        `Статус: ${welcome.enabled ? 'ON' : 'OFF'}`,
+        `ЛС: ${welcome.dmEnabled ? 'ON' : 'OFF'}`,
+        `Текст: ${welcome.message ? 'задан' : 'не задан'}`
+      ].join('\n'),
+      true
+    ),
+    section(
+      'Verification',
+      [
+        `Статус: ${verification.enabled ? 'ON' : 'OFF'}`,
+        `Анкета: ${verification.questionnaireEnabled ? 'ON' : 'OFF'}`,
+        `Роль: ${verification.roleId ? `<@&${verification.roleId}>` : 'не задана'}`
+      ].join('\n'),
+      true
+    ),
+    section(
+      'Role Menus',
+      [`Меню: ${roleMenus.length}`, `Старые reaction roles: ${reactionRoles.length}`].join('\n'),
+      true
+    ),
+    section(
+      'Custom Commands',
+      [`Триггеры: ${customCommands.length}`, `Premium: ${isPremium ? 'ON' : 'OFF'}`].join('\n'),
+      true
+    ),
+    section(
+      'Reports',
+      [
+        `Weekly: ${reportSchedule.weekly?.enabled ? 'ON' : 'OFF'}`,
+        `Канал weekly: ${reportSchedule.weekly?.channelId ? `<#${reportSchedule.weekly.channelId}>` : 'не задан'}`,
+        `Monthly: ${reportSchedule.monthly?.enabled ? 'ON' : 'OFF'}`,
+        `Канал monthly: ${reportSchedule.monthly?.channelId ? `<#${reportSchedule.monthly.channelId}>` : 'не задан'}`
+      ].join('\n'),
+      false
+    ),
+    section(
+      'Automod',
+      [
+        `Инвайты: ${automod.invitesEnabled ? 'ON' : 'OFF'}`,
+        `Ссылки: ${automod.linksEnabled ? 'ON' : 'OFF'}`,
+        `Капс: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+ букв)` : 'OFF'}`,
+        `Упоминания: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`,
+        `Флуд: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}с)` : 'OFF'}`,
+        `Стоп-слова: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`,
+        `Наказание: ${automod.actionMode === 'hard' ? 'жёсткое' : 'мягкое'}`
+      ].join('\n'),
+      false
+    ),
+    section(
+      copy.admin.panelFieldVisuals,
+      [
+        copy.admin.visualLine('Панель семьи', visuals.familyBanner),
+        copy.admin.visualLine('Подача заявки', visuals.applicationsBanner)
+      ].join('\n'),
+      false
+    )
+  );
+}
+
+module.exports.buildRoleMenuStatusEmbed = buildRoleMenuStatusEmbed;
+module.exports.buildRoleMenuEmbed = buildRoleMenuEmbed;
+module.exports.buildCustomCommandsEmbed = buildCustomCommandsEmbed;
+module.exports.buildWelcomeEmbed = buildWelcomeEmbed;
+module.exports.buildAutomodStatusEmbed = buildAutomodStatusEmbed;
+module.exports.buildReportScheduleEmbed = buildReportScheduleEmbed;
+module.exports.buildLeaderboardEmbed = buildLeaderboardEmbed;
+module.exports.buildVoiceActivityEmbed = buildVoiceActivityEmbed;
+module.exports.buildAdminPanelEmbed = buildAdminPanelEmbed;

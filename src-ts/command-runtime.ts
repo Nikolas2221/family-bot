@@ -365,6 +365,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
     if (subcommand === copy.commands.automodActionSubcommand) {
       const mode = interaction.options.getString(copy.commands.actionModeOptionName, true);
+      const actionModeLabel = mode === 'hard' ? 'жёсткий' : 'мягкий';
       database.updateGuildSettings(guildId, { automod: { actionMode: mode } });
       await interaction.reply(ephemeral({
         content: copy.automod.actionUpdated(mode === 'hard' ? 'Р¶С‘СЃС‚РєРёР№' : 'РјСЏРіРєРёР№'),
@@ -1086,6 +1087,9 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     const desiredNickname = (interaction.options.getString(copy.commands.nicknameOptionName) || '').trim();
     const queryLower = query.toLowerCase();
     const wantsNicknameChange = queryLower.includes('смени ник')
+      || queryLower.includes('измени ник')
+      || queryLower.includes('переименуй')
+      || queryLower.includes('смени ник')
       || queryLower.includes('измени ник')
       || queryLower.includes('переименуй')
       || queryLower.includes('rename nick');

@@ -1047,15 +1047,15 @@ function buildAiCommandsOverview(interaction) {
 
 function splitUpdateChangeLines() {
   const raw = DEPLOY_COMMIT_MESSAGE
-    .split(/\r?\n|;|,(?=\s*[a-zР°-СЏ0-9])/i)
+    .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])/i)
     .map(item => item.replace(/^[-*]\s*/, '').trim())
     .filter(Boolean);
 
   if (!raw.length) {
     return [
-      'РќРѕРІР°СЏ СЃР±РѕСЂРєР° СЂР°Р·РІС‘СЂРЅСѓС‚Р° Рё РіРѕС‚РѕРІР° Рє СЂР°Р±РѕС‚Рµ.',
-      'РљРѕРјР°РЅРґС‹ Рё РјРѕРґСѓР»Рё СЃРµСЂРІРµСЂР° СЃРёРЅС…СЂРѕРЅРёР·РёСЂРѕРІР°РЅС‹.',
-      `РўРµРєСѓС‰Р°СЏ РІРµСЂСЃРёСЏ: ${PRODUCT_VERSION_LABEL}.`
+      'Новая сборка развёрнута и готова к работе.',
+      'Команды и модули сервера синхронизированы.',
+      `Текущая версия: ${PRODUCT_VERSION_LABEL}.`
     ];
   }
 
@@ -1098,33 +1098,33 @@ function humanizeUpdatePart(part) {
     .trim();
 
   const mapped = [
-    [/embed updates?/i, 'РѕРєРЅРѕ РѕР±РЅРѕРІР»РµРЅРёР№'],
-    [/embed(?:s| message| messages| card| cards| panel| panels)?/i, 'embed-РєР°СЂС‚РѕС‡РєРё'],
-    [/welcome messages?/i, 'welcome-СЃРѕРѕР±С‰РµРЅРёСЏ'],
-    [/welcome/i, 'welcome-РјРѕРґСѓР»СЊ'],
-    [/autoroles?/i, 'СЃРёСЃС‚РµРјР° Р°РІС‚РѕСЂРѕР»Рё'],
-    [/reaction roles?/i, 'РјРµРЅСЋ СѓРїСЂР°РІР»РµРЅРёСЏ СЂРѕР»СЏРјРё'],
-    [/report schedule/i, 'СЂР°СЃРїРёСЃР°РЅРёРµ РѕС‚С‡С‘С‚РѕРІ'],
-    [/scheduled reports?/i, 'Р°РІС‚РѕРѕС‚РїСЂР°РІРєР° РѕС‚С‡С‘С‚РѕРІ'],
-    [/server reports?/i, 'СЃРµСЂРІРµСЂРЅС‹Рµ РѕС‚С‡С‘С‚С‹'],
-    [/activity reports?/i, 'РѕС‚С‡С‘С‚С‹ РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё'],
+    [/embed updates?/i, 'окно обновлений'],
+    [/embed(?:s| message| messages| card| cards| panel| panels)?/i, 'embed-карточки'],
+    [/welcome messages?/i, 'welcome-сообщения'],
+    [/welcome/i, 'welcome-модуль'],
+    [/autoroles?/i, 'система автороли'],
+    [/reaction roles?/i, 'меню управления ролями'],
+    [/report schedule/i, 'расписание отчётов'],
+    [/scheduled reports?/i, 'автоотправка отчётов'],
+    [/server reports?/i, 'серверные отчёты'],
+    [/activity reports?/i, 'отчёты по активности'],
     [/automod/i, 'automod'],
-    [/command sync/i, 'СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ РєРѕРјР°РЅРґ'],
-    [/guild warmup/i, 'РѕРїС‚РёРјРёР·Р°С†РёСЏ Р·Р°РїСѓСЃРєР° guild'],
-    [/startup/i, 'РѕРїС‚РёРјРёР·Р°С†РёСЏ СЃС‚Р°СЂС‚Р°'],
-    [/ticket(?:s)?/i, 'С‚РёРєРµС‚С‹'],
-    [/application(?:s)?/i, 'Р·Р°СЏРІРєРё'],
-    [/leaderboard/i, 'Р»РёРґРµСЂР±РѕСЂРґ'],
-    [/voice activity/i, 'РіРѕР»РѕСЃРѕРІР°СЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ'],
-    [/\bvoice\b/i, 'РіРѕР»РѕСЃРѕРІР°СЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ'],
-    [/ai advisor/i, 'AI-СЃРѕРІРµС‚РЅРёРє'],
-    [/\bai\b/i, 'AI-РјРѕРґСѓР»СЊ'],
-    [/security/i, 'РјРѕРґСѓР»СЊ Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё'],
-    [/moderation/i, 'РјРѕРґРµСЂР°С†РёСЏ'],
-    [/logs?/i, 'Р»РѕРіРё'],
-    [/nickname(?:s)?/i, 'СЃРјРµРЅР° РЅРёРєРѕРІ'],
-    [/cleanup/i, 'РѕС‡РёСЃС‚РєР°'],
-    [/performance/i, 'РѕРїС‚РёРјРёР·Р°С†РёСЏ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅРѕСЃС‚Рё']
+    [/command sync/i, 'синхронизация команд'],
+    [/guild warmup/i, 'оптимизация запуска guild'],
+    [/startup/i, 'оптимизация старта'],
+    [/ticket(?:s)?/i, 'тикеты'],
+    [/application(?:s)?/i, 'заявки'],
+    [/leaderboard/i, 'лидерборд'],
+    [/voice activity/i, 'голосовая активность'],
+    [/\bvoice\b/i, 'голосовая активность'],
+    [/ai advisor/i, 'AI-советник'],
+    [/\bai\b/i, 'AI-модуль'],
+    [/security/i, 'модуль безопасности'],
+    [/moderation/i, 'модерация'],
+    [/logs?/i, 'логи'],
+    [/nickname(?:s)?/i, 'смена ников'],
+    [/cleanup/i, 'очистка'],
+    [/performance/i, 'оптимизация производительности']
   ].find(([pattern]) => pattern.test(normalized));
 
   if (mapped) {
@@ -1136,24 +1136,24 @@ function humanizeUpdatePart(part) {
 
 function extractUpdateParts(body) {
   const knownPhrases = [
-    ['embed update', 'РѕРєРЅРѕ РѕР±РЅРѕРІР»РµРЅРёР№'],
-    ['embeds', 'embed-РєР°СЂС‚РѕС‡РєРё'],
-    ['embed', 'embed-РєР°СЂС‚РѕС‡РєРё'],
-    ['reaction roles', 'РјРµРЅСЋ СѓРїСЂР°РІР»РµРЅРёСЏ СЂРѕР»СЏРјРё'],
-    ['report schedule', 'СЂР°СЃРїРёСЃР°РЅРёРµ РѕС‚С‡С‘С‚РѕРІ'],
-    ['welcome messages', 'welcome-СЃРѕРѕР±С‰РµРЅРёСЏ'],
-    ['welcome', 'welcome-СЃРѕРѕР±С‰РµРЅРёСЏ'],
-    ['autorole', 'Р°РІС‚РѕСЂРѕР»СЊ'],
+    ['embed update', 'окно обновлений'],
+    ['embeds', 'embed-карточки'],
+    ['embed', 'embed-карточки'],
+    ['reaction roles', 'меню управления ролями'],
+    ['report schedule', 'расписание отчётов'],
+    ['welcome messages', 'welcome-сообщения'],
+    ['welcome', 'welcome-сообщения'],
+    ['autorole', 'автороль'],
     ['automod', 'automod'],
-    ['server report', 'СЃРµСЂРІРµСЂРЅС‹Рµ РѕС‚С‡С‘С‚С‹'],
-    ['activity report', 'РѕС‚С‡С‘С‚С‹ РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё'],
-    ['command sync', 'СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ РєРѕРјР°РЅРґ'],
-    ['guild warmup', 'РѕРїС‚РёРјРёР·Р°С†РёСЏ Р·Р°РїСѓСЃРєР° guild'],
-    ['voice activity', 'РіРѕР»РѕСЃРѕРІР°СЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ'],
-    ['leaderboard', 'Р»РёРґРµСЂР±РѕСЂРґ'],
-    ['tickets', 'С‚РёРєРµС‚С‹'],
-    ['applications', 'Р·Р°СЏРІРєРё'],
-    ['logs', 'Р»РѕРіРё']
+    ['server report', 'серверные отчёты'],
+    ['activity report', 'отчёты по активности'],
+    ['command sync', 'синхронизация команд'],
+    ['guild warmup', 'оптимизация запуска guild'],
+    ['voice activity', 'голосовая активность'],
+    ['leaderboard', 'лидерборд'],
+    ['tickets', 'тикеты'],
+    ['applications', 'заявки'],
+    ['logs', 'логи']
   ];
 
   let remaining = String(body || '').trim();
@@ -1168,7 +1168,7 @@ function extractUpdateParts(body) {
   }
 
   remaining
-    .split(/\r?\n|;|,(?=\s*[a-zР°-СЏ0-9])|\s+\band\b\s+|\s+&\s+/i)
+    .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])|\s+\band\b\s+|\s+&\s+/i)
     .map(item => humanizeUpdatePart(item))
     .filter(Boolean)
     .forEach(item => parts.push(item));
@@ -1294,7 +1294,7 @@ function canManageTargetChannel(member, channel) {
 function formatModerationTimestamp(timestamp) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {
-    return 'РЅРµРёР·РІРµСЃС‚РЅРѕ';
+    return 'неизвестно';
   }
 
   return date.toLocaleString('ru-RU');
@@ -1479,7 +1479,7 @@ async function fetchMemberFast(guild, userId) {
   return guild.members.cache.get(userId) || guild.members.fetch(userId).catch(() => null);
 }
 
-async function sendDirectNotification(user, { title, description, color = 0x7c3aed, footer = 'BRHD вЂў Phoenix вЂў Notify' }) {
+async function sendDirectNotification(user, { title, description, color = 0x7c3aed, footer = 'BRHD • Phoenix • Notify' }) {
   if (!user) return false;
 
   const channel = await user.createDM().catch(() => null);
@@ -1492,15 +1492,15 @@ async function sendDirectNotification(user, { title, description, color = 0x7c3a
 
 async function sendAcceptanceDm({ guild, member, moderatorUser, reason, rankName }) {
   return sendDirectNotification(member.user, {
-    title: 'Р—Р°СЏРІРєР° РїСЂРёРЅСЏС‚Р°',
+    title: 'Заявка принята',
     color: 0x10b981,
-    footer: 'BRHD вЂў Phoenix вЂў Family',
+    footer: 'BRHD • Phoenix • Family',
     description: [
-      `РўС‹ РїСЂРёРЅСЏС‚ РІ СЃРµРјСЊСЋ **${resolveGuildSettings(guild.id).familyTitle}** РЅР° СЃРµСЂРІРµСЂРµ **${guild.name}**.`,
+      `Ты принят в семью **${resolveGuildSettings(guild.id).familyTitle}** на сервере **${guild.name}**.`,
       '',
-      `РњРѕРґРµСЂР°С‚РѕСЂ: <@${moderatorUser.id}>`,
-      `РџСЂРёС‡РёРЅР°: ${reason}`,
-      `Р’С‹РґР°РЅРЅС‹Р№ СЂР°РЅРі: ${rankName}`
+      `Модератор: <@${moderatorUser.id}>`,
+      `Причина: ${reason}`,
+      `Выданный ранг: ${rankName}`
     ].join('\n')
   });
 }
@@ -1508,15 +1508,15 @@ async function sendAcceptanceDm({ guild, member, moderatorUser, reason, rankName
 async function sendDisciplineDm(type, guild, targetUser, moderatorUser, reason) {
   const isWarn = type === 'warn';
   return sendDirectNotification(targetUser, {
-    title: isWarn ? 'РџРѕР»СѓС‡РµРЅ РІС‹РіРѕРІРѕСЂ' : 'РџРѕР»СѓС‡РµРЅР° РїРѕС…РІР°Р»Р°',
+    title: isWarn ? 'Получен выговор' : 'Получена похвала',
     color: isWarn ? 0xf97316 : 0x2563eb,
-    footer: 'BRHD вЂў Phoenix вЂў Discipline',
+    footer: 'BRHD • Phoenix • Discipline',
     description: [
-      `РЎРµСЂРІРµСЂ: **${guild.name}**`,
-      `РњРѕРґРµСЂР°С‚РѕСЂ: <@${moderatorUser.id}>`,
-      `РџСЂРёС‡РёРЅР°: ${reason}`,
+      `Сервер: **${guild.name}**`,
+      `Модератор: <@${moderatorUser.id}>`,
+      `Причина: ${reason}`,
       '',
-      isWarn ? 'РЎР»РµРґРё Р·Р° Р°РєС‚РёРІРЅРѕСЃС‚СЊСЋ Рё РґРёСЃС†РёРїР»РёРЅРѕР№, С‡С‚РѕР±С‹ РЅРµ РїРѕР»СѓС‡РёС‚СЊ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ СЃР°РЅРєС†РёРё.' : 'РўР°Рє РґРµСЂР¶Р°С‚СЊ. РђРєС‚РёРІРЅРѕСЃС‚СЊ Рё РІРєР»Р°Рґ РІ СЃРµРјСЊСЋ Р·Р°РјРµС‡РµРЅС‹.'
+      isWarn ? 'Следи за активностью и дисциплиной, чтобы не получить дополнительные санкции.' : 'Так держать. Активность и вклад в семью замечены.'
     ].join('\n')
   });
 }
@@ -1525,17 +1525,17 @@ async function sendRankDm(guild, member, result) {
   if (!result?.ok) return false;
 
   const isPromotion = result.code === 'promoted' || result.code === 'auto_applied';
-  const title = isPromotion ? 'Р Р°РЅРі РїРѕРІС‹С€РµРЅ' : 'Р Р°РЅРі РїРѕРЅРёР¶РµРЅ';
+  const title = isPromotion ? 'Ранг повышен' : 'Ранг понижен';
 
   return sendDirectNotification(member.user, {
     title,
     color: isPromotion ? 0x10b981 : 0xe11d48,
-    footer: 'BRHD вЂў Phoenix вЂў Ranks',
+    footer: 'BRHD • Phoenix • Ranks',
     description: [
-      `РЎРµСЂРІРµСЂ: **${guild.name}**`,
-      `Р‘С‹Р»Рѕ: ${result.fromRole?.name || 'вЂ”'}`,
-      `РЎС‚Р°Р»Рѕ: ${result.toRole?.name || 'вЂ”'}`,
-      result.score !== undefined ? `РўРµРєСѓС‰РёРµ РѕС‡РєРё Р°РєС‚РёРІРЅРѕСЃС‚Рё: ${result.score}` : null
+      `Сервер: **${guild.name}**`,
+      `Было: ${result.fromRole?.name || '—'}`,
+      `Стало: ${result.toRole?.name || '—'}`,
+      result.score !== undefined ? `Текущие очки активности: ${result.score}` : null
     ]
       .filter(Boolean)
       .join('\n')
@@ -1544,28 +1544,28 @@ async function sendRankDm(guild, member, result) {
 
 async function sendBlacklistDm(user, guild, reason) {
   return sendDirectNotification(user, {
-    title: 'Р§С‘СЂРЅС‹Р№ СЃРїРёСЃРѕРє',
+    title: 'Чёрный список',
     color: 0xe11d48,
-    footer: 'BRHD вЂў Phoenix вЂў Security',
+    footer: 'BRHD • Phoenix • Security',
     description: [
-      `РўРІРѕР№ РґРѕСЃС‚СѓРї РЅР° СЃРµСЂРІРµСЂ **${guild.name}** РѕРіСЂР°РЅРёС‡РµРЅ.`,
-      `РџСЂРёС‡РёРЅР°: ${reason}`,
+      `Твой доступ на сервер **${guild.name}** ограничен.`,
+      `Причина: ${reason}`,
       '',
-      'Р•СЃР»Рё СЌС‚Рѕ РѕС€РёР±РєР°, СЃРІСЏР¶РёСЃСЊ СЃ Р°РґРјРёРЅРёСЃС‚СЂР°С†РёРµР№ СЃРµСЂРІРµСЂР°.'
+      'Если это ошибка, свяжись с администрацией сервера.'
     ].join('\n')
   });
 }
 
 async function sendAfkWarningDm(member) {
   return sendDirectNotification(member.user, {
-    title: 'РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ РѕР± AFK',
+    title: 'Предупреждение об AFK',
     color: 0xf59e0b,
-    footer: 'BRHD вЂў Phoenix вЂў Activity',
+    footer: 'BRHD • Phoenix • Activity',
     description: [
-      `РќР° СЃРµСЂРІРµСЂРµ **${member.guild.name}** РѕС‚ С‚РµР±СЏ РЅРµ Р±С‹Р»Рѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё СѓР¶Рµ 3 РґРЅСЏ.`,
-      'Р•СЃР»Рё РЅРµ РїСЂРѕСЏРІРёС€СЊ Р°РєС‚РёРІРЅРѕСЃС‚СЊ, Р°РґРјРёРЅРёСЃС‚СЂР°С†РёСЏ РјРѕР¶РµС‚ РєРёРєРЅСѓС‚СЊ С‚РµР±СЏ Р·Р° AFK.',
+      `На сервере **${member.guild.name}** от тебя не было активности уже 3 дня.`,
+      'Если не проявишь активность, администрация может кикнуть тебя за AFK.',
       '',
-      'РћС‚РїСЂР°РІСЊ СЃРѕРѕР±С‰РµРЅРёРµ, Р·Р°Р№РґРё РІ РіРѕР»РѕСЃРѕРІРѕР№ РєР°РЅР°Р» РёР»Рё РїСЂРѕСЃС‚Рѕ РїСЂРѕСЏРІРё Р°РєС‚РёРІРЅРѕСЃС‚СЊ РІ Discord.'
+      'Отправь сообщение, зайди в голосовой канал или просто прояви активность в Discord.'
     ].join('\n')
   });
 }
@@ -1877,7 +1877,7 @@ async function handleAutomodMessage(message) {
   await sendAutomodLog(message.guild, {
     member: message.member,
     rule: triggered.rule,
-    detail: [triggered.detail, punishmentLabel].filter(Boolean).join(' вЂў '),
+    detail: [triggered.detail, punishmentLabel].filter(Boolean).join(' • '),
     channelId: message.channel.id,
     content: message.content
   }).catch(() => {});
@@ -1943,7 +1943,7 @@ function formatRankResult(userId, result) {
     case 'auto_keep_current':
       return typeof copy.ranks.autoKeepCurrent === 'function'
         ? copy.ranks.autoKeepCurrent(result.currentRole.name, result.score)
-        : `РђРІС‚Рѕ-СЂР°РЅРі СЃРѕС…СЂР°РЅРёР» С‚РµРєСѓС‰СѓСЋ СЂРѕР»СЊ ${result.currentRole.name}. РџРѕРЅРёР¶РµРЅРёРµ РІРЅРёР· Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РЅРµ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ (${result.score} РѕС‡Рє.).`;
+        : `Авто-ранг сохранил текущую роль ${result.currentRole.name}. Понижение вниз автоматически не применяется (${result.score} очк.).`;
     case 'auto_disabled':
       return copy.ranks.autoDisabled;
     case 'auto_unavailable':
@@ -2064,17 +2064,17 @@ async function doPanelUpdate(guildId, force = false) {
       } catch {
         const message = await channel.send({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
         storage.setGuildPanelMessageId(guild.id, message.id, fixedMessageId);
-        console.log('РЎРєРѕРїРёСЂСѓР№ MESSAGE_ID:', message.id);
+        console.log('Скопируй MESSAGE_ID:', message.id);
       }
     } else {
       const message = await channel.send({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
       storage.setGuildPanelMessageId(guild.id, message.id, fixedMessageId);
-      console.log('РЎРєРѕРїРёСЂСѓР№ MESSAGE_ID:', message.id);
+      console.log('Скопируй MESSAGE_ID:', message.id);
     }
 
     state.lastUpdate = Date.now();
   } catch (error) {
-    console.error('РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ РїР°РЅРµР»Рё:', error);
+    console.error('Ошибка обновления панели:', error);
   } finally {
     state.inProgress = false;
     if (state.pending) {
@@ -2118,10 +2118,10 @@ async function syncAutoRanks(guildId, reason = 'interval') {
     }
 
     for (const failure of result.failures) {
-      console.error(`РћС€РёР±РєР° Р°РІС‚Рѕ-СЂР°РЅРіР° РґР»СЏ ${failure.memberId}:`, failure.error);
+      console.error(`Ошибка авто-ранга для ${failure.memberId}:`, failure.error);
     }
   } catch (error) {
-    console.error('РћС€РёР±РєР° Р°РІС‚Рѕ-СЂР°РЅРіРѕРІ:', error);
+    console.error('Ошибка авто-рангов:', error);
   } finally {
     autoRankSyncInProgress.delete(guildId);
   }
@@ -2138,7 +2138,7 @@ function buildMaintenanceEmbed({ title, description, color, fieldName, lines }) 
     .setColor(color)
     .setTitle(title)
     .setDescription(description)
-    .setFooter({ text: 'BRHD вЂў Phoenix вЂў Maintenance' })
+    .setFooter({ text: 'BRHD • Phoenix • Maintenance' })
     .setTimestamp();
 
   if (lines?.length) {
@@ -2176,7 +2176,7 @@ async function runRolelessCleanup(guildId, reason = 'interval') {
     const nonEveryoneRoles = member.roles.cache.filter(role => role.id !== guild.id);
     if (nonEveryoneRoles.size > 0) continue;
 
-    const ok = await member.kick('Р•Р¶РµРЅРµРґРµР»СЊРЅР°СЏ РѕС‡РёСЃС‚РєР° СѓС‡Р°СЃС‚РЅРёРєРѕРІ Р±РµР· СЂРѕР»РµР№').then(() => true).catch(() => false);
+    const ok = await member.kick('Еженедельная очистка участников без ролей').then(() => true).catch(() => false);
     if (ok) {
       kicked.push(member.user.username);
     } else {
@@ -2193,11 +2193,11 @@ async function runRolelessCleanup(guildId, reason = 'interval') {
   await logChannel.send({
     embeds: [
       buildMaintenanceEmbed({
-        title: 'Р•Р¶РµРЅРµРґРµР»СЊРЅР°СЏ РѕС‡РёСЃС‚РєР° Р±РµР· СЂРѕР»РµР№',
-        description: [`Р РµР¶РёРј: ${reason}`, `РљРёРєРЅСѓС‚Рѕ: ${kicked.length}`, `РћС€РёР±РѕРє: ${failed.length}`].join('\n'),
+        title: 'Еженедельная очистка без ролей',
+        description: [`Режим: ${reason}`, `Кикнуто: ${kicked.length}`, `Ошибок: ${failed.length}`].join('\n'),
         color: 0xe11d48,
-        fieldName: 'РћС‚С‡С‘С‚',
-        lines: [...kicked.slice(0, 15), ...failed.slice(0, 10)].length ? [...kicked.slice(0, 15), ...failed.slice(0, 10)] : ['РќРёРєРѕРіРѕ РЅРµ РїСЂРёС€Р»РѕСЃСЊ РєРёРєР°С‚СЊ.']
+        fieldName: 'Отчёт',
+        lines: [...kicked.slice(0, 15), ...failed.slice(0, 10)].length ? [...kicked.slice(0, 15), ...failed.slice(0, 10)] : ['Никого не пришлось кикать.']
       })
     ]
   }).catch(() => {});
@@ -2239,12 +2239,12 @@ async function runRolelessCleanupDetailed(guildId, reason = 'interval', options 
     }
 
     try {
-      await member.kick('Р•Р¶РµРЅРµРґРµР»СЊРЅР°СЏ РѕС‡РёСЃС‚РєР° СѓС‡Р°СЃС‚РЅРёРєРѕРІ Р±РµР· СЂРѕР»РµР№');
+      await member.kick('Еженедельная очистка участников без ролей');
       kicked.push(member.user.username);
     } catch (error) {
       const fallbackReason = error?.code === 50013
-        ? 'Сѓ Р±РѕС‚Р° РЅРµ С…РІР°С‚Р°РµС‚ РїСЂР°РІ Discord РґР»СЏ РєРёРєР°'
-        : (error?.message || 'РЅРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР° РєРёРєР°');
+        ? 'у бота не хватает прав Discord для кика'
+        : (error?.message || 'неизвестная ошибка кика');
       failed.push(`${member.user.username} (\`${member.id}\`) - ${fallbackReason}`);
     }
   }
@@ -2258,11 +2258,11 @@ async function runRolelessCleanupDetailed(guildId, reason = 'interval', options 
   await logChannel.send({
     embeds: [
       buildMaintenanceEmbed({
-        title: 'Р•Р¶РµРЅРµРґРµР»СЊРЅР°СЏ РѕС‡РёСЃС‚РєР° Р±РµР· СЂРѕР»РµР№',
-        description: [`Р РµР¶РёРј: ${reason}`, `РљРёРєРЅСѓС‚Рѕ: ${kicked.length}`, `РћС€РёР±РѕРє: ${failed.length}`].join('\n'),
+        title: 'Еженедельная очистка без ролей',
+        description: [`Режим: ${reason}`, `Кикнуто: ${kicked.length}`, `Ошибок: ${failed.length}`].join('\n'),
         color: 0xe11d48,
-        fieldName: 'РћС‚С‡С‘С‚',
-        lines: [...kicked.slice(0, 15), ...failed.slice(0, 10)].length ? [...kicked.slice(0, 15), ...failed.slice(0, 10)] : ['РќРёРєРѕРіРѕ РЅРµ РїСЂРёС€Р»РѕСЃСЊ РєРёРєР°С‚СЊ.']
+        fieldName: 'Отчёт',
+        lines: [...kicked.slice(0, 15), ...failed.slice(0, 10)].length ? [...kicked.slice(0, 15), ...failed.slice(0, 10)] : ['Никого не пришлось кикать.']
       })
     ]
   }).catch(() => {});
@@ -2307,10 +2307,10 @@ async function runAfkWarnings(guildId) {
   await logChannel.send({
     embeds: [
       buildMaintenanceEmbed({
-        title: 'AFK-РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ',
-        description: `РћС‚РїСЂР°РІР»РµРЅС‹ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёСЏ Р·Р° РЅРµР°РєС‚РёРІРЅРѕСЃС‚СЊ 3+ РґРЅСЏ: ${warned.length}`,
+        title: 'AFK-предупреждения',
+        description: `Отправлены предупреждения за неактивность 3+ дня: ${warned.length}`,
         color: 0xf59e0b,
-        fieldName: 'РЈС‡Р°СЃС‚РЅРёРєРё',
+        fieldName: 'Участники',
         lines: warned
       })
     ]
