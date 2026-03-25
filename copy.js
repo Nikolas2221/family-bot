@@ -126,6 +126,7 @@ const copy = {
     sent: 'Заявка отправлена. Ожидай решения руководства.',
     invalidEmpty: 'Все поля заявки должны быть заполнены.',
     invalidShort: 'Текст заявки слишком короткий. Напиши хотя бы 10 символов.',
+    invalidNonsense: 'Похоже, в заявке есть бессмысленный текст. Напиши нормальный ник, кто пригласил, откуда узнал и немного о себе.',
     notFound: 'Заявка не найдена.',
     closed(statusLabel) {
       return `Заявка уже закрыта: ${statusLabel}.`;
@@ -916,6 +917,181 @@ copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
 };
 
 copy.customCommands = copy.customCommands || {};
+copy.customCommands.title = 'Custom Commands';
+copy.customCommands.empty = 'Пользовательские триггеры пока не настроены.';
+copy.customCommands.added = function added(name) {
+  return `Триггер \`${name}\` сохранён.`;
+};
+copy.customCommands.removed = function removed(name) {
+  return `Триггер \`${name}\` удалён.`;
+};
+copy.customCommands.notFound = 'Такой триггер не найден.';
+
+copy.automod.actionUpdated = function actionUpdated(mode) {
+  return `Режим наказания automod обновлён: ${mode}.`;
+};
+
+copy.stats = {
+  leaderboardTitle: '🏆 Таблица участников',
+  leaderboardDescription: 'Рейтинг по очкам репутации от 0 до 100.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: '🎙 Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours(value) {
+    return `${Number(value || 0).toFixed(1)} ч`;
+  },
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
+  }
+};
+
+copy.ai.advisorTitle = function advisorTitle(displayName) {
+  return `🤖 AI-советник: ${displayName}`;
+};
+copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
+copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
+
+copy.admin.noOwnerAccess = 'Эта команда доступна только владельцам бота.';
+copy.admin.premiumOnly = 'Эта функция доступна только на тарифе Premium.';
+copy.admin.setupSaved = 'Настройки сервера сохранены в базе.';
+copy.admin.setupTitle = '⚙️ Setup сервера';
+copy.admin.setupDescription = function setupDescription(guildName) {
+  return `Конфигурация для сервера "${guildName}" сохранена.`;
+};
+copy.admin.panelTitle = '🛠 Админ-панель сервера';
+copy.admin.panelFree = 'Free — 0$';
+copy.admin.panelPremium = 'Premium — 5$';
+copy.admin.panelFieldPlan = 'Тариф';
+copy.admin.panelFieldSetup = 'Setup';
+copy.admin.panelFieldFeatures = 'Функции';
+copy.admin.panelFieldChannels = 'Каналы';
+copy.admin.panelFieldRoles = 'Роли';
+copy.admin.panelFieldVisuals = 'Баннеры';
+copy.admin.panelSetupDone = 'Настроен';
+copy.admin.panelSetupPending = 'Не настроен';
+copy.admin.panelFeatures = function panelFeatures(plan) {
+  if (plan === 'premium') {
+    return [
+      '• всё из Free',
+      '• лидерборд и голосовая активность',
+      '• админ-отчёты по активности',
+      '• оффлайн AI и AI-анализ заявок',
+      '• авто-ранги и авто-DM',
+      '• чёрный список и бан-лист',
+      '• anti-leak и защита каналов',
+      '• еженедельная очистка без ролей',
+      '• AFK-предупреждения за 3 дня'
+    ].join('\n');
+  }
+
+  return [
+    '• панель семьи',
+    '• заявки и кнопка подачи',
+    '• профили участников',
+    '• настройка ролей и каналов через Discord',
+    '• ручные похвалы и преды',
+    '• базовая админка сервера'
+  ].join('\n');
+};
+copy.admin.channelLine = function channelLine(label, value) {
+  return `${label}: ${value || 'не задан'}`;
+};
+copy.admin.roleLine = function roleLine(label, value) {
+  return `${label}: ${value || 'не задана'}`;
+};
+copy.admin.visualLine = function visualLine(label, value) {
+  return `${label}: ${value || 'не задан'}`;
+};
+copy.admin.subscriptionUpdated = function subscriptionUpdated(plan) {
+  return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}.`;
+};
+
+copy.help.title = function title(plan) {
+  return `📚 Команды бота • ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}`;
+};
+copy.help.freeSection = 'Доступно сейчас';
+copy.help.premiumSection = 'В Premium';
+copy.help.line = function line(name, description) {
+  return `/${name} — ${description}`;
+};
+
+copy.applications.fieldNick = '🎮 Ник в игре';
+copy.applications.fieldLevel = '⚡ Лвл';
+copy.applications.fieldInvite = '🫂 Кто дал инвайт / Откуда узнали';
+copy.applications.fieldText = '📝 О себе';
+copy.applications.applyModalNick = 'Ник в игре';
+copy.applications.applyModalLevel = 'Какой лвл?';
+copy.applications.applyModalInviter = 'Кто дал инвайт?';
+copy.applications.applyModalDiscovery = 'Откуда о нас узнали?';
+copy.applications.applyModalText = 'О себе';
+copy.applications.closeTicketButton = '🔒 Закрыть тикет';
+copy.applications.ticketClosedReply = '🔒 Тикет по заявке закрыт.';
+copy.applications.ticketOnlyInThread = 'Закрыть тикет можно только внутри треда заявки.';
+copy.applications.ticketStarter = function ticketStarter(userId, threadId) {
+  return `Новая заявка от <@${userId}> • тикет: <#${threadId}>`;
+};
+copy.applications.ticketThreadHeader = function ticketThreadHeader(userId, applicationId) {
+  return `Тикет по заявке <@${userId}> • ID: \`${applicationId}\``;
+};
+copy.applications.ticketReason = function ticketReason(userId) {
+  return `Тикет по заявке ${userId}`;
+};
+
+copy.verification.title = 'Проверка новичков';
+copy.verification.enabled = 'Проверка включена.';
+copy.verification.disabled = 'Проверка выключена.';
+copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+  return [
+    `Статус: ${enabled ? 'включено' : 'выключено'}`,
+    `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
+    `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
+  ].join('\n');
+};
+copy.verification.updated = function updated(label) {
+  return `Настройки verification обновлены: ${label}.`;
+};
+copy.verification.alreadyVerified = 'Ты уже прошёл подтверждение.';
+copy.verification.roleMissing = 'Сначала укажи роль после подтверждения или autorole.';
+copy.verification.success = function success(roleId) {
+  return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
+};
+copy.verification.noPermission = 'Бот не смог выдать роль после подтверждения. Проверь права и иерархию ролей.';
+copy.verification.modalTitle = 'Стартовая анкета';
+copy.verification.modalNick = 'Игровой ник';
+copy.verification.modalReason = 'Зачем пришёл';
+copy.verification.modalRules = 'Подтверди, что ознакомился с правилами';
+copy.verification.rulesButton = 'Правила';
+copy.verification.verifyButton = 'Подтвердить';
+copy.verification.applyButton = 'Подать заявку';
+
+copy.roleMenus.title = 'Role Menus';
+copy.roleMenus.empty = 'Role-menu пока не созданы.';
+copy.roleMenus.created = function created(menuId) {
+  return `Role-menu \`${menuId}\` создано.`;
+};
+copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+  return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
+};
+copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+  return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
+};
+copy.roleMenus.published = function published(menuId, channelId) {
+  return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
+};
+copy.roleMenus.notFound = 'Такое role-menu не найдено.';
+copy.roleMenus.roleAdded = function roleAdded(roleId) {
+  return `Роль <@&${roleId}> выдана.`;
+};
+copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+  return `Роль <@&${roleId}> снята.`;
+};
+
 copy.customCommands.title = 'Custom Commands';
 copy.customCommands.empty = 'Пользовательские триггеры пока не настроены.';
 copy.customCommands.added = function added(name) {

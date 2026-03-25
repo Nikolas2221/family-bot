@@ -118,14 +118,22 @@ function createApplicationsService({
         ? await guild.channels.fetch(application.ticketThreadId).catch(() => null)
         : null;
 
-    const starterChannel = thread?.parent?.type === 0
-      ? thread.parent
-      : await fetchTextChannel(guild, applicationsChannelId);
+    const fallbackChannel = await fetchTextChannel(guild, applicationsChannelId);
+    const starterChannels = [
+      thread?.parent,
+      fallbackChannel
+    ].filter(channel => channel && typeof channel.messages?.fetch === 'function');
 
-    if (starterChannel && application.ticketStarterMessageId && starterChannel.messages?.fetch) {
-      const starterMessage = await starterChannel.messages.fetch(application.ticketStarterMessageId).catch(() => null);
-      if (starterMessage?.deletable || typeof starterMessage?.delete === 'function') {
-        await starterMessage.delete().catch(() => {});
+    for (const [messageId, channel] of [
+      [application.ticketStarterMessageId, starterChannels[0]],
+      [application.ticketStarterMessageId, starterChannels[1]],
+      [application.ticketMessageId, thread]
+    ]) {
+      if (!messageId || !channel || typeof channel.messages?.fetch !== 'function') continue;
+
+      const message = await channel.messages.fetch(messageId).catch(() => null);
+      if (message && typeof message.delete === 'function') {
+        await message.delete().catch(() => {});
       }
     }
 

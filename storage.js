@@ -98,6 +98,31 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return String(value || '').trim().slice(0, maxLength);
   }
 
+  function looksLikeApplicationNoise(value) {
+    const text = String(value || '').trim().toLowerCase();
+    if (!text) return false;
+
+    const compact = text.replace(/\s+/g, '');
+    if (compact.length < 4) return false;
+
+    if (/(.)\1{4,}/u.test(compact)) return true;
+    if (/^(.{1,3})\1{3,}$/u.test(compact)) return true;
+
+    const lettersOnly = compact.replace(/[^a-zа-яё0-9]/giu, '');
+    if (lettersOnly.length < 6) return false;
+
+    const uniqueCount = new Set(lettersOnly).size;
+    if (uniqueCount <= 2) return true;
+
+    const counts = {};
+    for (const char of lettersOnly) {
+      counts[char] = (counts[char] || 0) + 1;
+    }
+
+    const maxCount = Math.max(...Object.values(counts));
+    return maxCount / lettersOnly.length >= 0.65;
+  }
+
   function memberKey(guildId, memberId) {
     return `${guildId}:${memberId}`;
   }
@@ -296,6 +321,15 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
 
     if (about.length < 10) {
       return { error: copy.applications.invalidShort };
+    }
+
+    if (
+      looksLikeApplicationNoise(nickname)
+      || looksLikeApplicationNoise(inviter)
+      || looksLikeApplicationNoise(discovery)
+      || looksLikeApplicationNoise(about)
+    ) {
+      return { error: copy.applications.invalidNonsense };
     }
 
     return {

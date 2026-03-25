@@ -195,16 +195,16 @@ function formatVoiceHours(minutes) {
 
 function formatTimeAgo(timestamp) {
   const safeTimestamp = Number(timestamp) || 0;
-  if (!safeTimestamp) return 'РЅРµС‚ РґР°РЅРЅС‹С…';
+  if (!safeTimestamp) return 'нет данных';
 
   const diff = Math.max(0, Date.now() - safeTimestamp);
   const days = Math.floor(diff / (24 * 60 * 60 * 1000));
   const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
   const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
 
-  if (days > 0) return `${days}Рґ ${hours}С‡ РЅР°Р·Р°Рґ`;
-  if (hours > 0) return `${hours}С‡ ${minutes}Рј РЅР°Р·Р°Рґ`;
-  return `${minutes}Рј РЅР°Р·Р°Рґ`;
+  if (days > 0) return `${days}д ${hours}ч назад`;
+  if (hours > 0) return `${hours}ч ${minutes}м назад`;
+  return `${minutes}м назад`;
 }
 
 function getLiveVoiceMinutes(member) {
@@ -283,7 +283,7 @@ function buildFamilyDashboardStats(guild) {
     dndCount,
     offlineCount,
     topMemberLine: topEntry
-      ? `<@${topEntry.member.id}> вЂў ${getDisplayRankName(topEntry.member)} вЂў ${Math.max(0, topEntry.activity)} РѕС‡Рє.`
+      ? `<@${topEntry.member.id}> • ${getDisplayRankName(topEntry.member)} • ${Math.max(0, topEntry.activity)} очк.`
       : '',
     lastUpdatedLabel: new Date().toLocaleString('ru-RU')
   };
@@ -362,7 +362,7 @@ function buildLeaderboardSummary(guild) {
   return {
     memberCount: ranked.length,
     planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
-    topLine: topEntry ? `<@${topEntry.member.id}> вЂў ${topEntry.roleName} вЂў ${topEntry.points}/100` : '',
+    topLine: topEntry ? `<@${topEntry.member.id}> • ${topEntry.roleName} • ${topEntry.points}/100` : '',
     averagePoints: ranked.length ? (totalPoints / ranked.length).toFixed(1) : '0.0',
     totalPoints,
     totalVoiceHours: totalVoiceHours.toFixed(1),
@@ -397,7 +397,7 @@ function buildVoiceActivitySummary(guild) {
   return {
     memberCount: ranked.length,
     planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
-    topLine: topEntry ? `<@${topEntry.member.id}> вЂў ${topEntry.hours.toFixed(1)} С‡ вЂў ${topEntry.points}/100` : '',
+    topLine: topEntry ? `<@${topEntry.member.id}> • ${topEntry.hours.toFixed(1)} ч • ${topEntry.points}/100` : '',
     totalHours: totalHours.toFixed(1),
     averageHours: ranked.length ? (totalHours / ranked.length).toFixed(1) : '0.0',
     totalPoints,
@@ -412,23 +412,23 @@ function buildActivityReportEmbed(guild, targetMember = null) {
     const data = guildStorage.ensureMember(targetMember.id);
     return new EmbedBuilder()
       .setColor(0x2563eb)
-      .setTitle(`РћС‚С‡С‘С‚ РїРѕ СѓС‡Р°СЃС‚РЅРёРєСѓ: ${targetMember.displayName}`)
-      .setDescription(`РЎРµСЂРІРµСЂ: **${guild.name}**`)
+      .setTitle(`Отчёт по участнику: ${targetMember.displayName}`)
+      .setDescription(`Сервер: **${guild.name}**`)
       .addFields(
-        { name: 'Р Р°РЅРі', value: getDisplayRankName(targetMember), inline: true },
-        { name: 'Р РµРїСѓС‚Р°С†РёСЏ', value: `${guildStorage.pointsScore(targetMember.id)}/100`, inline: true },
-        { name: 'РџРѕСЃР»РµРґРЅСЏСЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ', value: formatTimeAgo(data.lastSeenAt), inline: true },
+        { name: 'Ранг', value: getDisplayRankName(targetMember), inline: true },
+        { name: 'Репутация', value: `${guildStorage.pointsScore(targetMember.id)}/100`, inline: true },
+        { name: 'Последняя активность', value: formatTimeAgo(data.lastSeenAt), inline: true },
         {
-          name: 'РЎС‚Р°С‚РёСЃС‚РёРєР°',
+          name: 'Статистика',
           value: [
-            `РЎРѕРѕР±С‰РµРЅРёСЏ: ${data.messageCount || 0}`,
-            `РџРѕС…РІР°Р»С‹: ${data.commends || 0}`,
-            `РџСЂРµРґС‹: ${data.warns || 0}`,
-            `Р“РѕР»РѕСЃ: ${formatVoiceHours(getLiveVoiceMinutes(targetMember))} С‡`
+            `Сообщения: ${data.messageCount || 0}`,
+            `Похвалы: ${data.commends || 0}`,
+            `Преды: ${data.warns || 0}`,
+            `Голос: ${formatVoiceHours(getLiveVoiceMinutes(targetMember))} ч`
           ].join('\n')
         }
       )
-      .setFooter({ text: 'BRHD вЂў Phoenix вЂў Activity Report' })
+      .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
       .setTimestamp();
   }
 
@@ -437,7 +437,7 @@ function buildActivityReportEmbed(guild, targetMember = null) {
       const data = guildStorage.ensureMember(member.id);
       return {
         member,
-        line: `${getDisplayRankName(member)} вЂў <@${member.id}> вЂў ${guildStorage.pointsScore(member.id)}/100 вЂў ${formatVoiceHours(getLiveVoiceMinutes(member))} С‡ вЂў ${formatTimeAgo(data.lastSeenAt)}`
+        line: `${getDisplayRankName(member)} - <@${member.id}> - ${guildStorage.pointsScore(member.id)}/100 - ${formatVoiceHours(getLiveVoiceMinutes(member))} ч - ${formatTimeAgo(data.lastSeenAt)}`
       };
     })
     .sort((left, right) => left.member.displayName.localeCompare(right.member.displayName, 'ru'))
@@ -446,13 +446,13 @@ function buildActivityReportEmbed(guild, targetMember = null) {
 
   return new EmbedBuilder()
     .setColor(0x7c3aed)
-    .setTitle('РћС‚С‡С‘С‚ РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё СЃРµРјСЊРё')
-    .setDescription(`РЎРµСЂРІРµСЂ: **${guild.name}**\nРЈС‡Р°СЃС‚РЅРёРєРѕРІ СЃ СЃРµРјРµР№РЅС‹РјРё СЂРѕР»СЏРјРё: ${lines.length}`)
+    .setTitle('Отчёт по активности семьи')
+    .setDescription(`Сервер: **${guild.name}**\nУчастников с семейными ролями: ${lines.length}`)
     .addFields({
-      name: 'РЎРїРёСЃРѕРє',
-      value: lines.length ? lines.join('\n').slice(0, 1024) : 'РќРµС‚ СѓС‡Р°СЃС‚РЅРёРєРѕРІ СЃ СЃРµРјРµР№РЅС‹РјРё СЂРѕР»СЏРјРё.'
+      name: 'Список',
+      value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
     })
-    .setFooter({ text: 'BRHD вЂў Phoenix вЂў Activity Report' })
+    .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
     .setTimestamp();
 }
 
@@ -467,45 +467,45 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
 
     return new EmbedBuilder()
       .setColor(0x2563eb)
-      .setTitle(`РћС‚С‡С‘С‚ РїРѕ СѓС‡Р°СЃС‚РЅРёРєСѓ вЂў ${targetMember.displayName}`)
+      .setTitle(`Отчёт по участнику - ${targetMember.displayName}`)
       .setDescription(
         [
-          `РЎРµСЂРІРµСЂ: **${guild.name}**`,
-          `Р Р°РЅРі: **${getDisplayRankName(targetMember)}**`,
-          `РЎС‚Р°С‚СѓСЃ: ${targetMember.presence?.status || 'offline'}`,
-          `РџРѕСЃР»РµРґРЅСЏСЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ: **${formatTimeAgo(data.lastSeenAt)}**`
+          `Сервер: **${guild.name}**`,
+          `Ранг: **${getDisplayRankName(targetMember)}**`,
+          `Статус: ${targetMember.presence?.status || 'offline'}`,
+          `Последняя активность: **${formatTimeAgo(data.lastSeenAt)}**`
         ].join('\n')
       )
       .setImage(settings.visuals.familyBanner || null)
       .addFields(
         {
-          name: 'РЎРІРѕРґРєР°',
+          name: 'Сводка',
           value: [
-            `Р РµРїСѓС‚Р°С†РёСЏ: ${reputation}/100`,
-            `Р“РѕР»РѕСЃ: ${voiceHours} С‡`,
-            `РЎРѕРѕР±С‰РµРЅРёСЏ: ${data.messageCount || 0}`
+            `Репутация: ${reputation}/100`,
+            `Голос: ${voiceHours} ч`,
+            `Сообщения: ${data.messageCount || 0}`
           ].join('\n'),
           inline: true
         },
         {
-          name: 'Р”РёСЃС†РёРїР»РёРЅР°',
+          name: 'Дисциплина',
           value: [
-            `РџРѕС…РІР°Р»С‹: ${data.commends || 0}`,
-            `РџСЂРµРґС‹: ${data.warns || 0}`,
-            `РђРєС‚РёРІ-РѕС‡РєРё: ${guildStorage.activityScore(targetMember.id)}`
+            `Похвалы: ${data.commends || 0}`,
+            `Преды: ${data.warns || 0}`,
+            `Актив-очки: ${guildStorage.activityScore(targetMember.id)}`
           ].join('\n'),
           inline: true
         },
         {
-          name: 'Р РµРєРѕРјРµРЅРґР°С†РёСЏ',
+          name: 'Рекомендация',
           value: [
-            reputation >= 70 ? 'РЈС‡Р°СЃС‚РЅРёРє РґРµСЂР¶РёС‚ СЃРёР»СЊРЅСѓСЋ СЂРµРїСѓС‚Р°С†РёСЋ.' : 'Р РµРїСѓС‚Р°С†РёСЏ С‚СЂРµР±СѓРµС‚ РІРЅРёРјР°РЅРёСЏ.',
-            (data.warns || 0) >= 3 ? 'Р•СЃС‚СЊ РґРёСЃС†РёРїР»РёРЅР°СЂРЅС‹Р№ СЂРёСЃРє.' : 'РљСЂРёС‚РёС‡РЅС‹С… РґРёСЃС†РёРїР»РёРЅР°СЂРЅС‹С… СЂРёСЃРєРѕРІ РЅРµС‚.',
-            Number(voiceHours) >= 3 || (data.messageCount || 0) >= 25 ? 'РђРєС‚РёРІРЅРѕСЃС‚СЊ РІС‹С€Рµ СЃСЂРµРґРЅРµРіРѕ.' : 'Р•СЃС‚СЊ Р·Р°РїР°СЃ РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё.'
+            reputation >= 70 ? 'Участник держит сильную репутацию.' : 'Репутация требует внимания.',
+            (data.warns || 0) >= 3 ? 'Есть дисциплинарный риск.' : 'Критичных дисциплинарных рисков нет.',
+            Number(voiceHours) >= 3 || (data.messageCount || 0) >= 25 ? 'Активность выше среднего.' : 'Есть запас по активности.'
           ].join('\n')
         }
       )
-      .setFooter({ text: 'BRHD вЂў Phoenix вЂў Premium Activity' })
+      .setFooter({ text: 'BRHD • Phoenix • Premium Activity' })
       .setTimestamp();
   }
 
@@ -513,7 +513,7 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
   const lines = members
     .map(member => {
       const data = guildStorage.ensureMember(member.id);
-      return `${getDisplayRankName(member)} вЂў <@${member.id}> вЂў ${guildStorage.pointsScore(member.id)}/100 вЂў ${formatVoiceHours(getLiveVoiceMinutes(member))} С‡ вЂў ${formatTimeAgo(data.lastSeenAt)}`;
+      return `${getDisplayRankName(member)} - <@${member.id}> - ${guildStorage.pointsScore(member.id)}/100 - ${formatVoiceHours(getLiveVoiceMinutes(member))} ч - ${formatTimeAgo(data.lastSeenAt)}`;
     })
     .sort((left, right) => left.localeCompare(right, 'ru'))
     .slice(0, 25);
@@ -527,48 +527,45 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
 
   return new EmbedBuilder()
     .setColor(0x7c3aed)
-    .setTitle('РћС‚С‡С‘С‚ РїРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё СЃРµРјСЊРё вЂў Phoenix')
+    .setTitle('Отчёт по активности семьи • Phoenix')
     .setDescription(
       [
-        `РЎРµСЂРІРµСЂ: **${guild.name}**`,
-        `РЈС‡Р°СЃС‚РЅРёРєРѕРІ СЃ СЃРµРјРµР№РЅС‹РјРё СЂРѕР»СЏРјРё: **${members.length}**`,
-        `AFK-СЂРёСЃРєРѕРІ: **${afkRiskCount}**`
+        `Сервер: **${guild.name}**`,
+        `Участников с семейными ролями: **${members.length}**`,
+        `AFK-рисков: **${afkRiskCount}**`
       ].join('\n')
     )
     .setImage(settings.visuals.familyBanner || null)
     .addFields(
       {
-        name: 'РЎРІРѕРґРєР°',
+        name: 'Сводка',
         value: [
-          `РЎСЂРµРґРЅСЏСЏ СЂРµРїСѓС‚Р°С†РёСЏ: ${members.length ? (totalPoints / members.length).toFixed(1) : '0.0'}/100`,
-          `РЎСѓРјРјР°СЂРЅР°СЏ СЂРµРїСѓС‚Р°С†РёСЏ: ${totalPoints}`,
-          `РЎСѓРјРјР°СЂРЅС‹Р№ РіРѕР»РѕСЃ: ${totalVoiceHours.toFixed(1)} С‡`
+          `Средняя репутация: ${members.length ? (totalPoints / members.length).toFixed(1) : '0.0'}/100`,
+          `Суммарная репутация: ${totalPoints}`,
+          `Суммарный голос: ${totalVoiceHours.toFixed(1)} ч`
         ].join('\n'),
         inline: true
       },
       {
-        name: 'РЎРїРёСЃРѕРє',
-        value: lines.length ? lines.join('\n').slice(0, 1024) : 'РќРµС‚ СѓС‡Р°СЃС‚РЅРёРєРѕРІ СЃ СЃРµРјРµР№РЅС‹РјРё СЂРѕР»СЏРјРё.'
+        name: 'Список',
+        value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
       }
     )
-    .setFooter({ text: 'BRHD вЂў Phoenix вЂў Premium Activity' })
+    .setFooter({ text: 'BRHD • Phoenix • Premium Activity' })
     .setTimestamp();
 }
 
 function formatPeriodLabel(period) {
-  return period === 'monthly' ? 'Р•Р¶РµРјРµСЃСЏС‡РЅС‹Р№ СЃС‚Р°С‚РёСЃС‚РёС‡РµСЃРєРёР№ РѕС‚С‡С‘С‚' : 'Р•Р¶РµРЅРµРґРµР»СЊРЅС‹Р№ СЃС‚Р°С‚РёСЃС‚РёС‡РµСЃРєРёР№ РѕС‚С‡С‘С‚';
+  return period === 'monthly' ? 'Ежемесячный статистический отчёт' : 'Еженедельный статистический отчёт';
 }
 
 function formatPeriodRangeLabel(analytics) {
   return analytics.dayCount >= 30
-    ? `РћС‚С‡С‘С‚ Р·Р° РїРµСЂРёРѕРґ СЃ ${analytics.fromDayKey}`
-    : `РћС‚С‡С‘С‚ Р·Р° РїРµСЂРёРѕРґ: ${analytics.fromDayKey} вЂ” ${analytics.toDayKey}`;
+    ? `Отчёт за период с ${analytics.fromDayKey}`
+    : `Отчёт за период: ${analytics.fromDayKey} - ${analytics.toDayKey}`;
 }
 
 function medal(index) {
-  if (index === 0) return 'рџҐ‡';
-  if (index === 1) return 'рџҐ€';
-  if (index === 2) return 'рџҐ‰';
   return `${index + 1}.`;
 }
 
@@ -576,7 +573,7 @@ function formatMinutesLong(totalMinutes) {
   const safe = Math.max(0, Math.floor(Number(totalMinutes) || 0));
   const hours = Math.floor(safe / 60);
   const minutes = safe % 60;
-  return `${hours}С‡ ${minutes}Рј`;
+  return `${hours}ч ${minutes}м`;
 }
 
 function normalizeReactionEmoji(emojiValue = '') {
@@ -663,7 +660,7 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
       .map(([memberId, stats]) => ({ memberId, value: stats.messages || 0 }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getMemberLabel(guild, item.memberId)} вЂ” ${item.value} СЃРѕРѕР±С‰РµРЅРёР№`
+    item => `${getMemberLabel(guild, item.memberId)} - ${item.value} сообщений`
   );
 
   const topVoice = buildRankedLines(
@@ -671,7 +668,7 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
       .map(([memberId, stats]) => ({ memberId, value: stats.voiceMinutes || 0 }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getMemberLabel(guild, item.memberId)} вЂ” ${formatMinutesLong(item.value)}`
+    item => `${getMemberLabel(guild, item.memberId)} - ${formatMinutesLong(item.value)}`
   );
 
   const topReactions = buildRankedLines(
@@ -679,7 +676,7 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
       .map(([memberId, stats]) => ({ memberId, value: stats.reactions || 0 }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getMemberLabel(guild, item.memberId)} вЂ” ${item.value} СЂРµР°РєС†РёР№`
+    item => `${getMemberLabel(guild, item.memberId)} - ${item.value} реакций`
   );
 
   const topChannels = buildRankedLines(
@@ -687,7 +684,7 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
       .map(([channelId, value]) => ({ channelId, value }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getChannelLabel(guild, item.channelId)} вЂ” ${item.value} СЃРѕРѕР±С‰РµРЅРёР№`
+    item => `${getChannelLabel(guild, item.channelId)} - ${item.value} сообщений`
   );
 
   const topVoiceChannels = buildRankedLines(
@@ -695,52 +692,52 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
       .map(([channelId, value]) => ({ channelId, value }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getChannelLabel(guild, item.channelId)} вЂ” ${formatMinutesLong(item.value)}`
+    item => `${getChannelLabel(guild, item.channelId)} - ${formatMinutesLong(item.value)}`
   );
 
   return new EmbedBuilder()
     .setColor(period === 'monthly' ? 0xf59e0b : 0x2563eb)
-    .setTitle(`рџ“… ${formatPeriodLabel(period)}`)
+    .setTitle(`📊 ${formatPeriodLabel(period)}`)
     .setDescription(formatPeriodRangeLabel(analytics))
     .setThumbnail(client.user?.displayAvatarURL?.() || null)
     .setImage(settings.visuals.familyBanner || null)
     .addFields(
       {
-        name: 'рџ’¬ РўРѕРї РїРѕ СЃРѕРѕР±С‰РµРЅРёСЏРј',
-        value: topMessages.length ? topMessages.join('\n').slice(0, 1024) : 'РќРµС‚ РґР°РЅРЅС‹С… Р·Р° РїРµСЂРёРѕРґ.'
+        name: '💬 Топ по сообщениям',
+        value: topMessages.length ? topMessages.join('\n').slice(0, 1024) : 'Нет данных за период.'
       },
       {
-        name: 'рџЋ¤ РўРѕРї РїРѕ РіРѕР»РѕСЃРѕРІРѕР№ Р°РєС‚РёРІРЅРѕСЃС‚Рё',
-        value: topVoice.length ? topVoice.join('\n').slice(0, 1024) : 'РќРµС‚ РґР°РЅРЅС‹С… Р·Р° РїРµСЂРёРѕРґ.'
+        name: '🎤 Топ по голосовой активности',
+        value: topVoice.length ? topVoice.join('\n').slice(0, 1024) : 'Нет данных за период.'
       },
       {
-        name: 'вњЁ РўРѕРї РїРѕ СЂРµР°РєС†РёСЏРј',
-        value: topReactions.length ? topReactions.join('\n').slice(0, 1024) : 'РќРµС‚ РґР°РЅРЅС‹С… Р·Р° РїРµСЂРёРѕРґ.'
+        name: '✨ Топ по реакциям',
+        value: topReactions.length ? topReactions.join('\n').slice(0, 1024) : 'Нет данных за период.'
       },
       {
-        name: 'рџ“Ќ РЎР°РјС‹Рµ Р°РєС‚РёРІРЅС‹Рµ РєР°РЅР°Р»С‹',
-        value: topChannels.length ? topChannels.join('\n').slice(0, 1024) : 'РќРµС‚ РґР°РЅРЅС‹С… Р·Р° РїРµСЂРёРѕРґ.'
+        name: '📌 Самые активные каналы',
+        value: topChannels.length ? topChannels.join('\n').slice(0, 1024) : 'Нет данных за период.'
       },
       {
-        name: 'рџ”Љ РўРѕРї РїРѕ РіРѕР»РѕСЃРѕРІС‹Рј РєР°РЅР°Р»Р°Рј',
-        value: topVoiceChannels.length ? topVoiceChannels.join('\n').slice(0, 1024) : 'РќРµС‚ РґР°РЅРЅС‹С… Р·Р° РїРµСЂРёРѕРґ.'
+        name: '🔊 Топ по голосовым каналам',
+        value: topVoiceChannels.length ? topVoiceChannels.join('\n').slice(0, 1024) : 'Нет данных за период.'
       },
       {
-        name: 'рџ‘‹ РЈС‡Р°СЃС‚РЅРёРєРё',
-        value: [`РќРѕРІС‹Рµ СѓС‡Р°СЃС‚РЅРёРєРё: **${analytics.joins}**`, `РЈС€РµРґС€РёРµ СѓС‡Р°СЃС‚РЅРёРєРё: **${analytics.leaves}**`].join('\n'),
+        name: '👋 Участники',
+        value: [`Новые участники: **${analytics.joins}**`, `Ушедшие участники: **${analytics.leaves}**`].join('\n'),
         inline: true
       },
       {
-        name: 'рџ“Љ РћР±С‰Р°СЏ СЃС‚Р°С‚РёСЃС‚РёРєР°',
+        name: '📈 Общая статистика',
         value: [
-          `Р’СЃРµРіРѕ СЃРѕРѕР±С‰РµРЅРёР№: **${analytics.messagesTotal}**`,
-          `Р’СЂРµРјСЏ РІ РІРѕР№СЃРµ: **${formatMinutesLong(analytics.voiceMinutesTotal)}**`,
-          `Р’СЃРµРіРѕ СЂРµР°РєС†РёР№: **${analytics.reactionsTotal}**`
+          `Всего сообщений: **${analytics.messagesTotal}**`,
+          `Время в войсе: **${formatMinutesLong(analytics.voiceMinutesTotal)}**`,
+          `Всего реакций: **${analytics.reactionsTotal}**`
         ].join('\n'),
         inline: true
       }
     )
-    .setFooter({ text: `BRHD вЂў Phoenix вЂў ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
+    .setFooter({ text: `BRHD • Phoenix • ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
     .setTimestamp();
 }
 
@@ -1011,11 +1008,11 @@ function canUseCommandInContext(commandName, interaction) {
 function isAiCommandOverviewQuery(query) {
   const value = String(query || '').toLowerCase();
   return (
-    value.includes('С‡С‚Рѕ СЏ СѓРјРµСЋ') ||
-    value.includes('С‡С‚Рѕ РјРЅРµ РґРѕСЃС‚СѓРїРЅРѕ') ||
-    value.includes('РєР°РєРёРµ РєРѕРјР°РЅРґС‹') ||
-    value.includes('С‡С‚Рѕ СЏ РјРѕРіСѓ') ||
-    value.includes('РјРѕРё РєРѕРјР°РЅРґС‹')
+    value.includes('что я умею') ||
+    value.includes('что мне доступно') ||
+    value.includes('какие команды') ||
+    value.includes('что я могу') ||
+    value.includes('мои команды')
   );
 }
 
@@ -1023,10 +1020,9 @@ function isAiNicknameRequest(query, targetUser, newNickname) {
   if (!targetUser || !newNickname) return false;
   const value = String(query || '').toLowerCase();
   return (
-    value.includes('СЃРјРµРЅРё РЅРёРє') ||
-    value.includes('СЃРјРµРЅРё РЅРёРє') ||
-    value.includes('РёР·РјРµРЅРё РЅРёРє') ||
-    value.includes('РїРµСЂРµРёРјРµРЅСѓР№') ||
+    value.includes('смени ник') ||
+    value.includes('измени ник') ||
+    value.includes('переименуй') ||
     value.includes('rename nick')
   );
 }
@@ -1042,10 +1038,10 @@ function buildAiCommandsOverview(interaction) {
   const planLabel = isPremiumGuild(interaction.guild.id) ? 'Premium' : 'Free';
   return [
     `${copy.ai.commandsOverviewTitle}:`,
-    `РџР»Р°РЅ: **${planLabel}**`,
-    `РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ: <@${interaction.user.id}>`,
+    `План: **${planLabel}**`,
+    `Пользователь: <@${interaction.user.id}>`,
     '',
-    ...available.map(command => `/${command.name} вЂ” ${command.description}`)
+    ...available.map(command => `/${command.name} - ${command.description}`)
   ].join('\n').slice(0, 1900);
 }
 
@@ -2397,7 +2393,13 @@ process.on('uncaughtException', error => {
 
 registerInteractionRuntime({
   client,
-  handleCommand: interaction => handleCommandRuntime(interaction, {
+  handleCommand: interaction => {
+    const guildId = interaction.guild?.id || interaction.guildId || GUILD_ID;
+    const guildStorage = getGuildStorage(guildId);
+    const applicationsService = getApplicationsService(guildId);
+    const rankService = getRankService(guildId);
+
+    return handleCommandRuntime(interaction, {
     APPLICATION_COOLDOWN_MS,
     AUTO_RANKS,
     CHANNEL_ID,
@@ -2430,29 +2432,34 @@ registerInteractionRuntime({
     copy,
     createConfig,
     database,
+    defaultModulesForMode,
+    deleteMessagesFast,
+    doPanelUpdate,
     editReplyAndAutoDelete,
-    embedBuilderCtor: EmbedBuilder,
+    EmbedBuilderCtor: EmbedBuilder,
     embeds,
+    ephemeral,
     enforceBlacklist,
     fetchMemberFast,
     fetchMessagesForUser,
     fetchRecentDeletableMessages,
     formatModerationTimestamp,
     formatVoiceHours,
+    getHelpCatalog,
     getGuildPlan,
     getGuildRecord: guild => database.getGuild(guild.id),
     getRoleIds,
+    guildStorage,
     guildRuntime,
     hasFamilyRole,
     isOwner,
+    isAiCommandOverviewQuery,
     isPremiumGuild,
     isPremiumAutomodRule,
     isPremiumAutomodTarget,
     normalizeAutomodConfig,
     printStartupDiagnostics,
-    rankService: {
-      get: getRankService
-    },
+    rankService,
     replyAndAutoDelete,
     resolveGuildSettings,
     resolveMemberQuery,
@@ -2465,8 +2472,10 @@ registerInteractionRuntime({
       fetchDeletedChannelExecutor,
       restoreDeletedChannel
     },
+    applicationsService,
     sendAcceptLog,
     sendBlacklistDm,
+    sendRankDm,
     sendDisciplineDm,
     sendDisciplineLog,
     storage,
@@ -2475,8 +2484,12 @@ registerInteractionRuntime({
     updateAutomodConfig: (guildId, patch) => updateAutomodConfig(guildId, patch),
     validateConfig,
     getAutomodTargetLimits,
-    buildAutomodRulePatch
-  }),
+    buildAutomodRulePatch,
+    buildAiCommandsOverview,
+    buildFamilyDashboardStats,
+    buildProfilePayload
+  });
+  },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,
   ephemeral,
   copy,
