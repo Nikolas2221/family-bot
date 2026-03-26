@@ -12,6 +12,33 @@ function createTempStorage() {
   return createStorage({ dataFile, saveDelayMs: 1 });
 }
 
+function createGuildScopedStorage(storage, guildId) {
+  return {
+    sanitizeApplicationInput: storage.sanitizeApplicationInput,
+    getCooldown(userId) {
+      return storage.getGuildCooldown(guildId, userId);
+    },
+    setCooldown(userId, value) {
+      return storage.setGuildCooldown(guildId, userId, value);
+    },
+    createApplication(payload) {
+      return storage.createGuildApplication({ guildId, ...payload });
+    },
+    findApplication(applicationId) {
+      return storage.findGuildApplication(guildId, applicationId);
+    },
+    setApplicationTicketInfo(application, ticketInfo) {
+      return storage.setApplicationTicketInfo(application, ticketInfo);
+    },
+    setApplicationStatus(application, status, reviewerId) {
+      return storage.setApplicationStatus(application, status, reviewerId);
+    },
+    listRecentApplications(limit) {
+      return storage.listGuildRecentApplications(guildId, limit);
+    }
+  };
+}
+
 function createFakeEmbed() {
   return {
     color: null,
@@ -87,6 +114,7 @@ async function runTest(name, fn) {
 
 async function testSubmitApplication() {
   const storage = createTempStorage();
+  const guildId = 'guild-1';
   const channel = {
     sent: [],
     async send(payload) {
@@ -96,7 +124,7 @@ async function testSubmitApplication() {
   };
 
   const service = createApplicationsService({
-    storage,
+    storage: createGuildScopedStorage(storage, guildId),
     fetchTextChannel: async () => channel,
     applicationsChannelId: 'applications',
     applicationDefaultRole: '',
@@ -109,7 +137,7 @@ async function testSubmitApplication() {
 
   const replies = [];
   const interaction = {
-    guild: { id: 'guild-1' },
+    guild: { id: guildId },
     user: { id: 'user-1' },
     fields: {
       getTextInputValue(field) {
@@ -130,14 +158,15 @@ async function testSubmitApplication() {
 
   await service.submitApplication(interaction);
 
-  assert.equal(storage.listRecentApplications(1).length, 1);
-  assert.equal(storage.getCooldown('user-1') > 0, true);
+  assert.equal(storage.listGuildRecentApplications(guildId, 1).length, 1);
+  assert.equal(storage.getGuildCooldown(guildId, 'user-1') > 0, true);
   assert.equal(channel.sent.length, 2);
   assert.match(replies[0].content, /заявка отправлена/i);
 }
 
 async function testSubmitApplicationCreatesThreadTicket() {
   const storage = createTempStorage();
+  const guildId = 'guild-thread';
   const threadMessages = [];
   let starterEdited = null;
   let threadOptions = null;
@@ -169,7 +198,7 @@ async function testSubmitApplicationCreatesThreadTicket() {
   };
 
   const service = createApplicationsService({
-    storage,
+    storage: createGuildScopedStorage(storage, guildId),
     fetchTextChannel: async () => channel,
     applicationsChannelId: 'applications',
     applicationDefaultRole: '',
@@ -182,7 +211,7 @@ async function testSubmitApplicationCreatesThreadTicket() {
   });
 
   const interaction = {
-    guild: { id: 'guild-thread' },
+    guild: { id: guildId },
     user: { id: 'user-thread' },
     fields: {
       getTextInputValue(field) {
@@ -200,7 +229,7 @@ async function testSubmitApplicationCreatesThreadTicket() {
 
   await service.submitApplication(interaction);
 
-  const saved = storage.listRecentApplications(1)[0];
+  const saved = storage.listGuildRecentApplications(guildId, 1)[0];
   assert.equal(channel.sent.length, 1);
   assert.equal(threadMessages.length, 1);
   assert.equal(saved.ticketThreadId, 'thread-1');
@@ -212,7 +241,9 @@ async function testSubmitApplicationCreatesThreadTicket() {
 
 async function testAcceptApplication() {
   const storage = createTempStorage();
-  const applicationId = storage.createApplication({
+  const guildId = 'guild-accept';
+  const applicationId = storage.createGuildApplication({
+    guildId,
     userId: 'user-2',
     nickname: 'Applicant',
     level: '19',
@@ -242,7 +273,7 @@ async function testAcceptApplication() {
   };
 
   const service = createApplicationsService({
-    storage,
+    storage: createGuildScopedStorage(storage, guildId),
     fetchTextChannel: async () => null,
     applicationsChannelId: 'applications',
     applicationDefaultRole: 'role-newbie',
@@ -259,6 +290,7 @@ async function testAcceptApplication() {
   const interaction = {
     user: { id: 'moderator-1', username: 'Boss' },
     guild: {
+      id: guildId,
       members: {
         async fetch() {
           return member;
@@ -288,7 +320,7 @@ async function testAcceptApplication() {
     rankName: '1 ранг'
   });
 
-  assert.equal(storage.findApplication(applicationId).status, 'accepted');
+  assert.equal(storage.findGuildApplication(guildId, applicationId).status, 'accepted');
   assert.equal(edits.length, 1);
   assert.equal(addedRoleId, 'role-newbie');
   assert.equal(removedRoleIds, null);
@@ -301,7 +333,9 @@ async function testAcceptApplication() {
 
 async function testAcceptApplicationAssignsResolvedFamilyRole() {
   const storage = createTempStorage();
-  const applicationId = storage.createApplication({
+  const guildId = 'guild-accept-resolved';
+  const applicationId = storage.createGuildApplication({
+    guildId,
     userId: 'user-22',
     nickname: 'Applicant 2',
     level: '22',
@@ -332,7 +366,7 @@ async function testAcceptApplicationAssignsResolvedFamilyRole() {
   };
 
   const service = createApplicationsService({
-    storage,
+    storage: createGuildScopedStorage(storage, guildId),
     fetchTextChannel: async () => null,
     applicationsChannelId: 'applications',
     applicationDefaultRole: 'role-newbie',
@@ -346,6 +380,7 @@ async function testAcceptApplicationAssignsResolvedFamilyRole() {
   const interaction = {
     user: { id: 'moderator-1', username: 'Boss' },
     guild: {
+      id: guildId,
       members: {
         async fetch() {
           return member;
@@ -378,7 +413,9 @@ async function testAcceptApplicationAssignsResolvedFamilyRole() {
 
 async function testAcceptApplicationDeletesTicketAfterApproval() {
   const storage = createTempStorage();
-  const applicationId = storage.createApplication({
+  const guildId = 'guild-accept-ticket';
+  const applicationId = storage.createGuildApplication({
+    guildId,
     userId: 'user-44',
     nickname: 'Ticket Applicant',
     level: '18',
@@ -386,7 +423,7 @@ async function testAcceptApplicationDeletesTicketAfterApproval() {
     discovery: 'Discord',
     about: 'Хочу попасть в семью и пройти одобрение через тикет.'
   });
-  const application = storage.findApplication(applicationId);
+  const application = storage.findGuildApplication(guildId, applicationId);
   storage.setApplicationTicketInfo(application, {
     ticketThreadId: 'thread-accepted',
     ticketMessageId: 'ticket-message-1',
@@ -438,7 +475,7 @@ async function testAcceptApplicationDeletesTicketAfterApproval() {
   };
 
   const service = createApplicationsService({
-    storage,
+    storage: createGuildScopedStorage(storage, guildId),
     fetchTextChannel: async () => null,
     applicationsChannelId: 'applications',
     applicationDefaultRole: 'role-newbie',
@@ -452,6 +489,7 @@ async function testAcceptApplicationDeletesTicketAfterApproval() {
   const interaction = {
     user: { id: 'moderator-1', username: 'Boss' },
     guild: {
+      id: guildId,
       members: {
         async fetch() {
           return member;
@@ -489,7 +527,9 @@ async function testAcceptApplicationDeletesTicketAfterApproval() {
 
 async function testRejectApplication() {
   const storage = createTempStorage();
-  const applicationId = storage.createApplication({
+  const guildId = 'guild-reject';
+  const applicationId = storage.createGuildApplication({
+    guildId,
     userId: 'user-3',
     nickname: 'Rejected',
     level: '20',
@@ -507,7 +547,7 @@ async function testRejectApplication() {
   };
 
   const service = createApplicationsService({
-    storage,
+    storage: createGuildScopedStorage(storage, guildId),
     fetchTextChannel: async (_guild, id) => (id === 'log-channel' ? logChannel : null),
     applicationsChannelId: 'applications',
     applicationDefaultRole: '',
@@ -527,7 +567,7 @@ async function testRejectApplication() {
   const replies = [];
   const interaction = {
     user: { id: 'moderator-2', username: 'Rejector' },
-    guild: {},
+    guild: { id: guildId },
     message: {
       async edit() {}
     },
@@ -539,7 +579,7 @@ async function testRejectApplication() {
 
   await service.reject(interaction, applicationId, 'user-3');
 
-  assert.equal(storage.findApplication(applicationId).status, 'rejected');
+  assert.equal(storage.findGuildApplication(guildId, applicationId).status, 'rejected');
   assert.equal(logChannel.sent.length, 1);
   assert.match(replies[0].content, /отклон/i);
 }

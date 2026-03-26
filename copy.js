@@ -1107,3 +1107,926 @@ copy.automod.actionUpdated = function actionUpdated(mode) {
 };
 
 module.exports = copy;
+
+// UTF-8 overrides for late-added modules and admin surfaces.
+Object.assign(copy.applications, {
+  applyModalNick: 'Ник в игре',
+  applyModalLevel: 'Какой лвл?',
+  applyModalInviter: 'Кто дал инвайт?',
+  applyModalDiscovery: 'Откуда о нас узнали?',
+  applyModalText: 'О себе',
+  closeTicketButton: '🔒 Закрыть тикет',
+  ticketClosedReply: '🔒 Тикет по заявке закрыт.',
+  ticketOnlyInThread: 'Закрыть тикет можно только внутри треда заявки.',
+  fieldNick: '🎮 Ник в игре',
+  fieldLevel: '⚡ Лвл',
+  fieldInvite: '🫂 Кто дал инвайт / Откуда узнали',
+  fieldText: '📝 О себе'
+});
+copy.applications.ticketThreadName = function ticketThreadName(nickname, applicationId) {
+  return `ticket-${nickname}-${applicationId}`.slice(0, 90);
+};
+copy.applications.ticketStarter = function ticketStarter(userId, threadId) {
+  return `Новая заявка от <@${userId}> • тикет: <#${threadId}>`;
+};
+copy.applications.ticketThreadHeader = function ticketThreadHeader(userId, applicationId) {
+  return `Тикет по заявке <@${userId}> • ID: \`${applicationId}\``;
+};
+copy.applications.ticketReason = function ticketReason(userId) {
+  return `Тикет по заявке ${userId}`;
+};
+
+Object.assign(copy.commands, {
+  roleTargetMute: 'Мут',
+  roleTargetAutorole: 'Автороль',
+  roleTargetVerification: 'Роль после подтверждения',
+  purgeDescription: 'Удалить выбранное количество сообщений в канале',
+  purgeUserDescription: 'Удалить сообщения конкретного участника',
+  clearAllChannelDescription: 'Полностью очистить текстовый канал',
+  muteDescription: 'Выдать мут участнику через mute-роль',
+  unmuteDescription: 'Снять мут с участника',
+  lockChannelDescription: 'Закрыть канал для @everyone',
+  unlockChannelDescription: 'Открыть канал для @everyone',
+  slowmodeDescription: 'Изменить slowmode канала',
+  warnHistoryDescription: 'Показать историю выговоров участника',
+  clearWarnsDescription: 'Очистить выговоры участника',
+  countOptionName: 'количество',
+  countOptionDescription: 'Сколько сообщений обработать',
+  channelOptionName: 'канал',
+  channelOptionDescription: 'Текстовый канал для команды',
+  confirmOptionName: 'подтверждение',
+  confirmOptionDescription: 'Напишите CLEAR, чтобы подтвердить полную очистку канала',
+  secondsOptionName: 'секунды',
+  secondsOptionDescription: 'Количество секунд для slowmode',
+  nicknameOptionName: 'новый_ник',
+  nicknameOptionDescription: 'Новый ник для AI-действия',
+  kickRolessDescription: 'Кикнуть участников без ролей вручную',
+  setModeDescription: 'Переключить продуктовый режим сервера',
+  setModuleDescription: 'Включить или выключить модуль сервера',
+  modeOptionName: 'mode',
+  modeOptionDescription: 'Какой режим продукта включить',
+  moduleOptionName: 'module',
+  moduleOptionDescription: 'Какой модуль переключить',
+  stateOptionName: 'state',
+  stateOptionDescription: 'Включить или выключить модуль',
+  modeFamily: 'Family Mode',
+  modeHybrid: 'Hybrid Mode',
+  modeServer: 'Server Mode',
+  stateOn: 'On',
+  stateOff: 'Off',
+  moduleFamily: 'Family',
+  moduleApplications: 'Applications',
+  moduleModeration: 'Moderation',
+  moduleSecurity: 'Security',
+  moduleAnalytics: 'Analytics',
+  moduleAi: 'AI',
+  moduleWelcome: 'Welcome',
+  moduleAutomod: 'Automod',
+  moduleSubscriptions: 'Subscriptions',
+  moduleCustomCommands: 'Custom Commands',
+  moduleMusic: 'Music',
+  channelTargetApplications: 'Подача заявки',
+  channelTargetUpdates: 'Апдейты бота',
+  channelTargetWelcome: 'Welcome',
+  channelTargetReports: 'Отчёты',
+  channelTargetRules: 'Правила',
+  channelTargetAutomod: 'Логи automod',
+  automodDescription: 'Настроить автомодерацию сервера',
+  automodStatusSubcommand: 'status',
+  automodStatusDescription: 'Показать текущие настройки automod',
+  automodToggleSubcommand: 'toggle',
+  automodToggleDescription: 'Включить или выключить правило automod',
+  automodLimitSubcommand: 'limit',
+  automodLimitDescription: 'Изменить числовой порог automod',
+  automodWordsSubcommand: 'words',
+  automodWordsDescription: 'Управлять списком стоп-слов automod',
+  automodRuleOptionName: 'rule',
+  automodRuleOptionDescription: 'Какое правило automod изменить',
+  automodRuleInvites: 'Инвайты',
+  automodRuleLinks: 'Ссылки',
+  automodRuleCaps: 'Капс',
+  automodRuleMentions: 'Много упоминаний',
+  automodRuleSpam: 'Флуд',
+  automodRuleBadWords: 'Стоп-слова',
+  automodTargetOptionName: 'target',
+  automodTargetOptionDescription: 'Какой порог изменить',
+  automodTargetCapsPercent: 'Порог капса %',
+  automodTargetCapsMinLength: 'Мин. длина капса',
+  automodTargetMentionLimit: 'Лимит упоминаний',
+  automodTargetSpamCount: 'Лимит флуда',
+  automodTargetSpamWindow: 'Окно флуда',
+  valueOptionName: 'value',
+  valueOptionDescription: 'Новое значение для порога',
+  actionOptionName: 'action',
+  actionOptionDescription: 'Что сделать со списком слов',
+  wordOptionName: 'word',
+  wordOptionDescription: 'Слово или список слов через запятую',
+  automodWordAddAction: 'Добавить',
+  automodWordRemoveAction: 'Удалить',
+  automodWordListAction: 'Показать',
+  automodWordClearAction: 'Очистить',
+  serverReportDescription: 'Показать недельный или месячный отчёт по серверу',
+  periodOptionName: 'period',
+  periodOptionDescription: 'За какой период собрать статистику',
+  periodWeekly: 'Weekly',
+  periodMonthly: 'Monthly',
+  messageOptionName: 'message',
+  messageOptionDescription: 'Текст welcome-сообщения',
+  messageIdOptionName: 'message_id',
+  messageIdOptionDescription: 'ID сообщения для reaction role',
+  emojiOptionName: 'emoji',
+  emojiOptionDescription: 'Эмодзи реакции',
+  welcomeDescription: 'Настроить welcome-сообщения сервера',
+  welcomeStatusSubcommand: 'status',
+  welcomeStatusDescription: 'Показать текущие настройки welcome',
+  welcomeToggleSubcommand: 'toggle',
+  welcomeToggleDescription: 'Включить или выключить welcome-сообщения',
+  welcomeChannelSubcommand: 'channel',
+  welcomeChannelDescription: 'Назначить канал для welcome-сообщений',
+  welcomeDmSubcommand: 'dm',
+  welcomeDmDescription: 'Включить или выключить welcome в личные сообщения',
+  welcomeMessageSubcommand: 'message',
+  welcomeMessageDescription: 'Изменить текст welcome-сообщения',
+  welcomeTestSubcommand: 'test',
+  welcomeTestDescription: 'Отправить тестовое welcome-сообщение',
+  autoroleDescription: 'Настроить автоматическую выдачу роли новичкам',
+  autoroleStatusSubcommand: 'status',
+  autoroleStatusDescription: 'Показать текущую autorole',
+  autoroleSetSubcommand: 'set',
+  autoroleSetDescription: 'Назначить роль для autorole',
+  autoroleClearSubcommand: 'clear',
+  autoroleClearDescription: 'Отключить autorole',
+  reactionRoleDescription: 'Настроить reaction roles',
+  reactionRoleStatusSubcommand: 'status',
+  reactionRoleStatusDescription: 'Показать все reaction roles',
+  reactionRoleAddSubcommand: 'add',
+  reactionRoleAddDescription: 'Добавить новую reaction role',
+  reactionRoleRemoveSubcommand: 'remove',
+  reactionRoleRemoveDescription: 'Удалить reaction role',
+  reportScheduleDescription: 'Настроить автопост серверных отчётов',
+  reportScheduleStatusSubcommand: 'status',
+  reportScheduleStatusDescription: 'Показать статус weekly/monthly отчётов',
+  reportScheduleSetSubcommand: 'set',
+  reportScheduleSetDescription: 'Включить weekly или monthly отчёт',
+  reportScheduleOffSubcommand: 'off',
+  reportScheduleOffDescription: 'Выключить weekly или monthly отчёт',
+  reportScheduleSendSubcommand: 'send',
+  reportScheduleSendDescription: 'Отправить отчёт вручную сейчас',
+  verificationDescription: 'Настроить проверку новичков',
+  verificationStatusSubcommand: 'status',
+  verificationToggleSubcommand: 'toggle',
+  verificationRoleSubcommand: 'role',
+  verificationQuestionnaireSubcommand: 'questionnaire',
+  roleMenuDescription: 'Настроить меню ролей с кнопками',
+  roleMenuStatusSubcommand: 'status',
+  roleMenuCreateSubcommand: 'create',
+  roleMenuAddSubcommand: 'add',
+  roleMenuRemoveSubcommand: 'remove',
+  roleMenuPublishSubcommand: 'publish',
+  customCommandDescription: 'Настроить свои автоответы и триггеры',
+  customCommandStatusSubcommand: 'status',
+  customCommandAddSubcommand: 'add',
+  customCommandRemoveSubcommand: 'remove',
+  automodActionSubcommand: 'action',
+  automodActionDescription: 'Выбрать мягкое или жёсткое наказание',
+  automodActionModeSoft: 'Мягкий режим',
+  automodActionModeHard: 'Жёсткий режим',
+  menuOptionName: 'menu',
+  menuOptionDescription: 'ID или имя меню',
+  titleOptionName: 'title',
+  titleOptionDescription: 'Заголовок',
+  descriptionOptionName: 'description',
+  descriptionOptionDescription: 'Описание',
+  categoryOptionName: 'category',
+  categoryOptionDescription: 'Категория',
+  triggerOptionName: 'trigger',
+  triggerOptionDescription: 'Ключевое слово или фраза',
+  responseOptionName: 'response',
+  responseOptionDescription: 'Ответ бота',
+  modeChoiceOptionName: 'mode',
+  modeChoiceOptionDescription: 'Как искать совпадение',
+  modeContains: 'Содержит',
+  modeStartsWith: 'Начинается с',
+  modeExact: 'Точное совпадение',
+  actionModeOptionName: 'mode',
+  actionModeOptionDescription: 'Режим наказания'
+});
+
+copy.common.moduleDisabled = 'Этот модуль сервера сейчас отключён.';
+
+copy.moderation = {
+  ...copy.moderation,
+  noAccess: 'У тебя нет доступа к этой модераторской команде.',
+  premiumOnly: 'Эта модераторская команда доступна только на Premium.',
+  muteRoleMissing: 'Сначала задай mute-роль через /setrole.',
+  invalidCount: 'Укажи количество от 1 до 500.',
+  invalidSeconds: 'Укажи значение от 0 до 21600 секунд.',
+  invalidConfirmation: 'Для полной очистки канала нужно написать `CLEAR`.',
+  notTextChannel: 'Эта команда работает только с текстовыми каналами сервера.',
+  purgeDone(count, channelId) {
+    return `Удалено сообщений: **${count}** в канале <#${channelId}>.`;
+  },
+  purgeUserDone(count, userId, channelId) {
+    return `Удалено сообщений участника <@${userId}>: **${count}** в канале <#${channelId}>.`;
+  },
+  purgeUserScanDone(count, matched, userId, channelId) {
+    return `Удалено сообщений участника <@${userId}>: **${count}** из **${matched}** найденных в канале <#${channelId}>.`;
+  },
+  purgeUserDetailed(count, matched, blocked, system, userId, channelId) {
+    const details = [
+      `Удалено сообщений участника <@${userId}>: **${count}**`,
+      `Найдено совпадений: **${matched}**`,
+      `Канал: <#${channelId}>`
+    ];
+    if (blocked > 0) details.push(`Неудаляемых сообщений: **${blocked}**`);
+    if (system > 0) details.push(`Системных записей Discord: **${system}**`);
+    return details.join(' • ');
+  },
+  clearChannelDone(oldChannelId, newChannelId) {
+    return `Канал <#${oldChannelId}> очищен. Новый канал: <#${newChannelId}>.`;
+  },
+  clearChannelPartial(channelId, deleted, skipped) {
+    return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Осталось неудаляемых или системных сообщений: **${skipped}**.`;
+  },
+  muteDone(userId, roleId) {
+    return `Участнику <@${userId}> выдан мут <@&${roleId}>.`;
+  },
+  unmuteDone(userId) {
+    return `С участника <@${userId}> снят мут.`;
+  },
+  slowmodeDone(channelId, seconds) {
+    return seconds > 0
+      ? `Slowmode для <#${channelId}> установлен на **${seconds}** сек.`
+      : `Slowmode для <#${channelId}> отключён.`;
+  },
+  lockDone(channelId) {
+    return `Канал <#${channelId}> закрыт для @everyone.`;
+  },
+  unlockDone(channelId) {
+    return `Канал <#${channelId}> снова открыт для @everyone.`;
+  },
+  warnHistoryTitle(userTag) {
+    return `История выговоров: ${userTag}`;
+  },
+  warnHistoryEmpty: 'У участника пока нет сохранённых выговоров.',
+  warnHistoryLine(index, entry) {
+    return `${index + 1}. ${entry.reason} • модератор <@${entry.moderatorId}> • ${entry.createdAt}`;
+  },
+  clearWarnsDone(userId, count) {
+    return `Для <@${userId}> очищено выговоров: **${count}**.`;
+  },
+  actionFailed(action) {
+    return `Не удалось выполнить действие: ${action}. Проверь права бота и иерархию ролей.`;
+  },
+  kickRolessDone(kicked, failed) {
+    return `Чистка безрольных завершена: кикнуто **${kicked}**, ошибок **${failed}**.`;
+  }
+};
+
+copy.security.banListLine = function banListLine(index, ban) {
+  const username = ban?.user?.username || 'unknown';
+  const reason = ban?.reason || 'без причины';
+  return `${index + 1}. <@${ban.user.id}> • \`${ban.user.id}\` • ${username} • ${reason}`;
+};
+copy.security.blacklistLine = function blacklistLine(index, entry) {
+  return `${index + 1}. <@${entry.userId}> • \`${entry.userId}\` • ${entry.reason}`;
+};
+
+copy.automod = copy.automod || {};
+copy.automod.ruleLabel = function ruleLabel(rule) {
+  const labels = {
+    invites: 'Инвайты',
+    links: 'Ссылки',
+    caps: 'Капс',
+    mentions: 'Упоминания',
+    spam: 'Флуд',
+    badWords: 'Стоп-слова'
+  };
+  return labels[rule] || rule;
+};
+copy.automod.targetLabel = function targetLabel(target) {
+  const labels = {
+    capsPercent: 'Порог капса',
+    capsMinLength: 'Мин. длина капса',
+    mentionLimit: 'Лимит упоминаний',
+    spamCount: 'Лимит флуда',
+    spamWindowSeconds: 'Окно флуда'
+  };
+  return labels[target] || target;
+};
+copy.automod.notice = function notice(userId, rule, detail = '') {
+  return `<@${userId}>, automod удалил сообщение по правилу **${rule}**${detail ? ` (${detail})` : ''}.`;
+};
+copy.automod.toggleDone = function toggleDone(rule, enabled) {
+  return `Правило automod **${rule}** теперь **${enabled ? 'включено' : 'выключено'}**.`;
+};
+copy.automod.limitDone = function limitDone(target, value) {
+  return `Порог automod **${target}** обновлён: **${value}**.`;
+};
+copy.automod.wordAdded = function wordAdded(word) {
+  return `Слова **${word}** добавлены в стоп-лист automod.`;
+};
+copy.automod.wordRemoved = function wordRemoved(word) {
+  return `Слова **${word}** удалены из стоп-листа automod.`;
+};
+copy.automod.wordsCleared = 'Список стоп-слов automod очищен.';
+copy.automod.wordMissing = 'Укажи слово или список слов через запятую для этой операции.';
+copy.automod.actionUpdated = function actionUpdated(mode) {
+  return `Режим наказания automod обновлён: ${mode}.`;
+};
+
+copy.welcome = copy.welcome || {};
+Object.assign(copy.welcome, {
+  statusTitle: '👋 Welcome',
+  enabled: 'Включено',
+  disabled: 'Выключено',
+  channel: 'Канал',
+  dm: 'ЛС',
+  message: 'Текст',
+  autorole: 'Автороль',
+  messageCleared: 'Текст welcome очищен.',
+  testSent: 'Тестовое welcome-сообщение отправлено.'
+});
+copy.welcome.updated = function updated(label) {
+  return `Настройки welcome обновлены: ${label}.`;
+};
+
+copy.reactionRoles = copy.reactionRoles || {};
+Object.assign(copy.reactionRoles, {
+  title: '✨ Reaction Roles',
+  empty: 'Связки реакций пока не настроены.',
+  notFound: 'Такая reaction role не найдена.',
+  messageMissing: 'Не удалось найти сообщение для этой reaction role.'
+});
+copy.reactionRoles.added = function added(emoji, roleId, messageId) {
+  return `Reaction role добавлена: ${emoji} -> <@&${roleId}> для сообщения \`${messageId}\`.`;
+};
+copy.reactionRoles.removed = function removed(emoji, messageId) {
+  return `Reaction role удалена: ${emoji} для сообщения \`${messageId}\`.`;
+};
+
+copy.reports = copy.reports || {};
+Object.assign(copy.reports, {
+  title: '📆 Расписание отчётов',
+  periodWeekly: 'Weekly',
+  periodMonthly: 'Monthly',
+  channelMissing: 'Сначала укажи канал отчётов или передай канал в команду.'
+});
+copy.reports.enabled = function enabled(period, channelId) {
+  return `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`;
+};
+copy.reports.disabled = function disabled(period) {
+  return `${period} отчёт выключен.`;
+};
+copy.reports.sent = function sent(period, channelId) {
+  return `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`;
+};
+
+copy.verification = copy.verification || {};
+Object.assign(copy.verification, {
+  title: 'Проверка новичков',
+  enabled: 'Проверка включена.',
+  disabled: 'Проверка выключена.',
+  alreadyVerified: 'Ты уже прошёл подтверждение.',
+  roleMissing: 'Сначала укажи роль после подтверждения или autorole.',
+  noPermission: 'Бот не смог выдать роль после подтверждения. Проверь права и иерархию ролей.',
+  modalTitle: 'Стартовая анкета',
+  modalNick: 'Игровой ник',
+  modalReason: 'Зачем пришёл',
+  modalRules: 'Подтверди, что ознакомился с правилами',
+  rulesButton: 'Правила',
+  verifyButton: 'Подтвердить',
+  applyButton: 'Подать заявку'
+});
+copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+  return [
+    `Статус: ${enabled ? 'включено' : 'выключено'}`,
+    `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
+    `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
+  ].join('\n');
+};
+copy.verification.updated = function updated(label) {
+  return `Настройки verification обновлены: ${label}.`;
+};
+copy.verification.success = function success(roleId) {
+  return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
+};
+
+copy.roleMenus = copy.roleMenus || {};
+Object.assign(copy.roleMenus, {
+  title: 'Меню ролей',
+  empty: 'Role-menu пока не созданы.',
+  notFound: 'Такое role-menu не найдено.'
+});
+copy.roleMenus.created = function created(menuId) {
+  return `Role-menu \`${menuId}\` создано.`;
+};
+copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+  return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
+};
+copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+  return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
+};
+copy.roleMenus.published = function published(menuId, channelId) {
+  return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
+};
+copy.roleMenus.roleAdded = function roleAdded(roleId) {
+  return `Роль <@&${roleId}> выдана.`;
+};
+copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+  return `Роль <@&${roleId}> снята.`;
+};
+
+copy.customCommands = copy.customCommands || {};
+Object.assign(copy.customCommands, {
+  title: 'Пользовательские команды',
+  empty: 'Пользовательские триггеры пока не настроены.',
+  notFound: 'Такой триггер не найден.'
+});
+copy.customCommands.added = function added(name) {
+  return `Триггер \`${name}\` сохранён.`;
+};
+copy.customCommands.removed = function removed(name) {
+  return `Триггер \`${name}\` удалён.`;
+};
+
+copy.stats = {
+  ...copy.stats,
+  leaderboardTitle: '🏆 Таблица участников',
+  leaderboardDescription: 'Рейтинг по очкам репутации от 0 до 100.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: '🎙 Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours(value) {
+    return `${Number(value || 0).toFixed(1)} ч`;
+  },
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
+  }
+};
+
+copy.ai.advisorTitle = function advisorTitle(displayName) {
+  return `🤖 AI-советник: ${displayName}`;
+};
+copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
+copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
+copy.ai.commandsOverviewTitle = 'Что тебе доступно сейчас';
+copy.ai.commandsOverviewEmpty = 'Не нашёл доступных команд для твоих прав.';
+copy.ai.nicknameMissingTarget = 'Для смены ника укажи пользователя и новый ник.';
+copy.ai.nicknameNoAccess = 'Для смены ника через AI нужны права администратора или Manage Nicknames.';
+copy.ai.nicknameTooLong = 'Новый ник должен быть от 1 до 32 символов.';
+copy.ai.nicknameDone = function nicknameDone(userId, nickname) {
+  return `AI изменил ник для <@${userId}> на **${nickname}**.`;
+};
+copy.ai.nicknameFailed = 'AI не смог изменить ник. Проверь права бота и иерархию ролей.';
+
+copy.admin.noOwnerAccess = 'Эта команда доступна только владельцам бота.';
+copy.admin.premiumOnly = 'Эта функция доступна только на тарифе Premium.';
+copy.admin.setupSaved = 'Настройки сервера сохранены в базе.';
+copy.admin.setupTitle = '⚙️ Setup сервера';
+copy.admin.setupDescription = function setupDescription(guildName) {
+  return `Конфигурация для сервера "${guildName}" сохранена.`;
+};
+copy.admin.panelTitle = '🛠 Админ-панель сервера';
+copy.admin.panelFree = 'Free - 0$';
+copy.admin.panelPremium = 'Premium - 5$';
+copy.admin.panelFieldPlan = 'Тариф';
+copy.admin.panelFieldSetup = 'Setup';
+copy.admin.panelFieldFeatures = 'Функции';
+copy.admin.panelFieldChannels = 'Каналы';
+copy.admin.panelFieldRoles = 'Роли';
+copy.admin.panelFieldVisuals = 'Баннеры';
+copy.admin.panelSetupDone = 'Настроен';
+copy.admin.panelSetupPending = 'Не настроен';
+copy.admin.panelFeatures = function panelFeatures(plan) {
+  if (plan === 'premium') {
+    return [
+      '• всё из Free',
+      '• лидерборд и голосовая активность',
+      '• админ-отчёты по активности',
+      '• оффлайн AI и AI-анализ заявок',
+      '• авто-ранги и авто-DM',
+      '• чёрный список и бан-лист',
+      '• anti-leak и защита каналов',
+      '• еженедельная очистка без ролей',
+      '• AFK-предупреждения за 3 дня'
+    ].join('\n');
+  }
+
+  return [
+    '• панель семьи',
+    '• заявки и кнопка подачи',
+    '• профили участников',
+    '• настройка ролей и каналов через Discord',
+    '• ручные похвалы и преды',
+    '• базовая админка сервера'
+  ].join('\n');
+};
+copy.admin.channelLine = function channelLine(label, value) {
+  return `${label}: ${value || 'не задан'}`;
+};
+copy.admin.roleLine = function roleLine(label, value) {
+  return `${label}: ${value || 'не задана'}`;
+};
+copy.admin.visualLine = function visualLine(label, value) {
+  return `${label}: ${value || 'не задан'}`;
+};
+copy.admin.subscriptionUpdated = function subscriptionUpdated(plan) {
+  return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}.`;
+};
+
+copy.help.title = function title(plan) {
+  return `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`;
+};
+copy.help.regularSection = 'Обычные команды';
+copy.help.adminSection = 'Команды администрации';
+copy.help.premiumRegularSection = 'Обычные команды в Premium';
+copy.help.premiumAdminSection = 'Админ-команды в Premium';
+copy.help.freeSection = 'Доступно сейчас';
+copy.help.premiumSection = 'В Premium';
+copy.help.none = 'Нет доступных команд для этого раздела.';
+copy.help.line = function line(name, description) {
+  return `/${name} - ${description}`;
+};
+
+copy.common = copy.common || {};
+Object.assign(copy.common, {
+  noAccess: 'У тебя нет доступа к этой команде.',
+  moduleDisabled: 'Этот модуль сервера сейчас отключён.'
+});
+
+copy.profile = copy.profile || {};
+Object.assign(copy.profile, {
+  notFound: 'Участник не найден.'
+});
+
+copy.family = copy.family || {};
+Object.assign(copy.family, {
+  menuTitle: 'Панель семьи',
+  refreshButton: 'Обновить',
+  profileButton: 'Профиль',
+  leaderboardButton: 'Топ',
+  voiceButton: 'Голос',
+  applyButton: 'Подать заявку',
+  adminApplicationsButton: 'Заявки',
+  adminAiAdvisorButton: 'AI-совет',
+  adminPanelButton: 'Админка',
+  adminBlacklistButton: 'ЧС',
+  adminReportButton: 'Отчёт',
+  aiAdvisorModalTitle: 'AI-советник',
+  aiAdvisorModalLabel: 'Участник',
+  aiAdvisorModalPlaceholder: 'ID, ник или @упоминание'
+});
+
+copy.moderation = {
+  ...copy.moderation,
+  noAccess: 'У тебя нет доступа к этой модераторской команде.',
+  premiumOnly: 'Эта модераторская команда доступна только на Premium.',
+  muteRoleMissing: 'Сначала задай mute-роль через /setrole.',
+  invalidCount: 'Укажи количество от 1 до 500.',
+  invalidSeconds: 'Укажи значение от 0 до 21600 секунд.',
+  invalidConfirmation: 'Для полной очистки канала нужно написать `CLEAR`.',
+  notTextChannel: 'Эта команда работает только с текстовыми каналами сервера.',
+  purgeDone(count, channelId) {
+    return `Удалено сообщений: **${count}** в канале <#${channelId}>.`;
+  },
+  purgeUserDone(count, userId, channelId) {
+    return `Удалено сообщений участника <@${userId}>: **${count}** в канале <#${channelId}>.`;
+  },
+  purgeUserScanDone(count, matched, userId, channelId) {
+    return `Удалено сообщений участника <@${userId}>: **${count}** из **${matched}** найденных в канале <#${channelId}>.`;
+  },
+  purgeUserDetailed(count, matched, blocked, system, userId, channelId) {
+    const details = [
+      `Удалено сообщений участника <@${userId}>: **${count}**`,
+      `Найдено совпадений: **${matched}**`,
+      `Канал: <#${channelId}>`
+    ];
+    if (blocked > 0) details.push(`Неудаляемых сообщений: **${blocked}**`);
+    if (system > 0) details.push(`Системных записей Discord: **${system}**`);
+    return details.join(' • ');
+  },
+  clearChannelDone(oldChannelId, newChannelId) {
+    return `Канал <#${oldChannelId}> очищен. Новый канал: <#${newChannelId}>.`;
+  },
+  clearChannelPartial(channelId, deleted, skipped) {
+    return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Осталось неудаляемых или системных сообщений: **${skipped}**.`;
+  },
+  muteDone(userId, roleId) {
+    return `Участнику <@${userId}> выдан мут <@&${roleId}>.`;
+  },
+  unmuteDone(userId) {
+    return `С участника <@${userId}> снят мут.`;
+  },
+  slowmodeDone(channelId, seconds) {
+    return seconds > 0
+      ? `Slowmode для <#${channelId}> установлен на **${seconds}** сек.`
+      : `Slowmode для <#${channelId}> отключён.`;
+  },
+  lockDone(channelId) {
+    return `Канал <#${channelId}> закрыт для @everyone.`;
+  },
+  unlockDone(channelId) {
+    return `Канал <#${channelId}> снова открыт для @everyone.`;
+  },
+  warnHistoryTitle(userTag) {
+    return `История выговоров: ${userTag}`;
+  },
+  warnHistoryEmpty: 'У участника пока нет сохранённых выговоров.',
+  warnHistoryLine(index, entry) {
+    return `${index + 1}. ${entry.reason} • модератор <@${entry.moderatorId}> • ${entry.createdAt}`;
+  },
+  clearWarnsDone(userId, count) {
+    return `Для <@${userId}> очищено выговоров: **${count}**.`;
+  },
+  actionFailed(action) {
+    return `Не удалось выполнить действие: ${action}. Проверь права бота и иерархию ролей.`;
+  },
+  kickRolessDone(kicked, failed) {
+    return `Чистка безрольных завершена: кикнуто **${kicked}**, ошибок **${failed}**.`;
+  }
+};
+
+copy.security = copy.security || {};
+copy.security.banListLine = function banListLine(index, ban) {
+  const username = ban?.user?.username || 'unknown';
+  const reason = ban?.reason || 'без причины';
+  return `${index + 1}. <@${ban.user.id}> • \`${ban.user.id}\` • ${username} • ${reason}`;
+};
+copy.security.blacklistLine = function blacklistLine(index, entry) {
+  return `${index + 1}. <@${entry.userId}> • \`${entry.userId}\` • ${entry.reason}`;
+};
+
+copy.automod = copy.automod || {};
+copy.automod.ruleLabel = function ruleLabel(rule) {
+  const labels = {
+    invites: 'Инвайты',
+    links: 'Ссылки',
+    caps: 'Капс',
+    mentions: 'Упоминания',
+    spam: 'Флуд',
+    badWords: 'Стоп-слова'
+  };
+  return labels[rule] || rule;
+};
+copy.automod.targetLabel = function targetLabel(target) {
+  const labels = {
+    capsPercent: 'Порог капса',
+    capsMinLength: 'Мин. длина капса',
+    mentionLimit: 'Лимит упоминаний',
+    spamCount: 'Лимит флуда',
+    spamWindowSeconds: 'Окно флуда'
+  };
+  return labels[target] || target;
+};
+copy.automod.notice = function notice(userId, rule, detail = '') {
+  return `<@${userId}>, automod удалил сообщение по правилу **${rule}**${detail ? ` (${detail})` : ''}.`;
+};
+copy.automod.toggleDone = function toggleDone(rule, enabled) {
+  return `Правило automod **${rule}** теперь **${enabled ? 'включено' : 'выключено'}**.`;
+};
+copy.automod.limitDone = function limitDone(target, value) {
+  return `Порог automod **${target}** обновлён: **${value}**.`;
+};
+copy.automod.wordAdded = function wordAdded(word) {
+  return `Слова **${word}** добавлены в стоп-лист automod.`;
+};
+copy.automod.wordRemoved = function wordRemoved(word) {
+  return `Слова **${word}** удалены из стоп-листа automod.`;
+};
+copy.automod.wordsCleared = 'Список стоп-слов automod очищен.';
+copy.automod.wordMissing = 'Укажи слово или список слов через запятую для этой операции.';
+copy.automod.actionUpdated = function actionUpdated(mode) {
+  return `Режим наказания automod обновлён: ${mode}.`;
+};
+
+copy.welcome = copy.welcome || {};
+Object.assign(copy.welcome, {
+  statusTitle: '👋 Welcome',
+  enabled: 'Включено',
+  disabled: 'Выключено',
+  channel: 'Канал',
+  dm: 'ЛС',
+  message: 'Текст',
+  autorole: 'Автороль',
+  messageCleared: 'Текст welcome очищен.',
+  testSent: 'Тестовое welcome-сообщение отправлено.'
+});
+copy.welcome.updated = function updated(label) {
+  return `Настройки welcome обновлены: ${label}.`;
+};
+
+copy.reactionRoles = copy.reactionRoles || {};
+Object.assign(copy.reactionRoles, {
+  title: '✨ Reaction Roles',
+  empty: 'Связки реакций пока не настроены.',
+  notFound: 'Такая reaction role не найдена.',
+  messageMissing: 'Не удалось найти сообщение для этой reaction role.'
+});
+copy.reactionRoles.added = function added(emoji, roleId, messageId) {
+  return `Reaction role добавлена: ${emoji} -> <@&${roleId}> для сообщения \`${messageId}\`.`;
+};
+copy.reactionRoles.removed = function removed(emoji, messageId) {
+  return `Reaction role удалена: ${emoji} для сообщения \`${messageId}\`.`;
+};
+
+copy.reports = copy.reports || {};
+Object.assign(copy.reports, {
+  title: '📆 Расписание отчётов',
+  periodWeekly: 'Weekly',
+  periodMonthly: 'Monthly',
+  channelMissing: 'Сначала укажи канал отчётов или передай канал в команду.'
+});
+copy.reports.enabled = function enabled(period, channelId) {
+  return `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`;
+};
+copy.reports.disabled = function disabled(period) {
+  return `${period} отчёт выключен.`;
+};
+copy.reports.sent = function sent(period, channelId) {
+  return `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`;
+};
+
+copy.verification = copy.verification || {};
+Object.assign(copy.verification, {
+  title: 'Проверка новичков',
+  enabled: 'Проверка включена.',
+  disabled: 'Проверка выключена.',
+  alreadyVerified: 'Ты уже прошёл подтверждение.',
+  roleMissing: 'Сначала укажи роль после подтверждения или autorole.',
+  noPermission: 'Бот не смог выдать роль после подтверждения. Проверь права и иерархию ролей.',
+  modalTitle: 'Стартовая анкета',
+  modalNick: 'Игровой ник',
+  modalReason: 'Зачем пришёл',
+  modalRules: 'Подтверди, что ознакомился с правилами',
+  rulesButton: 'Правила',
+  verifyButton: 'Подтвердить',
+  applyButton: 'Подать заявку'
+});
+copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+  return [
+    `Статус: ${enabled ? 'включено' : 'выключено'}`,
+    `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
+    `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
+  ].join('\n');
+};
+copy.verification.updated = function updated(label) {
+  return `Настройки verification обновлены: ${label}.`;
+};
+copy.verification.success = function success(roleId) {
+  return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
+};
+
+copy.roleMenus = copy.roleMenus || {};
+Object.assign(copy.roleMenus, {
+  title: 'Меню ролей',
+  empty: 'Role-menu пока не созданы.',
+  notFound: 'Такое role-menu не найдено.'
+});
+copy.roleMenus.created = function created(menuId) {
+  return `Role-menu \`${menuId}\` создано.`;
+};
+copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+  return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
+};
+copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+  return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
+};
+copy.roleMenus.published = function published(menuId, channelId) {
+  return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
+};
+copy.roleMenus.roleAdded = function roleAdded(roleId) {
+  return `Роль <@&${roleId}> выдана.`;
+};
+copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+  return `Роль <@&${roleId}> снята.`;
+};
+
+copy.customCommands = copy.customCommands || {};
+Object.assign(copy.customCommands, {
+  title: 'Пользовательские команды',
+  empty: 'Пользовательские триггеры пока не настроены.',
+  notFound: 'Такой триггер не найден.'
+});
+copy.customCommands.added = function added(name) {
+  return `Триггер \`${name}\` сохранён.`;
+};
+copy.customCommands.removed = function removed(name) {
+  return `Триггер \`${name}\` удалён.`;
+};
+
+copy.stats = {
+  ...copy.stats,
+  leaderboardTitle: '🏆 Таблица участников',
+  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: '🎙 Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours(value) {
+    return `${Number(value || 0).toFixed(1)} ч`;
+  },
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
+  }
+};
+
+copy.ai = copy.ai || {};
+copy.ai.advisorTitle = function advisorTitle(displayName) {
+  return `🤖 AI-советник: ${displayName}`;
+};
+copy.ai.advisorFooter = 'BRHD / Phoenix / AI Advisor';
+copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
+copy.ai.commandsOverviewTitle = 'Что тебе доступно сейчас';
+copy.ai.commandsOverviewEmpty = 'Не нашёл доступных команд для твоих прав.';
+copy.ai.nicknameMissingTarget = 'Для смены ника укажи пользователя и новый ник.';
+copy.ai.nicknameNoAccess = 'Для смены ника через AI нужны права администратора или Manage Nicknames.';
+copy.ai.nicknameTooLong = 'Новый ник должен быть от 1 до 32 символов.';
+copy.ai.nicknameDone = function nicknameDone(userId, nickname) {
+  return `AI изменил ник для <@${userId}> на **${nickname}**.`;
+};
+copy.ai.nicknameFailed = 'AI не смог изменить ник. Проверь права бота и иерархию ролей.';
+
+copy.admin = copy.admin || {};
+Object.assign(copy.admin, {
+  noOwnerAccess: 'Эта команда доступна только владельцам бота.',
+  premiumOnly: 'Эта функция доступна только на тарифе Premium.',
+  setupSaved: 'Настройки сервера сохранены в базе.',
+  setupTitle: '⚙️ Setup сервера',
+  panelTitle: '🛠 Админ-панель сервера',
+  panelFree: 'Free - 0$',
+  panelPremium: 'Premium - 5$',
+  panelFieldPlan: 'Тариф',
+  panelFieldSetup: 'Setup',
+  panelFieldFeatures: 'Возможности',
+  panelFieldChannels: 'Каналы',
+  panelFieldRoles: 'Роли',
+  panelFieldVisuals: 'Баннеры',
+  panelSetupDone: 'Настроен',
+  panelSetupPending: 'Не настроен'
+});
+copy.admin.setupDescription = function setupDescription(guildName) {
+  return `Конфигурация для сервера "${guildName}" сохранена.`;
+};
+copy.admin.panelFeatures = function panelFeatures(plan) {
+  if (plan === 'premium') {
+    return [
+      '• всё из Free',
+      '• лидерборд и голосовая активность',
+      '• админ-отчёты по активности',
+      '• оффлайн AI и AI-анализ заявок',
+      '• авто-ранги и авто-DM',
+      '• чёрный список и бан-лист',
+      '• anti-leak и защита каналов',
+      '• еженедельная очистка без ролей',
+      '• AFK-предупреждения за 3 дня'
+    ].join('\n');
+  }
+
+  return [
+    '• панель семьи',
+    '• заявки и кнопка подачи',
+    '• профили участников',
+    '• настройка ролей и каналов через Discord',
+    '• ручные похвалы и преды',
+    '• базовая админка сервера'
+  ].join('\n');
+};
+copy.admin.channelLine = function channelLine(label, value) {
+  return `${label}: ${value || 'не задан'}`;
+};
+copy.admin.roleLine = function roleLine(label, value) {
+  return `${label}: ${value || 'не задана'}`;
+};
+copy.admin.visualLine = function visualLine(label, value) {
+  return `${label}: ${value || 'не задан'}`;
+};
+copy.admin.subscriptionUpdated = function subscriptionUpdated(plan) {
+  return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}.`;
+};
+
+copy.help = copy.help || {};
+copy.help.title = function title(plan) {
+  return `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`;
+};
+copy.help.regularSection = 'Обычные команды';
+copy.help.adminSection = 'Команды администрации';
+copy.help.premiumRegularSection = 'Обычные команды в Premium';
+copy.help.premiumAdminSection = 'Админ-команды в Premium';
+copy.help.freeSection = 'Доступно сейчас';
+copy.help.premiumSection = 'В Premium';
+copy.help.none = 'Нет доступных команд для этого раздела.';
+copy.help.line = function line(name, description) {
+  return `/${name} - ${description}`;
+};

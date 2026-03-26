@@ -23,30 +23,33 @@ async function runTest(name, fn) {
 
 async function testCommendsIncreasePointsUpToHundred() {
   const storage = createTempStorage();
+  const guildId = 'guild-1';
 
   for (let index = 0; index < 120; index += 1) {
-    storage.addCommend({ userId: 'user-1', moderatorId: 'mod-1', reason: 'good' });
+    storage.addGuildCommend({ guildId, userId: 'user-1', moderatorId: 'mod-1', reason: 'good' });
   }
 
-  assert.equal(storage.pointsScore('user-1'), 100);
+  assert.equal(storage.guildPointsScore(guildId, 'user-1'), 100);
 }
 
 async function testWarnsDoNotDropPointsBelowZero() {
   const storage = createTempStorage();
+  const guildId = 'guild-2';
 
-  storage.addWarn({ userId: 'user-2', moderatorId: 'mod-1', reason: 'bad' });
-  storage.addWarn({ userId: 'user-2', moderatorId: 'mod-1', reason: 'bad' });
+  storage.addGuildWarn({ guildId, userId: 'user-2', moderatorId: 'mod-1', reason: 'bad' });
+  storage.addGuildWarn({ guildId, userId: 'user-2', moderatorId: 'mod-1', reason: 'bad' });
 
-  assert.equal(storage.pointsScore('user-2'), 0);
+  assert.equal(storage.guildPointsScore(guildId, 'user-2'), 0);
 }
 
 async function testVoiceMinutesAccumulate() {
   const storage = createTempStorage();
+  const guildId = 'guild-3';
 
-  storage.addVoiceMinutes('user-3', 25);
-  storage.addVoiceMinutes('user-3', 35);
+  storage.addGuildVoiceMinutes(guildId, 'user-3', 25);
+  storage.addGuildVoiceMinutes(guildId, 'user-3', 35);
 
-  assert.equal(storage.voiceMinutes('user-3'), 60);
+  assert.equal(storage.guildVoiceMinutes(guildId, 'user-3'), 60);
 }
 
 async function testStoredGuildPanelMessageIdOverridesLegacyFixedId() {
@@ -252,6 +255,34 @@ async function testStoragePrefersBackupWhenPrimaryLooksEmpty() {
   assert.equal(storage.guildPointsScore('guild-pref', 'user-pref'), 4);
 }
 
+async function testLegacyCooldownMigratesIntoGuildScopedKey() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-storage-cooldown-'));
+  const dataFile = path.join(tempDir, 'storage.json');
+  fs.writeFileSync(
+    dataFile,
+    JSON.stringify({
+      members: {},
+      analytics: { daily: {}, reports: {} },
+      applications: [],
+      cooldowns: {
+        'user-cooldown': 1234567890
+      },
+      warns: [],
+      commends: [],
+      blacklist: [],
+      panelMessageId: '',
+      panelMessageIds: {}
+    }),
+    'utf8'
+  );
+
+  const storage = createStorage({ dataFile, saveDelayMs: 1 });
+
+  assert.equal(storage.getGuildCooldown('guild-cooldown', 'user-cooldown'), 1234567890);
+  assert.equal(storage.getStore().cooldowns['user-cooldown'], undefined);
+  assert.equal(storage.getStore().cooldowns['guild-cooldown:user-cooldown'], 1234567890);
+}
+
 async function testGuildPeriodAnalyticsAggregateMessagesVoiceReactionsAndMembers() {
   const storage = createTempStorage();
 
@@ -287,6 +318,7 @@ async function main() {
   await runTest('storage creates nested directory on flush', testStorageCreatesNestedDirectoryOnFlush);
   await runTest('storage restores from backup when primary is invalid', testStorageRestoresFromBackupWhenPrimaryIsInvalid);
   await runTest('storage prefers backup when primary looks empty', testStoragePrefersBackupWhenPrimaryLooksEmpty);
+  await runTest('legacy cooldown migrates into guild scoped key', testLegacyCooldownMigratesIntoGuildScopedKey);
   await runTest('guild period analytics aggregate messages voice reactions and joins', testGuildPeriodAnalyticsAggregateMessagesVoiceReactionsAndMembers);
   console.log('ALL STORAGE TESTS PASSED');
 }

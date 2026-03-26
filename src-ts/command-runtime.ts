@@ -64,6 +64,96 @@ interface CommandRuntimeOptions {
   canManageNicknames(member: any): boolean;
 }
 
+function createGuildStorageFallback(guildId: string, storage: any) {
+  if (!storage) return null;
+  return {
+    ensureMember(memberId: string) {
+      return storage.ensureGuildMember(guildId, memberId);
+    },
+    activityScore(memberId: string) {
+      return storage.guildActivityScore(guildId, memberId);
+    },
+    pointsScore(memberId: string) {
+      return storage.guildPointsScore(guildId, memberId);
+    },
+    voiceMinutes(memberId: string) {
+      return storage.guildVoiceMinutes(guildId, memberId);
+    },
+    addVoiceMinutes(memberId: string, minutes: number) {
+      return storage.addGuildVoiceMinutes(guildId, memberId, minutes);
+    },
+    addVoiceMinutesInChannel(memberId: string, minutes: number, channelId: string) {
+      return storage.addGuildVoiceMinutes(guildId, memberId, minutes, channelId);
+    },
+    trackMessage(memberId: string) {
+      return storage.trackGuildMessage(guildId, memberId);
+    },
+    trackMessageInChannel(memberId: string, channelId: string) {
+      return storage.trackGuildMessage(guildId, memberId, channelId);
+    },
+    trackAnalyticsMessage(memberId: string, channelId: string) {
+      return storage.trackGuildAnalyticsMessage(guildId, memberId, channelId);
+    },
+    trackPresence(memberId: string) {
+      return storage.trackGuildPresence(guildId, memberId);
+    },
+    addReaction(memberId: string) {
+      return storage.addGuildReaction(guildId, memberId);
+    },
+    addWarn({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
+      return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
+    },
+    listWarns(userId: string, limit = 10) {
+      return storage.listGuildWarnsForUser(guildId, userId, limit);
+    },
+    clearWarns(userId: string) {
+      return storage.clearGuildWarnsForUser(guildId, userId);
+    },
+    addCommend({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
+      return storage.addGuildCommend({ guildId, userId, moderatorId, reason });
+    },
+    getCooldown(userId: string) {
+      return storage.getGuildCooldown(guildId, userId);
+    },
+    setCooldown(userId: string, value?: number) {
+      return storage.setGuildCooldown(guildId, userId, value);
+    },
+    createApplication(payload: Record<string, unknown>) {
+      return storage.createGuildApplication({ guildId, ...payload });
+    },
+    findApplication(applicationId: string) {
+      return storage.findGuildApplication(guildId, applicationId);
+    },
+    setApplicationTicketInfo(application: any, ticketInfo: Record<string, unknown>) {
+      return storage.setApplicationTicketInfo(application, ticketInfo);
+    },
+    listRecentApplications(limit?: number) {
+      return storage.listGuildRecentApplications(guildId, limit);
+    },
+    listBlacklist() {
+      return storage.listGuildBlacklist(guildId);
+    },
+    getBlacklistEntry(userId: string) {
+      return storage.getGuildBlacklistEntry(guildId, userId);
+    },
+    isBlacklisted(userId: string) {
+      return storage.isGuildBlacklisted(guildId, userId);
+    },
+    addBlacklistEntry({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
+      return storage.addGuildBlacklistEntry({ guildId, userId, moderatorId, reason });
+    },
+    removeBlacklistEntry(userId: string) {
+      return storage.removeGuildBlacklistEntry(guildId, userId);
+    },
+    markAfkWarningSent(memberId: string, value?: string) {
+      return storage.markGuildAfkWarningSent(guildId, memberId, value);
+    },
+    getPeriodAnalytics(periodDays: number) {
+      return storage.getGuildPeriodAnalytics(guildId, periodDays);
+    }
+  };
+}
+
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
   return options.ephemeral({
     ...(content ? { content } : {}),
@@ -82,7 +172,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     copy,
     embeds,
     database,
-    ephemeral,
+    ephemeral: rawEphemeral,
     resolveGuildSettings,
     buildFamilyDashboardStats,
     canApplications,
@@ -92,7 +182,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     doPanelUpdate,
     defaultModulesForMode,
     getHelpCatalog,
-    guildStorage,
+    guildStorage: rawGuildStorage,
     applicationsService,
     rankService,
     isPremiumGuild,
@@ -131,17 +221,31 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     validateConfig,
     summarizeConfig,
     sendAcceptLog,
-    buildProfilePayload,
+    buildProfilePayload: rawBuildProfilePayload,
     canManageRanks,
     sendDisciplineLog,
     sendDisciplineDm,
     sendRankDm,
     AUTO_RANKS,
     aiService,
-    isAiCommandOverviewQuery,
-    buildAiCommandsOverview,
+    isAiCommandOverviewQuery: rawIsAiCommandOverviewQuery,
+    buildAiCommandsOverview: rawBuildAiCommandsOverview,
     canManageNicknames
   } = options;
+
+  const ephemeral = typeof rawEphemeral === 'function' ? rawEphemeral : ((payload: Record<string, unknown> = {}) => payload);
+  const guildStorage = rawGuildStorage && typeof rawGuildStorage.addCommend === 'function'
+    ? rawGuildStorage
+    : createGuildStorageFallback(guildId, storage);
+  const buildProfilePayload = typeof rawBuildProfilePayload === 'function'
+    ? rawBuildProfilePayload
+    : ((_member: any, _allowRankButtons: boolean, content = '') => ephemeral({ content: content || 'Произошла ошибка. Попробуй ещё раз.' }));
+  const isAiCommandOverviewQuery = typeof rawIsAiCommandOverviewQuery === 'function'
+    ? rawIsAiCommandOverviewQuery
+    : (() => false);
+  const buildAiCommandsOverview = typeof rawBuildAiCommandsOverview === 'function'
+    ? rawBuildAiCommandsOverview
+    : (() => copy.ai?.commandsOverviewEmpty || 'Список команд пока недоступен.');
 
   if (interaction.commandName === 'family') {
     const settings = resolveGuildSettings(guildId);
@@ -318,6 +422,72 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
     const subcommand = interaction.options.getSubcommand();
     const current = resolveGuildSettings(guildId).automod;
+
+    if (subcommand === copy.commands.automodActionSubcommand) {
+      const mode = interaction.options.getString(copy.commands.actionModeOptionName, true);
+      const actionModeLabel = mode === 'hard' ? 'жёсткий' : 'мягкий';
+      database.updateGuildSettings(guildId, { automod: { actionMode: mode } });
+      await interaction.reply(ephemeral({
+        content: copy.automod.actionUpdated(actionModeLabel),
+        embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
+      }));
+      return true;
+    }
+
+    if (subcommand === copy.commands.automodWordsSubcommand) {
+      if (!isPremiumGuild(guildId)) {
+        await interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+        return true;
+      }
+
+      const action = interaction.options.getString(copy.commands.actionOptionName, true);
+      const rawWord = interaction.options.getString(copy.commands.wordOptionName) || '';
+      const parsedWords = rawWord
+        .split(',')
+        .map((item: string) => item.trim().toLowerCase())
+        .filter(Boolean);
+      const words = [...current.badWords];
+
+      if (action === 'list') {
+        await interaction.reply(ephemeral({
+          embeds: [embeds.buildAutomodStatusEmbed(current, resolveGuildSettings(guildId).channels.automod)]
+        }));
+        return true;
+      }
+
+      if (action === 'clear') {
+        database.updateGuildSettings(guildId, { automod: { badWords: [] } });
+        await interaction.reply(ephemeral({
+          content: copy.automod.wordsCleared,
+          embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
+        }));
+        return true;
+      }
+
+      if (!parsedWords.length) {
+        await interaction.reply(ephemeral({ content: copy.automod.wordMissing }));
+        return true;
+      }
+
+      if (action === 'add') {
+        const nextWords = [...new Set([...words, ...parsedWords])];
+        database.updateGuildSettings(guildId, { automod: { badWords: nextWords, badWordsEnabled: true } });
+        await interaction.reply(ephemeral({
+          content: copy.automod.wordAdded(parsedWords.join(', ')),
+          embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
+        }));
+        return true;
+      }
+
+      const parsedSet = new Set(parsedWords);
+      const nextWords = words.filter((item: string) => !parsedSet.has(item));
+      database.updateGuildSettings(guildId, { automod: { badWords: nextWords } });
+      await interaction.reply(ephemeral({
+        content: copy.automod.wordRemoved(parsedWords.join(', ')),
+        embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
+      }));
+      return true;
+    }
 
     if (subcommand === copy.commands.automodStatusSubcommand) {
       await interaction.reply(ephemeral({

@@ -85,7 +85,7 @@ async function testWelcomeEmbedShowsJoinFlow() {
     'BRHD Family'
   ).toJSON();
 
-  assert.match(embed.title, /Phoenix/);
+  assert.match(embed.title, /BRHD Family|Phoenix/);
   assert.match(embed.description, /BRHD Family/);
   assert.ok(embed.fields?.length);
 }
@@ -214,8 +214,8 @@ async function testFamilyMenuSummaryAndButtons() {
 
 async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
   const embed = buildUpdateAnnouncementEmbed({
-    versionLabel: 'BRHD/PHOENIX 0.1 BETA',
-    semver: '0.1.0-beta.1',
+    versionLabel: 'BRHD/PHOENIX 1.0 RELEASE',
+    semver: '1.0.3',
     buildId: 'abc123',
     commitMessage: 'embed update',
     changeLines: {

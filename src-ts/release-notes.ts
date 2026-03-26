@@ -1,6 +1,36 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.4': {
+    added: [
+      'финальный UTF-8 override-слой для family panel, help, welcome, leaderboard, voice и admin panel'
+    ],
+    updated: [
+      'карточки семьи и family menu теперь используют единый чистый текстовый слой без битой кодировки',
+      'update-log, role menus, automod status и report schedule выровнены по нормальному русскому тексту',
+      'release notes синхронизированы с текущим релизом и больше не тянут битый changelog'
+    ],
+    fixed: [
+      'битые слова в family panel, leaderboard, voice activity и admin panel',
+      'битые строки в карточке welcome, update-log и role menu status',
+      'риск повторного появления кракозябр из-за старого release-notes слоя'
+    ]
+  },
+  '1.0.3': {
+    added: [
+      'чистый UTF-8 слой для embed-карточек, админ-панели, leaderboard и update-log'
+    ],
+    updated: [
+      'automod bad words теперь принимает списки слов через запятую как отдельные слова',
+      'статусы welcome, verification, role menu, reports и custom commands переведены на чистые тексты',
+      'пользовательские уведомления и changelog теперь берутся из нормализованного релизного словаря'
+    ],
+    fixed: [
+      'битые слова в leaderboard, activity report, админ-панели и update-card',
+      'ошибочные ответы automod action/words после перехода на TS command runtime',
+      'путаница со stop-словами, когда список через запятую воспринимался как одна строка'
+    ]
+  },
   '1.0.2': {
     added: [
       'отдельный hotfix-релиз для команд, DM-уведомлений и служебных embed-ов'
@@ -47,7 +77,7 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
   }
 };
 
-export function normalizeReleaseGroups(groups?: Partial<ReleaseNoteGroups> | null): ReleaseNoteGroups {
+export function normalizeReleaseGroups(groups?: ReleaseNoteGroups | null): ReleaseNoteGroups {
   return {
     added: Array.isArray(groups?.added) ? groups.added.filter(Boolean).slice(0, 6) : [],
     updated: Array.isArray(groups?.updated) ? groups.updated.filter(Boolean).slice(0, 6) : [],

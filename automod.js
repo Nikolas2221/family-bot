@@ -19,6 +19,7 @@ function defaultAutomodConfig() {
 
 function normalizeBadWords(words) {
   return [...new Set((Array.isArray(words) ? words : [])
+    .flatMap(word => String(word || '').split(','))
     .map(word => String(word || '').trim().toLowerCase())
     .filter(Boolean))];
 }

@@ -257,25 +257,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return store.members[key];
   }
 
-  function ensureMember(memberId) {
-    if (!store.members[memberId]) {
-      store.members[memberId] = {
-        messageCount: 0,
-        lastSeenAt: Date.now(),
-        warns: 0,
-        commends: 0,
-        points: 0,
-        voiceMinutes: 0,
-        afkWarningSentAt: ''
-      };
-    }
-
-    store.members[memberId].points = clampPoints(store.members[memberId].points);
-    store.members[memberId].voiceMinutes = Math.max(0, Number(store.members[memberId].voiceMinutes) || 0);
-    store.members[memberId].afkWarningSentAt = store.members[memberId].afkWarningSentAt || '';
-    return store.members[memberId];
-  }
-
   function clearAfkWarning(member) {
     if (member.afkWarningSentAt) {
       member.afkWarningSentAt = '';
@@ -287,21 +268,8 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return (member.messageCount || 0) + (member.commends || 0) * 5 - (member.warns || 0) * 3;
   }
 
-  function activityScore(memberId) {
-    const member = ensureMember(memberId);
-    return (member.messageCount || 0) + (member.commends || 0) * 5 - (member.warns || 0) * 3;
-  }
-
-  function pointsScore(memberId) {
-    return ensureMember(memberId).points || 0;
-  }
-
   function guildPointsScore(guildId, memberId) {
     return ensureGuildMember(guildId, memberId).points || 0;
-  }
-
-  function voiceMinutes(memberId) {
-    return ensureMember(memberId).voiceMinutes || 0;
   }
 
   function guildVoiceMinutes(guildId, memberId) {
@@ -350,17 +318,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     save();
   }
 
-  function setPanelMessageId(messageId, fixedMessageId = '') {
-    if (!fixedMessageId && store.panelMessageId !== (messageId || '')) {
-      store.panelMessageId = messageId || '';
-      save();
-    }
-  }
-
-  function getPanelMessageId(fixedMessageId = '') {
-    return fixedMessageId || store.panelMessageId || '';
-  }
-
   function setGuildPanelMessageId(guildId, messageId, fixedMessageId = '') {
     if (store.panelMessageIds[guildId] !== (messageId || '')) {
       store.panelMessageIds[guildId] = messageId || '';
@@ -370,14 +327,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
 
   function getGuildPanelMessageId(guildId, fixedMessageId = '') {
     return store.panelMessageIds[guildId] || fixedMessageId || '';
-  }
-
-  function trackMessage(memberId) {
-    const member = ensureMember(memberId);
-    member.messageCount += 1;
-    member.lastSeenAt = Date.now();
-    clearAfkWarning(member);
-    save();
   }
 
   function trackGuildMessage(guildId, memberId, channelId = '') {
@@ -393,26 +342,10 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     save();
   }
 
-  function trackPresence(memberId) {
-    const member = ensureMember(memberId);
-    member.lastSeenAt = Date.now();
-    clearAfkWarning(member);
-    save();
-  }
-
   function trackGuildPresence(guildId, memberId) {
     const member = ensureGuildMember(guildId, memberId);
     member.lastSeenAt = Date.now();
     clearAfkWarning(member);
-    save();
-  }
-
-  function addWarn({ userId, moderatorId, reason }) {
-    const member = ensureMember(userId);
-    member.warns = (member.warns || 0) + 1;
-    member.points = clampPoints((member.points || 0) - 1);
-    store.warns.unshift({ userId, moderatorId, reason, createdAt: new Date().toISOString() });
-    store.warns = store.warns.slice(0, 200);
     save();
   }
 
@@ -445,15 +378,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return entries.length;
   }
 
-  function addCommend({ userId, moderatorId, reason }) {
-    const member = ensureMember(userId);
-    member.commends = (member.commends || 0) + 1;
-    member.points = clampPoints((member.points || 0) + 1);
-    store.commends.unshift({ userId, moderatorId, reason, createdAt: new Date().toISOString() });
-    store.commends = store.commends.slice(0, 200);
-    save();
-  }
-
   function addGuildCommend({ guildId, userId, moderatorId, reason }) {
     const member = ensureGuildMember(guildId, userId);
     member.commends = (member.commends || 0) + 1;
@@ -461,18 +385,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     store.commends.unshift({ guildId, userId, moderatorId, reason, createdAt: new Date().toISOString() });
     store.commends = store.commends.slice(0, 500);
     save();
-  }
-
-  function addVoiceMinutes(memberId, minutes) {
-    const safeMinutes = Math.max(0, Math.floor(Number(minutes) || 0));
-    if (!safeMinutes) return 0;
-
-    const member = ensureMember(memberId);
-    member.voiceMinutes = (member.voiceMinutes || 0) + safeMinutes;
-    member.lastSeenAt = Date.now();
-    clearAfkWarning(member);
-    save();
-    return safeMinutes;
   }
 
   function addGuildVoiceMinutes(guildId, memberId, minutes, channelId = '') {
@@ -594,45 +506,30 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return true;
   }
 
-  function getCooldown(userId) {
-    return store.cooldowns[userId] || 0;
-  }
+  function migrateLegacyCooldownIfNeeded(guildId, userId) {
+    const key = cooldownKey(guildId, userId);
+    if (Object.prototype.hasOwnProperty.call(store.cooldowns, key)) {
+      return store.cooldowns[key] || 0;
+    }
 
-  function setCooldown(userId, value = Date.now()) {
-    store.cooldowns[userId] = value;
+    if (!Object.prototype.hasOwnProperty.call(store.cooldowns, userId)) {
+      return 0;
+    }
+
+    const legacyValue = store.cooldowns[userId] || 0;
+    store.cooldowns[key] = legacyValue;
+    delete store.cooldowns[userId];
     save();
+    return legacyValue;
   }
 
   function getGuildCooldown(guildId, userId) {
-    return store.cooldowns[cooldownKey(guildId, userId)] || 0;
+    return migrateLegacyCooldownIfNeeded(guildId, userId);
   }
 
   function setGuildCooldown(guildId, userId, value = Date.now()) {
     store.cooldowns[cooldownKey(guildId, userId)] = value;
     save();
-  }
-
-  function createApplication({ userId, nickname, level = '', inviter = '', discovery = '', about = '', age = '', text = '' }) {
-    const applicationId = `${Date.now()}_${userId}`;
-    store.applications.unshift({
-      id: applicationId,
-      discordId: userId,
-      nickname,
-      level: level || age,
-      inviter,
-      discovery,
-      about: about || text,
-      age: age || level,
-      text: text || about,
-      ticketThreadId: '',
-      ticketMessageId: '',
-      ticketStarterMessageId: '',
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    });
-    store.applications = store.applications.slice(0, 100);
-    save();
-    return applicationId;
   }
 
   function createGuildApplication({ guildId, userId, nickname, level = '', inviter = '', discovery = '', about = '', age = '', text = '' }) {
@@ -657,10 +554,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     store.applications = store.applications.slice(0, 500);
     save();
     return applicationId;
-  }
-
-  function findApplication(applicationId) {
-    return store.applications.find(item => item.id === applicationId) || null;
   }
 
   function findGuildApplication(guildId, applicationId) {
@@ -690,61 +583,20 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return app;
   }
 
-  function listRecentApplications(limit = 10) {
-    return store.applications.slice(0, limit);
-  }
-
   function listGuildRecentApplications(guildId, limit = 10) {
     return store.applications.filter(item => (item.guildId || guildId) === guildId).slice(0, limit);
-  }
-
-  function listBlacklist() {
-    return [...store.blacklist];
   }
 
   function listGuildBlacklist(guildId) {
     return store.blacklist.filter(item => (item.guildId || guildId) === guildId);
   }
 
-  function getBlacklistEntry(userId) {
-    return store.blacklist.find(item => item.userId === userId) || null;
-  }
-
   function getGuildBlacklistEntry(guildId, userId) {
     return store.blacklist.find(item => item.userId === userId && (item.guildId || guildId) === guildId) || null;
   }
 
-  function isBlacklisted(userId) {
-    return Boolean(getBlacklistEntry(userId));
-  }
-
   function isGuildBlacklisted(guildId, userId) {
     return Boolean(getGuildBlacklistEntry(guildId, userId));
-  }
-
-  function addBlacklistEntry({ userId, moderatorId, reason }) {
-    const sanitizedReason = trimText(reason, 300) || copy.security.defaultBlacklistReason;
-    const existing = getBlacklistEntry(userId);
-
-    if (existing) {
-      existing.moderatorId = moderatorId;
-      existing.reason = sanitizedReason;
-      existing.updatedAt = new Date().toISOString();
-      save();
-      return existing;
-    }
-
-    const entry = {
-      userId,
-      moderatorId,
-      reason: sanitizedReason,
-      createdAt: new Date().toISOString()
-    };
-
-    store.blacklist.unshift(entry);
-    store.blacklist = store.blacklist.slice(0, 500);
-    save();
-    return entry;
   }
 
   function addGuildBlacklistEntry({ guildId, userId, moderatorId, reason }) {
@@ -773,16 +625,6 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     return entry;
   }
 
-  function removeBlacklistEntry(userId) {
-    const before = store.blacklist.length;
-    store.blacklist = store.blacklist.filter(item => item.userId !== userId);
-    if (store.blacklist.length !== before) {
-      save();
-      return true;
-    }
-    return false;
-  }
-
   function removeGuildBlacklistEntry(guildId, userId) {
     const before = store.blacklist.length;
     store.blacklist = store.blacklist.filter(item => !(item.userId === userId && (item.guildId || guildId) === guildId));
@@ -797,32 +639,21 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     getStore,
     save,
     flush,
-    ensureMember,
     ensureGuildMember,
-    activityScore,
     guildActivityScore,
-    pointsScore,
     guildPointsScore,
-    voiceMinutes,
     guildVoiceMinutes,
     sanitizeApplicationInput,
     setApplicationStatus,
-    setPanelMessageId,
-    getPanelMessageId,
     setGuildPanelMessageId,
     getGuildPanelMessageId,
-    trackMessage,
     trackGuildMessage,
     trackGuildAnalyticsMessage,
-    trackPresence,
     trackGuildPresence,
-    addWarn,
     addGuildWarn,
     listGuildWarnsForUser,
     clearGuildWarnsForUser,
-    addCommend,
     addGuildCommend,
-    addVoiceMinutes,
     addGuildVoiceMinutes,
     addGuildReaction,
     markGuildAfkWarningSent,
@@ -832,26 +663,16 @@ function createStorage({ dataFile, saveDelayMs = 500 }) {
     getGuildPeriodAnalytics,
     getGuildReportMarker,
     setGuildReportMarker,
-    getCooldown,
     getGuildCooldown,
-    setCooldown,
     setGuildCooldown,
-    createApplication,
     createGuildApplication,
-    findApplication,
     findGuildApplication,
     setApplicationTicketInfo,
-    listRecentApplications,
     listGuildRecentApplications,
-    listBlacklist,
     listGuildBlacklist,
-    getBlacklistEntry,
     getGuildBlacklistEntry,
-    isBlacklisted,
     isGuildBlacklisted,
-    addBlacklistEntry,
     addGuildBlacklistEntry,
-    removeBlacklistEntry,
     removeGuildBlacklistEntry
   };
 }

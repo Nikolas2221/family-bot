@@ -1063,7 +1063,7 @@ function splitUpdateChangeLines() {
 }
 
 function canBypassAutomod(member) {
-  return canModerate(member) || canDebugConfig({ memberPermissions: member?.permissions, member });
+  return Boolean(member?.user?.bot);
 }
 
 function detectUpdateBucket(line) {

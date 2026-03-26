@@ -3,6 +3,7 @@ import type {
   ApplicationRecord,
   AutoRanksConfig,
   DatabaseApi,
+  GuildScopedStorageApi,
   GuildFeatures,
   GuardConfig,
   GuildSettings,
@@ -126,7 +127,7 @@ export function createGuildRuntimeApi(options: {
     return resolveGuildSettings(guildId).roles.map(role => role.id).filter(Boolean);
   }
 
-  function getGuildStorage(guildId: string) {
+  function getGuildStorage(guildId: string): GuildScopedStorageApi {
     return {
       ensureMember(memberId: string) {
         return storage.ensureGuildMember(guildId, memberId);

@@ -2,7 +2,7 @@ import packageMeta from '../package.json';
 import { getReleaseNotes, normalizeReleaseGroups } from './release-notes';
 import type { ReleaseNoteGroups } from './types';
 
-export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.2';
+export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.4';
 
 function resolveProductVersionLabel(version: string): string {
   if (/beta/i.test(version)) return 'BRHD/PHOENIX 0.1 BETA';
@@ -19,24 +19,24 @@ const FALLBACK_FIXED_PREFIXES = ['fix', 'repair', 'correct', 'stabilize', 'harde
 function splitCommitMessage(commitMessage?: string | null): string[] {
   return String(commitMessage || '')
     .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])/i)
-    .map(line => line.trim())
+    .map((line) => line.trim())
     .filter(Boolean);
 }
 
 function stripKnownPrefix(line: string, prefixes: string[]): string {
   const lower = line.toLowerCase();
-  const matched = prefixes.find(prefix => lower.startsWith(`${prefix} `));
+  const matched = prefixes.find((prefix) => lower.startsWith(`${prefix} `));
   if (!matched) return line.trim();
   return line.slice(matched.length).trim();
 }
 
 function classifyCommitLine(line: string): keyof ReleaseNoteGroups {
   const lower = line.toLowerCase();
-  if (FALLBACK_FIXED_PREFIXES.some(prefix => lower.startsWith(`${prefix} `))) {
+  if (FALLBACK_FIXED_PREFIXES.some((prefix) => lower.startsWith(`${prefix} `))) {
     return 'fixed';
   }
 
-  if (FALLBACK_ADDED_PREFIXES.some(prefix => lower.startsWith(`${prefix} `))) {
+  if (FALLBACK_ADDED_PREFIXES.some((prefix) => lower.startsWith(`${prefix} `))) {
     return 'added';
   }
 

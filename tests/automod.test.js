@@ -21,12 +21,12 @@ async function testNormalizeAutomodConfigClampsValuesAndWords() {
   const config = normalizeAutomodConfig({
     capsPercent: 200,
     mentionLimit: 1,
-    badWords: [' Test ', '', 'test', 'Word']
+    badWords: [' Test ', '', 'test', 'Word', 'spam, scam , abuse']
   });
 
   assert.equal(config.capsPercent, 100);
   assert.equal(config.mentionLimit, 2);
-  assert.deepEqual(config.badWords, ['test', 'word']);
+  assert.deepEqual(config.badWords, ['test', 'word', 'spam', 'scam', 'abuse']);
 }
 
 async function testEvaluateAutomodMessageDetectsRules() {
