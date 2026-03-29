@@ -3,19 +3,19 @@ import 'dotenv/config';
 
 const path = require('path');
 const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, Partials, PermissionFlagsBits } = require('discord.js');
-const { createAIService } = require('../ai');
-const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('../automod');
-const { createApplicationsService } = require('../applications');
-const { buildCommands, getCommandsSignature, registerCommands } = require('../commands');
-const { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } = require('../config');
-const copy = require('../copy');
-const { createDatabase, defaultModulesForMode } = require('../database');
-const embeds = require('../embeds');
-const { createRankService } = require('../ranks');
-const { getReleaseNotes } = require('../release-notes');
-const ROLES = require('../roles');
-const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('../security');
-const { createStorage } = require('../storage');
+const { createAIService } = require('./ai');
+const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('./automod');
+const { createApplicationsService } = require('./applications');
+const { buildCommands, getCommandsSignature, registerCommands } = require('./commands');
+const { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } = require('./config');
+const copy = require('./copy').default || require('./copy');
+const { createDatabase, defaultModulesForMode } = require('./database');
+const embeds = require('./embeds').default || require('./embeds');
+const { createRankService } = require('./ranks');
+const { getReleaseNotes } = require('./release-notes');
+const ROLES = require('./roles').default || require('./roles');
+const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
+const { createStorage } = require('./storage');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -283,7 +283,7 @@ function buildFamilyDashboardStats(guild) {
     dndCount,
     offlineCount,
     topMemberLine: topEntry
-      ? `<@${topEntry.member.id}> • ${getDisplayRankName(topEntry.member)} • ${Math.max(0, topEntry.activity)} очк.`
+      ? `<@${topEntry.member.id}> - ${getDisplayRankName(topEntry.member)} - ${Math.max(0, topEntry.activity)} очк.`
       : '',
     lastUpdatedLabel: new Date().toLocaleString('ru-RU')
   };
@@ -362,7 +362,7 @@ function buildLeaderboardSummary(guild) {
   return {
     memberCount: ranked.length,
     planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
-    topLine: topEntry ? `<@${topEntry.member.id}> • ${topEntry.roleName} • ${topEntry.points}/100` : '',
+    topLine: topEntry ? `<@${topEntry.member.id}> - ${topEntry.roleName} - ${topEntry.points}/100` : '',
     averagePoints: ranked.length ? (totalPoints / ranked.length).toFixed(1) : '0.0',
     totalPoints,
     totalVoiceHours: totalVoiceHours.toFixed(1),
@@ -397,7 +397,7 @@ function buildVoiceActivitySummary(guild) {
   return {
     memberCount: ranked.length,
     planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
-    topLine: topEntry ? `<@${topEntry.member.id}> • ${topEntry.hours.toFixed(1)} ч • ${topEntry.points}/100` : '',
+    topLine: topEntry ? `<@${topEntry.member.id}> - ${topEntry.hours.toFixed(1)} ч - ${topEntry.points}/100` : '',
     totalHours: totalHours.toFixed(1),
     averageHours: ranked.length ? (totalHours / ranked.length).toFixed(1) : '0.0',
     totalPoints,
@@ -428,7 +428,7 @@ function buildActivityReportEmbed(guild, targetMember = null) {
           ].join('\n')
         }
       )
-      .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
+      .setFooter({ text: 'BRHD - Phoenix - Activity Report' })
       .setTimestamp();
   }
 
@@ -452,7 +452,7 @@ function buildActivityReportEmbed(guild, targetMember = null) {
       name: 'Список',
       value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
     })
-    .setFooter({ text: 'BRHD • Phoenix • Activity Report' })
+    .setFooter({ text: 'BRHD - Phoenix - Activity Report' })
     .setTimestamp();
 }
 
@@ -505,7 +505,7 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
           ].join('\n')
         }
       )
-      .setFooter({ text: 'BRHD • Phoenix • Premium Activity' })
+      .setFooter({ text: 'BRHD - Phoenix - Premium Activity' })
       .setTimestamp();
   }
 
@@ -527,7 +527,7 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
 
   return new EmbedBuilder()
     .setColor(0x7c3aed)
-    .setTitle('Отчёт по активности семьи • Phoenix')
+    .setTitle('Отчёт по активности семьи - Phoenix')
     .setDescription(
       [
         `Сервер: **${guild.name}**`,
@@ -551,7 +551,7 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
         value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
       }
     )
-    .setFooter({ text: 'BRHD • Phoenix • Premium Activity' })
+    .setFooter({ text: 'BRHD - Phoenix - Premium Activity' })
     .setTimestamp();
 }
 
@@ -737,7 +737,7 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
         inline: true
       }
     )
-    .setFooter({ text: `BRHD • Phoenix • ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
+    .setFooter({ text: `BRHD - Phoenix - ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
     .setTimestamp();
 }
 
@@ -1479,7 +1479,7 @@ async function fetchMemberFast(guild, userId) {
   return guild.members.cache.get(userId) || guild.members.fetch(userId).catch(() => null);
 }
 
-async function sendDirectNotification(user, { title, description, color = 0x7c3aed, footer = 'BRHD • Phoenix • Notify' }) {
+async function sendDirectNotification(user, { title, description, color = 0x7c3aed, footer = 'BRHD - Phoenix - Notify' }) {
   if (!user) return false;
 
   const channel = await user.createDM().catch(() => null);
@@ -1494,7 +1494,7 @@ async function sendAcceptanceDm({ guild, member, moderatorUser, reason, rankName
   return sendDirectNotification(member.user, {
     title: 'Заявка принята',
     color: 0x10b981,
-    footer: 'BRHD • Phoenix • Family',
+    footer: 'BRHD - Phoenix - Family',
     description: [
       `Ты принят в семью **${resolveGuildSettings(guild.id).familyTitle}** на сервере **${guild.name}**.`,
       '',
@@ -1510,7 +1510,7 @@ async function sendDisciplineDm(type, guild, targetUser, moderatorUser, reason) 
   return sendDirectNotification(targetUser, {
     title: isWarn ? 'Получен выговор' : 'Получена похвала',
     color: isWarn ? 0xf97316 : 0x2563eb,
-    footer: 'BRHD • Phoenix • Discipline',
+    footer: 'BRHD - Phoenix - Discipline',
     description: [
       `Сервер: **${guild.name}**`,
       `Модератор: <@${moderatorUser.id}>`,
@@ -1530,7 +1530,7 @@ async function sendRankDm(guild, member, result) {
   return sendDirectNotification(member.user, {
     title,
     color: isPromotion ? 0x10b981 : 0xe11d48,
-    footer: 'BRHD • Phoenix • Ranks',
+    footer: 'BRHD - Phoenix - Ranks',
     description: [
       `Сервер: **${guild.name}**`,
       `Было: ${result.fromRole?.name || '—'}`,
@@ -1546,7 +1546,7 @@ async function sendBlacklistDm(user, guild, reason) {
   return sendDirectNotification(user, {
     title: 'Чёрный список',
     color: 0xe11d48,
-    footer: 'BRHD • Phoenix • Security',
+    footer: 'BRHD - Phoenix - Security',
     description: [
       `Твой доступ на сервер **${guild.name}** ограничен.`,
       `Причина: ${reason}`,
@@ -1560,7 +1560,7 @@ async function sendAfkWarningDm(member) {
   return sendDirectNotification(member.user, {
     title: 'Предупреждение об AFK',
     color: 0xf59e0b,
-    footer: 'BRHD • Phoenix • Activity',
+    footer: 'BRHD - Phoenix - Activity',
     description: [
       `На сервере **${member.guild.name}** от тебя не было активности уже 3 дня.`,
       'Если не проявишь активность, администрация может кикнуть тебя за AFK.',
@@ -1877,7 +1877,7 @@ async function handleAutomodMessage(message) {
   await sendAutomodLog(message.guild, {
     member: message.member,
     rule: triggered.rule,
-    detail: [triggered.detail, punishmentLabel].filter(Boolean).join(' • '),
+    detail: [triggered.detail, punishmentLabel].filter(Boolean).join(' - '),
     channelId: message.channel.id,
     content: message.content
   }).catch(() => {});
@@ -2138,7 +2138,7 @@ function buildMaintenanceEmbed({ title, description, color, fieldName, lines }) 
     .setColor(color)
     .setTitle(title)
     .setDescription(description)
-    .setFooter({ text: 'BRHD • Phoenix • Maintenance' })
+      .setFooter({ text: 'BRHD - Phoenix - Maintenance' })
     .setTimestamp();
 
   if (lines?.length) {
@@ -2528,6 +2528,7 @@ registerInteractionRuntime({
   buildVoiceActivitySummary,
   buildPremiumActivityReportEmbed,
   buildAiAdvisorEmbed,
+  getHelpCatalog,
   resolveMemberQuery,
   formatRankResult,
   syncAutoRanks,

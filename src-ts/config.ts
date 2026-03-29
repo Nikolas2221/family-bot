@@ -1,10 +1,5 @@
 import type { AppConfig, ReleaseNoteGroups, RoleEnvEntry, ValidationResult } from './types';
-
-const copy = require('../copy') as {
-  defaults: {
-    familyTitle: string;
-  };
-};
+import copy from './copy';
 
 const FAMILY_ROLE_ENV_KEYS = [
   'ROLE_LEADER',

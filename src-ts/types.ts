@@ -73,8 +73,27 @@ export interface CopyCatalog {
   defaults: {
     familyTitle: string;
   };
-  commands: Record<string, unknown>;
-  [section: string]: unknown;
+  common: Record<string, any>;
+  commands: Record<string, any>;
+  roles: Record<string, any>;
+  family: Record<string, any>;
+  applications: Record<string, any>;
+  admin: Record<string, any>;
+  automod: Record<string, any>;
+  moderation: Record<string, any>;
+  profile: Record<string, any>;
+  ai: Record<string, any>;
+  security: Record<string, any>;
+  logs: Record<string, any>;
+  discipline: Record<string, any>;
+  reports: Record<string, any>;
+  verification: Record<string, any>;
+  reactionRoles: Record<string, any>;
+  roleMenus: Record<string, any>;
+  customCommands: Record<string, any>;
+  ranks: Record<string, any>;
+  welcome: Record<string, any>;
+  [section: string]: any;
 }
 
 export type AutomodActionMode = 'soft' | 'hard';
@@ -113,9 +132,7 @@ export interface AutomodSpamEvaluation {
   triggered: boolean;
 }
 
-export interface CommandJson {
-  [key: string]: unknown;
-}
+export type CommandJson = Record<string, any>;
 
 export interface CommandGuildLike {
   commands: {
@@ -148,11 +165,11 @@ export interface AIService {
   analyzeMember(profile: MemberRecommendationInput): Promise<string>;
 }
 
-export type EmbedFactory = (...args: any[]) => unknown;
+export type EmbedFactory = (...args: any[]) => any;
 
 export interface EmbedsApi {
-  panelButtons: unknown;
-  [key: string]: EmbedFactory | unknown;
+  panelButtons: any;
+  [key: string]: any;
 }
 
 export interface ApplicationsService {
@@ -373,7 +390,7 @@ export interface GuildSettings {
   reportSchedule: ReportScheduleSettings;
   roleMenus: RoleMenu[];
   customCommands: CustomCommandEntry[];
-  automod: Record<string, unknown>;
+  automod: AutomodConfig;
   modules: ModuleFlags;
   features: GuildFeatures;
 }
@@ -514,7 +531,7 @@ export interface StoreState {
   members: Record<string, MemberRecord>;
   analytics: {
     daily: Record<string, GuildDailyAnalytics>;
-    reports: Record<string, Record<string, string>>;
+    reports: Record<string, string>;
   };
   applications: ApplicationRecord[];
   cooldowns: Record<string, number>;

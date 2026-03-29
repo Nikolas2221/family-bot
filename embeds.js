@@ -7,7 +7,64 @@ const {
   TextInputBuilder,
   TextInputStyle
 } = require('discord.js');
-const copy = require('./copy');
+const rawCopy = require('./copy');
+
+function repairText(value) {
+  const text = String(value ?? '');
+  if (!text) return text;
+  if (!/[РЁёЎўЂЃџ]/u.test(text) && !text.includes('вЂ') && !text.includes('рџ')) {
+    return text;
+  }
+
+  let next = text;
+  for (let index = 0; index < 2; index += 1) {
+    try {
+      const repaired = Buffer.from(next, 'latin1').toString('utf8');
+      if (!repaired || repaired === next || repaired.includes('\uFFFD')) break;
+      next = repaired;
+    } catch {
+      break;
+    }
+  }
+
+  return next;
+}
+
+function repairCopyValue(value, seen = new WeakMap()) {
+  if (typeof value === 'string') {
+    return repairText(value);
+  }
+
+  if (typeof value === 'function') {
+    return (...args) => repairCopyValue(value(...args), seen);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return seen.get(value);
+  }
+
+  if (Array.isArray(value)) {
+    const output = [];
+    seen.set(value, output);
+    for (const item of value) {
+      output.push(repairCopyValue(item, seen));
+    }
+    return output;
+  }
+
+  const output = {};
+  seen.set(value, output);
+  for (const [key, nested] of Object.entries(value)) {
+    output[key] = repairCopyValue(nested, seen);
+  }
+  return output;
+}
+
+const copy = repairCopyValue(rawCopy);
 
 const THEME = {
   brand: 0x7c3aed,
@@ -3210,3 +3267,1040 @@ module.exports.buildReportScheduleEmbed = buildReportScheduleEmbedFinal;
 module.exports.buildLeaderboardEmbed = buildLeaderboardEmbedFinal;
 module.exports.buildVoiceActivityEmbed = buildVoiceActivityEmbedFinal;
 module.exports.buildAdminPanelEmbed = buildAdminPanelEmbedFinal;
+
+function buildFamilySummaryLinesRelease(summary = {}) {
+  return [
+    `**Всего участников:** ${summary.totalMembers ?? 0}`,
+    `**С ролями / без ролей:** ${summary.membersWithFamilyRoles ?? 0} / ${summary.membersWithoutFamilyRoles ?? 0}`,
+    `**Заявок на рассмотрении:** ${summary.pendingApplications ?? 0}`,
+    `**AFK-рисков:** ${summary.afkRiskCount ?? 0}`,
+    `**Тариф:** ${summary.planLabel || 'Free - 0$'}`,
+    `**Статусы:** 🟢 ${summary.onlineCount ?? 0} • 🌙 ${summary.idleCount ?? 0} • ⛔ ${summary.dndCount ?? 0} • ⚫ ${summary.offlineCount ?? 0}`,
+    `**Топ-1 активности:** ${summary.topMemberLine || 'нет данных'}`,
+    `**Последнее обновление:** ${summary.lastUpdatedLabel || 'сейчас'}`
+  ];
+}
+
+function buildFamilyEmbedsRelease(guild, { roles, familyTitle, updateIntervalMs, activityScore, summary = {}, imageUrl }) {
+  const configuredRoles = roles
+    .map((item) => ({ ...item, role: guild.roles.cache.get(item.id) }))
+    .filter((item) => item.role)
+    .sort((a, b) => b.role.position - a.role.position);
+
+  const assignedMemberIds = new Set();
+  const roleSnapshots = configuredRoles.map((item) => {
+    const uniqueMembers = Array.from(item.role.members.values())
+      .filter((member) => {
+        if (assignedMemberIds.has(member.id)) return false;
+        assignedMemberIds.add(member.id);
+        return true;
+      });
+
+    return {
+      ...item,
+      members: sortMembers(uniqueMembers, activityScore)
+    };
+  });
+
+  const totalMembers = Array.from(guild.members.cache.values()).filter((member) => !member.user?.bot).length;
+  const membersWithFamilyRoles = assignedMemberIds.size;
+  const membersWithoutFamilyRoles = Math.max(0, totalMembers - membersWithFamilyRoles);
+  const activeRoles = roleSnapshots.filter((item) => item.members.length);
+  const embeds = [];
+
+  let currentEmbed = card({
+    title: familyTitle,
+    color: THEME.brand,
+    description: [
+      ...buildFamilySummaryLinesRelease({
+        ...summary,
+        totalMembers,
+        membersWithFamilyRoles,
+        membersWithoutFamilyRoles
+      }),
+      '',
+      `**Активных секций:** ${activeRoles.length}`,
+      `**Обновление:** каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
+      '',
+      '🟢 Онлайн • 🌙 Отошёл • ⛔ Не беспокоить • ⚫ Оффлайн'
+    ].join('\n'),
+    footer: `BRHD • Phoenix • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
+    image: imageUrl
+  });
+
+  let fieldCount = 0;
+
+  if (!activeRoles.length) {
+    currentEmbed.addFields(section('Состав', copy.family.emptyMembers, false));
+    return [currentEmbed];
+  }
+
+  for (const item of activeRoles) {
+    const lines = item.members.map((member) => `${getStatusEmoji(member)} <@${member.id}> • ${activityScore(member.id)} очк.`);
+    const parts = chunk(lines, 15);
+
+    for (let index = 0; index < parts.length; index += 1) {
+      if (fieldCount >= 25) {
+        embeds.push(currentEmbed);
+        currentEmbed = card({
+          title: `${familyTitle} • продолжение`,
+          color: THEME.slate,
+          description: 'Продолжение состава семьи.',
+          footer: `BRHD • Phoenix • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`
+        });
+        fieldCount = 0;
+      }
+
+      currentEmbed.addFields(
+        section(index === 0 ? `${item.name} • ${item.members.length}` : `${item.name} • продолжение`, parts[index].join('\n'), false)
+      );
+      fieldCount += 1;
+    }
+  }
+
+  embeds.push(currentEmbed);
+  return embeds;
+}
+
+function buildFamilyMenuEmbedRelease({ imageUrl, summary } = {}) {
+  return card({
+    title: copy.family.menuTitle,
+    color: THEME.brand,
+    description: [
+      'Панель семьи v2 в стиле BRHD / Phoenix.',
+      '',
+      ...buildFamilySummaryLinesRelease(summary),
+      '',
+      `• ${copy.family.refreshButton} — обновить состав, активность и ранги`,
+      `• ${copy.family.profileButton} — открыть свой профиль`,
+      `• ${copy.family.leaderboardButton} — лидерборд по очкам`,
+      `• ${copy.family.voiceButton} — топ по голосовой активности`,
+      `• ${copy.family.applyButton} — открыть анкету кандидата`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Family Control',
+    image: imageUrl
+  });
+}
+
+function buildReportScheduleEmbedRelease(schedule = {}, channels = {}) {
+  const weekly = schedule.weekly || {};
+  const monthly = schedule.monthly || {};
+
+  return card({
+    title: copy.reports.title,
+    color: THEME.royal,
+    description: [
+      `Weekly: ${weekly.enabled ? 'ON' : 'OFF'}`,
+      `Канал weekly: ${weekly.channelId ? `<#${weekly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`,
+      '',
+      `Monthly: ${monthly.enabled ? 'ON' : 'OFF'}`,
+      `Канал monthly: ${monthly.channelId ? `<#${monthly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Reports'
+  });
+}
+
+function buildLeaderboardEmbedRelease(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : copy.stats.leaderboardEmpty;
+
+  return card({
+    title: `${copy.stats.leaderboardTitle} • Phoenix`,
+    color: THEME.gold,
+    description: [
+      copy.stats.leaderboardDescription,
+      '',
+      `Участников в рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium - 5$'}`,
+      `Топ-игрок: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Leaderboard',
+    image: summary.imageUrl
+  }).addFields(
+    section('Сводка', [
+      `Средняя репутация: ${summary.averagePoints ?? 0}/100`,
+      `Суммарная репутация: ${summary.totalPoints ?? 0}`,
+      `Голос семьи: ${summary.totalVoiceHours ?? 0} ч`
+    ].join('\n'), true),
+    section('Рейтинг', content, false)
+  );
+}
+
+function buildVoiceActivityEmbedRelease(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : copy.stats.voiceEmpty;
+
+  return card({
+    title: `${copy.stats.voiceTitle} • Phoenix`,
+    color: THEME.royal,
+    description: [
+      copy.stats.voiceDescription,
+      '',
+      `Участников в голосовом рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium - 5$'}`,
+      `Лидер голоса: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Voice',
+    image: summary.imageUrl
+  }).addFields(
+    section('Сводка', [
+      `Суммарно часов: ${summary.totalHours ?? 0} ч`,
+      `Среднее на участника: ${summary.averageHours ?? 0} ч`,
+      `Репутация ядра: ${summary.totalPoints ?? 0}`
+    ].join('\n'), true),
+    section('Топ по голосу', content, false)
+  );
+}
+
+function buildAdminPanelEmbedRelease({ guildName, record }) {
+  const settings = record.settings || {};
+  const channels = settings.channels || {};
+  const roles = settings.roles || {};
+  const visuals = settings.visuals || {};
+  const modules = settings.modules || {};
+  const automod = settings.automod || {};
+  const welcome = settings.welcome || {};
+  const verification = settings.verification || {};
+  const reportSchedule = settings.reportSchedule || {};
+  const reactionRoles = Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [];
+  const roleMenus = Array.isArray(settings.roleMenus) ? settings.roleMenus : [];
+  const customCommands = Array.isArray(settings.customCommands) ? settings.customCommands : [];
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? copy.admin.panelPremium : copy.admin.panelFree;
+  const mode = settings.mode || 'hybrid';
+
+  const moduleLines = [
+    `Family: ${modules.family ? 'ON' : 'OFF'}`,
+    `Applications: ${modules.applications ? 'ON' : 'OFF'}`,
+    `Moderation: ${modules.moderation ? 'ON' : 'OFF'}`,
+    `Security: ${modules.security ? 'ON' : 'OFF'}`,
+    `Analytics: ${modules.analytics ? 'ON' : 'OFF'}`,
+    `AI: ${modules.ai ? 'ON' : 'OFF'}`,
+    `Welcome: ${modules.welcome ? 'ON' : 'OFF'}`,
+    `Automod: ${modules.automod ? 'ON' : 'OFF'}`,
+    `Subscriptions: ${modules.subscriptions ? 'ON' : 'OFF'}`,
+    `Custom Commands: ${modules.customCommands ? 'ON' : 'OFF'}`,
+    `Music: ${modules.music ? 'ON' : 'OFF'}`
+  ];
+
+  return card({
+    title: copy.admin.panelTitle,
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `Сервер: **${guildName}**`,
+    footer: 'BRHD • Phoenix • Administration'
+  }).addFields(
+    section('Статус', [`Тариф: ${planLabel}`, `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`, `Режим: ${mode}`].join('\n'), true),
+    section('Возможности', copy.admin.panelFeatures(record.plan), true),
+    section(copy.admin.panelFieldChannels, [
+      channelLine('Панель', channels.panel),
+      channelLine('Подача заявки', channels.applications),
+      channelLine('Welcome', channels.welcome),
+      channelLine('Правила', channels.rules),
+      channelLine('Логи', channels.logs),
+      channelLine('Дисциплина', channels.disciplineLogs),
+      channelLine('Апдейты', channels.updates),
+      channelLine('Отчёты', channels.reports),
+      channelLine('Automod', channels.automod)
+    ].join('\n'), false),
+    section(copy.admin.panelFieldRoles, [
+      roleLine('Лидер', roles.leader),
+      roleLine('Зам', roles.deputy),
+      roleLine('Старший', roles.elder),
+      roleLine('Участник', roles.member),
+      roleLine('Новичок', roles.newbie),
+      roleLine('Мут', roles.mute),
+      roleLine('Автороль', roles.autorole),
+      roleLine('После подтверждения', roles.verification)
+    ].join('\n'), false),
+    section('Модули', moduleLines.join('\n'), false),
+    section('Welcome', [`Статус: ${welcome.enabled ? 'ON' : 'OFF'}`, `ЛС: ${welcome.dmEnabled ? 'ON' : 'OFF'}`, `Текст: ${welcome.message ? 'задан' : 'не задан'}`].join('\n'), true),
+    section('Verification', [`Статус: ${verification.enabled ? 'ON' : 'OFF'}`, `Анкета: ${verification.questionnaireEnabled ? 'ON' : 'OFF'}`, `Роль: ${verification.roleId ? `<@&${verification.roleId}>` : 'не задана'}`].join('\n'), true),
+    section('Role Menus', [`Меню: ${roleMenus.length}`, `Старые reaction roles: ${reactionRoles.length}`].join('\n'), true),
+    section('Custom Commands', [`Триггеры: ${customCommands.length}`, `Premium: ${isPremium ? 'ON' : 'OFF'}`].join('\n'), true),
+    section('Reports', [`Weekly: ${reportSchedule.weekly?.enabled ? 'ON' : 'OFF'}`, `Канал weekly: ${reportSchedule.weekly?.channelId ? `<#${reportSchedule.weekly.channelId}>` : 'не задан'}`, `Monthly: ${reportSchedule.monthly?.enabled ? 'ON' : 'OFF'}`, `Канал monthly: ${reportSchedule.monthly?.channelId ? `<#${reportSchedule.monthly.channelId}>` : 'не задан'}`].join('\n'), false),
+    section('Automod', [`Инвайты: ${automod.invitesEnabled ? 'ON' : 'OFF'}`, `Ссылки: ${automod.linksEnabled ? 'ON' : 'OFF'}`, `Капс: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+ букв)` : 'OFF'}`, `Упоминания: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`, `Флуд: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}с)` : 'OFF'}`, `Стоп-слова: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`, `Наказание: ${automod.actionMode === 'hard' ? 'жёсткое' : 'мягкое'}`].join('\n'), false),
+    section(copy.admin.panelFieldVisuals, [copy.admin.visualLine('Панель семьи', visuals.familyBanner), copy.admin.visualLine('Подача заявки', visuals.applicationsBanner)].join('\n'), false)
+  );
+}
+
+module.exports.buildFamilyEmbeds = buildFamilyEmbedsRelease;
+module.exports.buildFamilyMenuEmbed = buildFamilyMenuEmbedRelease;
+module.exports.buildReportScheduleEmbed = buildReportScheduleEmbedRelease;
+module.exports.buildLeaderboardEmbed = buildLeaderboardEmbedRelease;
+module.exports.buildVoiceActivityEmbed = buildVoiceActivityEmbedRelease;
+module.exports.buildAdminPanelEmbed = buildAdminPanelEmbedRelease;
+
+function helpSectionsClean({ regularCommands = [], adminCommands = [], premiumRegularCommands = [], premiumAdminCommands = [] } = {}) {
+  return [
+    { title: 'Обычные команды', commands: regularCommands },
+    { title: 'Команды администрации', commands: adminCommands },
+    { title: 'Premium для всех', commands: premiumRegularCommands },
+    { title: 'Premium для администрации', commands: premiumAdminCommands }
+  ].filter(sectionData => Array.isArray(sectionData.commands) && sectionData.commands.length);
+}
+
+function renderCommandListClean(commands = []) {
+  if (!commands.length) return 'В этой категории пока нет доступных команд.';
+  return commands
+    .map(({ name }) => `/${name}`)
+    .join('\n')
+    .slice(0, 4000);
+}
+
+function buildHelpEmbedClean(catalog = {}, page = 0) {
+  const sections = helpSectionsClean(catalog);
+  const safePage = Math.max(0, Math.min(page, Math.max(0, sections.length - 1)));
+  const current = sections[safePage] || { title: 'Команды', commands: [] };
+  const totalPages = Math.max(1, sections.length || 1);
+
+  return card({
+    title: `Справка - ${current.title}`,
+    color: catalog.plan === 'premium' ? THEME.gold : THEME.brand,
+    description: [
+      `Тариф: ${catalog.plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
+      `Страница: ${safePage + 1}/${totalPages}`,
+      '',
+      renderCommandListClean(current.commands)
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Help'
+  });
+}
+
+function buildHelpPaginationButtonsClean(catalog = {}, page = 0) {
+  const sections = helpSectionsClean(catalog);
+  if (sections.length <= 1) return [];
+
+  const safePage = Math.max(0, Math.min(page, sections.length - 1));
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`help_page:${Math.max(0, safePage - 1)}`)
+        .setLabel('Назад')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage === 0),
+      new ButtonBuilder()
+        .setCustomId(`help_page:${Math.min(sections.length - 1, safePage + 1)}`)
+        .setLabel('Вперёд')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(safePage >= sections.length - 1)
+    )
+  ];
+}
+
+function buildFamilySummaryLinesClean(summary = {}) {
+  return [
+    `**Всего участников:** ${summary.totalMembers ?? 0}`,
+    `**С ролями / без ролей:** ${summary.membersWithFamilyRoles ?? 0} / ${summary.membersWithoutFamilyRoles ?? 0}`,
+    `**Заявок на рассмотрении:** ${summary.pendingApplications ?? 0}`,
+    `**AFK-рисков:** ${summary.afkRiskCount ?? 0}`,
+    `**Тариф:** ${summary.planLabel || 'Free - 0$'}`,
+    `**Статусы:** ${summary.onlineCount ?? 0} онлайн, ${summary.idleCount ?? 0} отошёл, ${summary.dndCount ?? 0} не беспокоить, ${summary.offlineCount ?? 0} оффлайн`,
+    `**Топ-1 активности:** ${summary.topMemberLine || 'нет данных'}`,
+    `**Последнее обновление:** ${summary.lastUpdatedLabel || 'сейчас'}`
+  ];
+}
+
+async function buildFamilyEmbedsClean(guild, { roles, familyTitle, updateIntervalMs, activityScore, summary, imageUrl } = {}) {
+  const roleSnapshots = roles.map(roleConfig => {
+    const discordRole = guild.roles.cache.get(roleConfig.id);
+    const members = discordRole ? Array.from(discordRole.members.values()).filter(member => !member.user?.bot) : [];
+    return { ...roleConfig, members };
+  });
+
+  const assignedMemberIds = new Set();
+  const normalizedRoles = roleSnapshots.map(item => {
+    const uniqueMembers = item.members.filter(member => {
+      if (assignedMemberIds.has(member.id)) return false;
+      assignedMemberIds.add(member.id);
+      return true;
+    });
+
+    return {
+      ...item,
+      members: sortMembers(uniqueMembers, activityScore)
+    };
+  });
+
+  const totalMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot).length;
+  const membersWithFamilyRoles = assignedMemberIds.size;
+  const membersWithoutFamilyRoles = Math.max(0, totalMembers - membersWithFamilyRoles);
+  const activeRoles = normalizedRoles.filter(item => item.members.length);
+  const embeds = [];
+
+  let currentEmbed = card({
+    title: familyTitle,
+    color: THEME.brand,
+    description: [
+      ...buildFamilySummaryLinesClean({
+        ...summary,
+        totalMembers,
+        membersWithFamilyRoles,
+        membersWithoutFamilyRoles
+      }),
+      '',
+      `**Активных секций:** ${activeRoles.length}`,
+      `**Обновление:** каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
+      '',
+      'Онлайн | Отошёл | Не беспокоить | Оффлайн'
+    ].join('\n'),
+    footer: `BRHD • Phoenix • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
+    image: imageUrl
+  });
+
+  let fieldCount = 0;
+
+  if (!activeRoles.length) {
+    currentEmbed.addFields(section('Состав', 'Нет участников в выбранных ролях.', false));
+    return [currentEmbed];
+  }
+
+  for (const item of activeRoles) {
+    const lines = item.members.map(member => `${getStatusEmoji(member)} <@${member.id}> - ${activityScore(member.id)} очк.`);
+    const parts = chunk(lines, 15);
+
+    for (let index = 0; index < parts.length; index += 1) {
+      if (fieldCount >= 25) {
+        embeds.push(currentEmbed);
+        currentEmbed = card({
+          title: `${familyTitle} - продолжение`,
+          color: THEME.slate,
+          description: 'Продолжение состава семьи.',
+          footer: `BRHD • Phoenix • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`
+        });
+        fieldCount = 0;
+      }
+
+      currentEmbed.addFields(
+        section(index === 0 ? `${item.name} - ${item.members.length}` : `${item.name} - продолжение`, parts[index].join('\n'), false)
+      );
+      fieldCount += 1;
+    }
+  }
+
+  embeds.push(currentEmbed);
+  return embeds;
+}
+
+function buildFamilyMenuEmbedClean({ imageUrl, summary } = {}) {
+  return card({
+    title: 'Панель семьи',
+    color: THEME.brand,
+    description: [
+      'Панель семьи в стиле BRHD / Phoenix.',
+      '',
+      ...buildFamilySummaryLinesClean(summary),
+      '',
+      `- ${copy.family.refreshButton} - обновить состав, активность и ранги`,
+      `- ${copy.family.profileButton} - открыть свой профиль`,
+      `- ${copy.family.leaderboardButton} - рейтинг по очкам`,
+      `- ${copy.family.voiceButton} - топ по голосовой активности`,
+      `- ${copy.family.applyButton} - открыть анкету кандидата`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Family Control',
+    image: imageUrl
+  });
+}
+
+function buildWelcomeEmbedClean(member, familyTitle, imageUrl = '', customMessage = '', extras = {}) {
+  return card({
+    title: `Добро пожаловать в ${familyTitle || 'Phoenix'}`,
+    color: THEME.emerald,
+    description: [
+      customMessage || `Рады видеть тебя в семье **${familyTitle || 'Phoenix'}** на сервере **${member.guild?.name || 'Phoenix'}**.`,
+      '',
+      extras.rulesChannelId ? `Правила: <#${extras.rulesChannelId}>` : '',
+      extras.applicationsChannelId ? `Подача заявки: <#${extras.applicationsChannelId}>` : '',
+      extras.verificationEnabled ? 'Подтверди доступ кнопкой ниже, чтобы получить стартовую роль.' : ''
+    ].filter(Boolean).join('\n'),
+    footer: 'BRHD • Phoenix • Welcome',
+    thumbnail: avatarUrl(member.user),
+    image: imageUrl
+  }).addFields(section('Старт', ['1. Изучи правила сервера', '2. Пройди подтверждение', '3. Открой панель семьи и подай заявку'].join('\n'), false));
+}
+
+function buildReportScheduleEmbedClean(schedule = {}, channels = {}) {
+  const weekly = schedule.weekly || {};
+  const monthly = schedule.monthly || {};
+
+  return card({
+    title: 'Расписание отчётов',
+    color: THEME.royal,
+    description: [
+      `Weekly: ${weekly.enabled ? 'ON' : 'OFF'}`,
+      `Канал weekly: ${weekly.channelId ? `<#${weekly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`,
+      '',
+      `Monthly: ${monthly.enabled ? 'ON' : 'OFF'}`,
+      `Канал monthly: ${monthly.channelId ? `<#${monthly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Reports'
+  });
+}
+
+function buildLeaderboardEmbedClean(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : 'Пока нет данных для рейтинга.';
+  return card({
+    title: 'Таблица участников • Phoenix',
+    color: THEME.gold,
+    description: [
+      'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+      '',
+      `Участников в рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium - 5$'}`,
+      `Топ-игрок: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Leaderboard',
+    image: summary.imageUrl
+  }).addFields(
+    section('Сводка', [
+      `Средняя репутация: ${summary.averagePoints ?? 0}/100`,
+      `Суммарная репутация: ${summary.totalPoints ?? 0}`,
+      `Голос семьи: ${summary.totalVoiceHours ?? 0} ч`
+    ].join('\n'), true),
+    section('Рейтинг', content, false)
+  );
+}
+
+function buildVoiceActivityEmbedClean(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : 'Пока нет данных по голосовой активности.';
+  return card({
+    title: 'Голосовая активность • Phoenix',
+    color: THEME.royal,
+    description: [
+      'Топ участников по голосовой активности.',
+      '',
+      `Участников в голосовом рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium - 5$'}`,
+      `Лидер голоса: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Voice',
+    image: summary.imageUrl
+  }).addFields(
+    section('Сводка', [
+      `Суммарно часов: ${summary.totalHours ?? 0} ч`,
+      `Среднее на участника: ${summary.averageHours ?? 0} ч`,
+      `Репутация ядра: ${summary.totalPoints ?? 0}`
+    ].join('\n'), true),
+    section('Топ по голосу', content, false)
+  );
+}
+
+function buildAdminPanelEmbedClean({ guildName, record }) {
+  const settings = record.settings || {};
+  const channels = settings.channels || {};
+  const roles = settings.roles || {};
+  const visuals = settings.visuals || {};
+  const modules = settings.modules || {};
+  const automod = settings.automod || {};
+  const welcome = settings.welcome || {};
+  const verification = settings.verification || {};
+  const reportSchedule = settings.reportSchedule || {};
+  const reactionRoles = Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [];
+  const roleMenus = Array.isArray(settings.roleMenus) ? settings.roleMenus : [];
+  const customCommands = Array.isArray(settings.customCommands) ? settings.customCommands : [];
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? 'Premium - 5$' : 'Free - 0$';
+  const mode = settings.mode || 'hybrid';
+
+  const moduleLines = [
+    `Family: ${modules.family ? 'ON' : 'OFF'}`,
+    `Applications: ${modules.applications ? 'ON' : 'OFF'}`,
+    `Moderation: ${modules.moderation ? 'ON' : 'OFF'}`,
+    `Security: ${modules.security ? 'ON' : 'OFF'}`,
+    `Analytics: ${modules.analytics ? 'ON' : 'OFF'}`,
+    `AI: ${modules.ai ? 'ON' : 'OFF'}`,
+    `Welcome: ${modules.welcome ? 'ON' : 'OFF'}`,
+    `Automod: ${modules.automod ? 'ON' : 'OFF'}`,
+    `Subscriptions: ${modules.subscriptions ? 'ON' : 'OFF'}`,
+    `Custom Commands: ${modules.customCommands ? 'ON' : 'OFF'}`,
+    `Music: ${modules.music ? 'ON' : 'OFF'}`
+  ];
+
+  return card({
+    title: 'Панель администратора',
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `Сервер: **${guildName}**`,
+    footer: 'BRHD • Phoenix • Administration'
+  }).addFields(
+    section('Статус', [`Тариф: ${planLabel}`, `Setup: ${record.setupCompleted ? 'завершён' : 'ожидает'}`, `Режим: ${mode}`].join('\n'), true),
+    section('Каналы', [
+      channelLine('Панель', channels.panel),
+      channelLine('Подача заявки', channels.applications),
+      channelLine('Welcome', channels.welcome),
+      channelLine('Правила', channels.rules),
+      channelLine('Логи', channels.logs),
+      channelLine('Дисциплина', channels.disciplineLogs),
+      channelLine('Апдейты', channels.updates),
+      channelLine('Отчёты', channels.reports),
+      channelLine('Automod', channels.automod)
+    ].join('\n'), false),
+    section('Роли', [
+      roleLine('Лидер', roles.leader),
+      roleLine('Зам', roles.deputy),
+      roleLine('Старший', roles.elder),
+      roleLine('Участник', roles.member),
+      roleLine('Новичок', roles.newbie),
+      roleLine('Мут', roles.mute),
+      roleLine('Автороль', roles.autorole),
+      roleLine('После подтверждения', roles.verification)
+    ].join('\n'), false),
+    section('Модули', moduleLines.join('\n'), false),
+    section('Welcome', [`Статус: ${welcome.enabled ? 'ON' : 'OFF'}`, `ЛС: ${welcome.dmEnabled ? 'ON' : 'OFF'}`, `Текст: ${welcome.message ? 'задан' : 'не задан'}`].join('\n'), true),
+    section('Verification', [`Статус: ${verification.enabled ? 'ON' : 'OFF'}`, `Анкета: ${verification.questionnaireEnabled ? 'ON' : 'OFF'}`, `Роль: ${verification.roleId ? `<@&${verification.roleId}>` : 'не задана'}`].join('\n'), true),
+    section('Role Menus', [`Меню: ${roleMenus.length}`, `Старые reaction roles: ${reactionRoles.length}`].join('\n'), true),
+    section('Custom Commands', [`Триггеры: ${customCommands.length}`, `Premium: ${isPremium ? 'ON' : 'OFF'}`].join('\n'), true),
+    section('Reports', [`Weekly: ${reportSchedule.weekly?.enabled ? 'ON' : 'OFF'}`, `Канал weekly: ${reportSchedule.weekly?.channelId ? `<#${reportSchedule.weekly.channelId}>` : 'не задан'}`, `Monthly: ${reportSchedule.monthly?.enabled ? 'ON' : 'OFF'}`, `Канал monthly: ${reportSchedule.monthly?.channelId ? `<#${reportSchedule.monthly.channelId}>` : 'не задан'}`].join('\n'), false),
+    section('Automod', [`Инвайты: ${automod.invitesEnabled ? 'ON' : 'OFF'}`, `Ссылки: ${automod.linksEnabled ? 'ON' : 'OFF'}`, `Капс: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+)` : 'OFF'}`, `Упоминания: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`, `Флуд: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}с)` : 'OFF'}`, `Стоп-слова: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`, `Наказание: ${automod.actionMode === 'hard' ? 'жёсткое' : 'мягкое'}`].join('\n'), false),
+    section('Баннеры', [
+      `Панель семьи: ${visuals.familyBanner || 'не задан'}`,
+      `Подача заявки: ${visuals.applicationsBanner || 'не задан'}`
+    ].join('\n'), false)
+  );
+}
+
+module.exports.buildHelpEmbed = buildHelpEmbedClean;
+module.exports.buildHelpPaginationButtons = buildHelpPaginationButtonsClean;
+module.exports.buildFamilyEmbeds = buildFamilyEmbedsClean;
+module.exports.buildFamilyMenuEmbed = buildFamilyMenuEmbedClean;
+module.exports.buildWelcomeEmbed = buildWelcomeEmbedClean;
+module.exports.buildReportScheduleEmbed = buildReportScheduleEmbedClean;
+module.exports.buildLeaderboardEmbed = buildLeaderboardEmbedClean;
+module.exports.buildVoiceActivityEmbed = buildVoiceActivityEmbedClean;
+module.exports.buildAdminPanelEmbed = buildAdminPanelEmbedClean;
+
+function getStatusEmoji(member) {
+  const status = member?.presence?.status || 'offline';
+  if (status === 'online') return repairText('рџџў');
+  if (status === 'idle') return repairText('рџџЎ');
+  if (status === 'dnd') return repairText('в›”');
+  return repairText('вљ«');
+}
+
+function getStatusLabel(member) {
+  const status = member?.presence?.status || 'offline';
+  if (status === 'online') return repairText('РћРЅР»Р°Р№РЅ');
+  if (status === 'idle') return repairText('РћС‚РѕС€С‘Р»');
+  if (status === 'dnd') return repairText('РќРµ Р±РµСЃРїРѕРєРѕРёС‚СЊ');
+  return repairText('РћС„С„Р»Р°Р№РЅ');
+}
+
+function trimValue(value, limit = 1024, fallback = 'вЂ”') {
+  const text = repairText(String(value || '').trim());
+  if (!text) return repairText(fallback);
+  return text.length > limit ? `${text.slice(0, limit - 1)}${repairText('вЂ¦')}` : text;
+}
+
+function card({ title, description, color, footer, thumbnail, author, image }) {
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(repairText(title))
+    .setTimestamp();
+
+  if (description) embed.setDescription(repairText(description));
+  embed.setFooter({ text: repairText(footer || BRAND_FOOTER) });
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  if (author) {
+    embed.setAuthor({
+      ...author,
+      ...(author.name ? { name: repairText(author.name) } : {})
+    });
+  }
+  if (image) embed.setImage(image);
+  return embed;
+}
+
+function section(name, value, inline = false) {
+  return {
+    name: repairText(name),
+    value: trimValue(value),
+    inline
+  };
+}
+
+function roleLine(label, roleId) {
+  return `${repairText(label)}: ${roleId ? `<@&${roleId}>` : repairText('РЅРµ Р·Р°РґР°РЅРѕ')}`;
+}
+
+function channelLine(label, channelId) {
+  return `${repairText(label)}: ${channelId ? `<#${channelId}>` : repairText('РЅРµ Р·Р°РґР°РЅ')}`;
+}
+
+function repairText(value) {
+  const text = String(value ?? '');
+  if (!text) return text;
+
+  const score = (input) => {
+    const markers = ['Р', 'С', 'вЂ', 'рџ', '\uFFFD'];
+    const markerPenalty = markers.reduce((sum, marker) => sum + (input.split(marker).length - 1) * 4, 0);
+    const controlPenalty = Array.from(input).reduce((sum, char) => {
+      const code = char.charCodeAt(0);
+      return sum + ((code < 32 && char !== '\n' && char !== '\r' && char !== '\t') ? 6 : 0);
+    }, 0);
+    const cyrillicBonus = (input.match(/[А-Яа-яЁё]/g) || []).length;
+    return markerPenalty + controlPenalty - cyrillicBonus;
+  };
+
+  let best = text;
+  let bestScore = score(text);
+  let next = text;
+
+  for (let index = 0; index < 2; index += 1) {
+    try {
+      const repaired = Buffer.from(next, 'latin1').toString('utf8');
+      if (!repaired || repaired === next) break;
+      const repairedScore = score(repaired);
+      if (repaired.includes('\uFFFD') && repairedScore >= bestScore) break;
+      if (repairedScore < bestScore) {
+        best = repaired;
+        bestScore = repairedScore;
+      }
+      next = repaired;
+    } catch {
+      break;
+    }
+  }
+
+  return best;
+}
+
+function statusEmojiFinal(member) {
+  const status = member?.presence?.status || 'offline';
+  if (status === 'online') return '🟢';
+  if (status === 'idle') return '🟡';
+  if (status === 'dnd') return '⛔';
+  return '⚫';
+}
+
+function statusLabelFinal(member) {
+  const status = member?.presence?.status || 'offline';
+  if (status === 'online') return 'Онлайн';
+  if (status === 'idle') return 'Отошёл';
+  if (status === 'dnd') return 'Не беспокоить';
+  return 'Оффлайн';
+}
+
+function sectionFinal(name, value, inline = false) {
+  return {
+    name,
+    value: String(value || '—').slice(0, 1024),
+    inline
+  };
+}
+
+function cardFinal({ title, description, color, footer, thumbnail, image }) {
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
+    .setTimestamp();
+
+  if (description) embed.setDescription(description);
+  if (footer) embed.setFooter({ text: footer });
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  if (image) embed.setImage(image);
+  return embed;
+}
+
+function roleLineFinal(label, roleId) {
+  return `${label}: ${roleId ? `<@&${roleId}>` : 'не задано'}`;
+}
+
+function channelLineFinal(label, channelId) {
+  return `${label}: ${channelId ? `<#${channelId}>` : 'не задан'}`;
+}
+
+function renderCommandListFinal(commands = []) {
+  if (!commands.length) return 'В этой категории пока нет доступных команд.';
+  return commands.map(({ name }) => `/${name}`).join('\n').slice(0, 4000);
+}
+
+function buildHelpEmbedFinal2(catalog = {}, page = 0) {
+  const sections = helpSectionsClean(catalog);
+  const safePage = Math.max(0, Math.min(page, Math.max(0, sections.length - 1)));
+  const current = sections[safePage] || { title: 'Команды', commands: [] };
+  const totalPages = Math.max(1, sections.length || 1);
+
+  return cardFinal({
+    title: `Справка • ${current.title}`,
+    color: catalog.plan === 'premium' ? THEME.gold : THEME.brand,
+    description: [
+      `Тариф: ${catalog.plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
+      `Страница: ${safePage + 1}/${totalPages}`,
+      '',
+      renderCommandListFinal(current.commands)
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Help'
+  });
+}
+
+function buildHelpPaginationButtonsFinal2(catalog = {}, page = 0) {
+  const sections = helpSectionsClean(catalog);
+  if (sections.length <= 1) return [];
+
+  const safePage = Math.max(0, Math.min(page, sections.length - 1));
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`help_page:${Math.max(0, safePage - 1)}`)
+        .setLabel('Назад')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage === 0),
+      new ButtonBuilder()
+        .setCustomId(`help_page:${Math.min(sections.length - 1, safePage + 1)}`)
+        .setLabel('Вперёд')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(safePage >= sections.length - 1)
+    )
+  ];
+}
+
+function buildFamilySummaryLinesFinal(summary = {}) {
+  return [
+    `Всего участников: ${summary.totalMembers ?? 0}`,
+    `С ролями / без ролей: ${summary.membersWithFamilyRoles ?? 0} / ${summary.membersWithoutFamilyRoles ?? 0}`,
+    `Заявок на рассмотрении: ${summary.pendingApplications ?? 0}`,
+    `AFK-рисков: ${summary.afkRiskCount ?? 0}`,
+    `Тариф: ${summary.planLabel || 'Free - 0$'}`,
+    `Статусы: ${summary.onlineCount ?? 0} • ${summary.idleCount ?? 0} • ${summary.dndCount ?? 0} • ${summary.offlineCount ?? 0}`,
+    `Топ-1 активности: ${summary.topMemberLine || 'нет данных'}`,
+    `Последнее обновление: ${summary.lastUpdatedLabel || 'сейчас'}`
+  ];
+}
+
+async function buildFamilyEmbedsFinal2(guild, { roles, familyTitle, updateIntervalMs, activityScore, summary, imageUrl } = {}) {
+  const roleSnapshots = roles.map(roleConfig => {
+    const discordRole = guild.roles.cache.get(roleConfig.id);
+    const members = discordRole ? Array.from(discordRole.members.values()).filter(member => !member.user?.bot) : [];
+    return { ...roleConfig, members };
+  });
+
+  const assignedMemberIds = new Set();
+  const normalizedRoles = roleSnapshots.map(item => {
+    const uniqueMembers = item.members.filter(member => {
+      if (assignedMemberIds.has(member.id)) return false;
+      assignedMemberIds.add(member.id);
+      return true;
+    });
+
+    return {
+      ...item,
+      members: sortMembers(uniqueMembers, activityScore)
+    };
+  });
+
+  const totalMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot).length;
+  const membersWithFamilyRoles = assignedMemberIds.size;
+  const membersWithoutFamilyRoles = Math.max(0, totalMembers - membersWithFamilyRoles);
+  const activeRoles = normalizedRoles.filter(item => item.members.length);
+
+  const currentEmbed = cardFinal({
+    title: familyTitle,
+    color: THEME.brand,
+    description: [
+      ...buildFamilySummaryLinesFinal({
+        ...summary,
+        totalMembers,
+        membersWithFamilyRoles,
+        membersWithoutFamilyRoles
+      }),
+      '',
+      `Активных секций: ${activeRoles.length}`,
+      `Обновление: каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
+      '',
+      `${statusEmojiFinal({ presence: { status: 'online' } })} Онлайн • ${statusEmojiFinal({ presence: { status: 'idle' } })} Отошёл • ${statusEmojiFinal({ presence: { status: 'dnd' } })} Не беспокоить • ${statusEmojiFinal({ presence: { status: 'offline' } })} Оффлайн`
+    ].join('\n'),
+    footer: `BRHD • Phoenix • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
+    image: imageUrl
+  });
+
+  if (!activeRoles.length) {
+    currentEmbed.addFields(sectionFinal('Состав', 'Нет участников в выбранных ролях.'));
+    return [currentEmbed];
+  }
+
+  for (const item of activeRoles) {
+    const lines = item.members.map(member => `${statusEmojiFinal(member)} <@${member.id}> • ${activityScore(member.id)} очк.`);
+    currentEmbed.addFields(sectionFinal(`${item.name} • ${item.members.length}`, lines.join('\n')));
+  }
+
+  return [currentEmbed];
+}
+
+function buildFamilyMenuEmbedFinal2({ imageUrl, summary } = {}) {
+  return cardFinal({
+    title: 'Панель семьи',
+    color: THEME.brand,
+    description: [
+      'Панель семьи в стиле BRHD / Phoenix.',
+      '',
+      ...buildFamilySummaryLinesFinal(summary),
+      '',
+      '- Обновить • обновить состав, активность и ранги',
+      '- Профиль • открыть свой профиль',
+      '- Топ • рейтинг по очкам',
+      '- Голос • топ по голосовой активности',
+      '- Подать заявку • открыть анкету кандидата'
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Family Control',
+    image: imageUrl
+  });
+}
+
+function buildWelcomeEmbedFinal2(member, familyTitle, imageUrl = '', customMessage = '', extras = {}) {
+  return cardFinal({
+    title: `Добро пожаловать в ${familyTitle || 'Phoenix'}`,
+    color: THEME.emerald,
+    description: [
+      customMessage || `Рады видеть тебя в семье **${familyTitle || 'Phoenix'}** на сервере **${member.guild?.name || 'Phoenix'}**.`,
+      '',
+      extras.rulesChannelId ? `Правила: <#${extras.rulesChannelId}>` : '',
+      extras.applicationsChannelId ? `Подача заявки: <#${extras.applicationsChannelId}>` : '',
+      extras.verificationEnabled ? 'Подтверди доступ кнопкой ниже, чтобы получить стартовую роль.' : ''
+    ].filter(Boolean).join('\n'),
+    footer: 'BRHD • Phoenix • Welcome',
+    thumbnail: avatarUrl(member.user),
+    image: imageUrl
+  }).addFields(sectionFinal('Старт', ['1. Изучи правила сервера', '2. Пройди подтверждение', '3. Открой панель семьи и подай заявку'].join('\n')));
+}
+
+function buildReportScheduleEmbedFinal2(schedule = {}, channels = {}) {
+  const weekly = schedule.weekly || {};
+  const monthly = schedule.monthly || {};
+
+  return cardFinal({
+    title: 'Расписание отчётов',
+    color: THEME.royal,
+    description: [
+      `Weekly: ${weekly.enabled ? 'ON' : 'OFF'}`,
+      `Канал weekly: ${weekly.channelId ? `<#${weekly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`,
+      '',
+      `Monthly: ${monthly.enabled ? 'ON' : 'OFF'}`,
+      `Канал monthly: ${monthly.channelId ? `<#${monthly.channelId}>` : (channels.reports ? `<#${channels.reports}>` : 'не задан')}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Reports'
+  });
+}
+
+function buildLeaderboardEmbedFinal2(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : 'Пока нет данных для рейтинга.';
+  return cardFinal({
+    title: 'Таблица участников • Phoenix',
+    color: THEME.gold,
+    description: [
+      'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+      '',
+      `Участников в рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium - 5$'}`,
+      `Топ-игрок: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Leaderboard',
+    image: summary.imageUrl
+  }).addFields(
+    sectionFinal('Сводка', [
+      `Средняя репутация: ${summary.averagePoints ?? 0}/100`,
+      `Суммарная репутация: ${summary.totalPoints ?? 0}`,
+      `Голос семьи: ${summary.totalVoiceHours ?? 0} ч`
+    ].join('\n'), true),
+    sectionFinal('Рейтинг', content)
+  );
+}
+
+function buildVoiceActivityEmbedFinal2(entries, summary = {}) {
+  const content = entries.length ? entries.join('\n') : 'Пока нет данных по голосовой активности.';
+  return cardFinal({
+    title: 'Голосовая активность • Phoenix',
+    color: THEME.royal,
+    description: [
+      'Топ участников по голосовой активности.',
+      '',
+      `Участников в голосовом рейтинге: ${summary.memberCount ?? entries.length}`,
+      `Тариф: ${summary.planLabel || 'Premium - 5$'}`,
+      `Лидер голоса: ${summary.topLine || 'нет данных'}`
+    ].join('\n'),
+    footer: 'BRHD • Phoenix • Premium Voice',
+    image: summary.imageUrl
+  }).addFields(
+    sectionFinal('Сводка', [
+      `Суммарно часов: ${summary.totalHours ?? 0} ч`,
+      `Среднее на участника: ${summary.averageHours ?? 0} ч`,
+      `Репутация ядра: ${summary.totalPoints ?? 0}`
+    ].join('\n'), true),
+    sectionFinal('Топ по голосу', content)
+  );
+}
+
+function buildAdminPanelEmbedFinal2({ guildName, record }) {
+  const settings = record.settings || {};
+  const channels = settings.channels || {};
+  const roles = settings.roles || {};
+  const visuals = settings.visuals || {};
+  const modules = settings.modules || {};
+  const automod = settings.automod || {};
+  const welcome = settings.welcome || {};
+  const verification = settings.verification || {};
+  const reportSchedule = settings.reportSchedule || {};
+  const reactionRoles = Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [];
+  const roleMenus = Array.isArray(settings.roleMenus) ? settings.roleMenus : [];
+  const customCommands = Array.isArray(settings.customCommands) ? settings.customCommands : [];
+  const isPremium = record.plan === 'premium';
+  const planLabel = isPremium ? 'Premium - 5$' : 'Free - 0$';
+  const mode = settings.mode || 'hybrid';
+
+  const moduleLines = [
+    `Family: ${modules.family ? 'ON' : 'OFF'}`,
+    `Applications: ${modules.applications ? 'ON' : 'OFF'}`,
+    `Moderation: ${modules.moderation ? 'ON' : 'OFF'}`,
+    `Security: ${modules.security ? 'ON' : 'OFF'}`,
+    `Analytics: ${modules.analytics ? 'ON' : 'OFF'}`,
+    `AI: ${modules.ai ? 'ON' : 'OFF'}`,
+    `Welcome: ${modules.welcome ? 'ON' : 'OFF'}`,
+    `Automod: ${modules.automod ? 'ON' : 'OFF'}`,
+    `Subscriptions: ${modules.subscriptions ? 'ON' : 'OFF'}`,
+    `Custom Commands: ${modules.customCommands ? 'ON' : 'OFF'}`,
+    `Music: ${modules.music ? 'ON' : 'OFF'}`
+  ];
+
+  return cardFinal({
+    title: 'Панель администратора',
+    color: isPremium ? THEME.gold : THEME.brand,
+    description: `Сервер: **${guildName}**`,
+    footer: 'BRHD • Phoenix • Administration'
+  }).addFields(
+    sectionFinal('Статус', [`Тариф: ${planLabel}`, `Setup: ${record.setupCompleted ? 'завершён' : 'ожидает'}`, `Режим: ${mode}`].join('\n'), true),
+    sectionFinal('Каналы', [
+      channelLineFinal('Панель', channels.panel),
+      channelLineFinal('Подача заявки', channels.applications),
+      channelLineFinal('Welcome', channels.welcome),
+      channelLineFinal('Правила', channels.rules),
+      channelLineFinal('Логи', channels.logs),
+      channelLineFinal('Дисциплина', channels.disciplineLogs),
+      channelLineFinal('Апдейты', channels.updates),
+      channelLineFinal('Отчёты', channels.reports),
+      channelLineFinal('Automod', channels.automod)
+    ].join('\n')),
+    sectionFinal('Роли', [
+      roleLineFinal('Лидер', roles.leader),
+      roleLineFinal('Зам', roles.deputy),
+      roleLineFinal('Старший', roles.elder),
+      roleLineFinal('Участник', roles.member),
+      roleLineFinal('Новичок', roles.newbie),
+      roleLineFinal('Мут', roles.mute),
+      roleLineFinal('Автороль', roles.autorole),
+      roleLineFinal('После подтверждения', roles.verification)
+    ].join('\n')),
+    sectionFinal('Модули', moduleLines.join('\n')),
+    sectionFinal('Welcome', [`Статус: ${welcome.enabled ? 'ON' : 'OFF'}`, `ЛС: ${welcome.dmEnabled ? 'ON' : 'OFF'}`, `Текст: ${welcome.message ? 'задан' : 'не задан'}`].join('\n'), true),
+    sectionFinal('Verification', [`Статус: ${verification.enabled ? 'ON' : 'OFF'}`, `Анкета: ${verification.questionnaireEnabled ? 'ON' : 'OFF'}`, `Роль: ${verification.roleId ? `<@&${verification.roleId}>` : 'не задана'}`].join('\n'), true),
+    sectionFinal('Role Menus', [`Меню: ${roleMenus.length}`, `Старые reaction roles: ${reactionRoles.length}`].join('\n'), true),
+    sectionFinal('Custom Commands', [`Триггеры: ${customCommands.length}`, `Premium: ${isPremium ? 'ON' : 'OFF'}`].join('\n'), true),
+    sectionFinal('Reports', [`Weekly: ${reportSchedule.weekly?.enabled ? 'ON' : 'OFF'}`, `Канал weekly: ${reportSchedule.weekly?.channelId ? `<#${reportSchedule.weekly.channelId}>` : 'не задан'}`, `Monthly: ${reportSchedule.monthly?.enabled ? 'ON' : 'OFF'}`, `Канал monthly: ${reportSchedule.monthly?.channelId ? `<#${reportSchedule.monthly.channelId}>` : 'не задан'}`].join('\n')),
+    sectionFinal('Automod', [`Инвайты: ${automod.invitesEnabled ? 'ON' : 'OFF'}`, `Ссылки: ${automod.linksEnabled ? 'ON' : 'OFF'}`, `Капс: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+)` : 'OFF'}`, `Упоминания: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`, `Флуд: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}с)` : 'OFF'}`, `Стоп-слова: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`, `Наказание: ${automod.actionMode === 'hard' ? 'жёсткое' : 'мягкое'}`].join('\n')),
+    sectionFinal('Баннеры', [`Панель семьи: ${visuals.familyBanner || 'не задан'}`, `Подача заявки: ${visuals.applicationsBanner || 'не задан'}`].join('\n'))
+  );
+}
+
+module.exports.buildHelpEmbed = buildHelpEmbedFinal2;
+module.exports.buildHelpPaginationButtons = buildHelpPaginationButtonsFinal2;
+module.exports.buildFamilyEmbeds = buildFamilyEmbedsFinal2;
+module.exports.buildFamilyMenuEmbed = buildFamilyMenuEmbedFinal2;
+module.exports.buildWelcomeEmbed = buildWelcomeEmbedFinal2;
+module.exports.buildReportScheduleEmbed = buildReportScheduleEmbedFinal2;
+module.exports.buildLeaderboardEmbed = buildLeaderboardEmbedFinal2;
+module.exports.buildVoiceActivityEmbed = buildVoiceActivityEmbedFinal2;
+module.exports.buildAdminPanelEmbed = buildAdminPanelEmbedFinal2;

@@ -1,8 +1,5 @@
-import type { FamilyRoleKey, RoleDefinition } from './types';
-
-const copy = require('../copy') as {
-  roles: Record<FamilyRoleKey, string>;
-};
+import copy from './copy';
+import type { RoleDefinition } from './types';
 
 export const roles: RoleDefinition[] = [
   { key: 'leader', envKey: 'ROLE_LEADER', id: process.env.ROLE_LEADER, name: copy.roles.leader },

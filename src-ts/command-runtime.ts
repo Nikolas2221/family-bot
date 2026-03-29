@@ -1,3 +1,5 @@
+import { createGuildScopedStorage } from './storage';
+
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
   AUTO_RANKS: any;
@@ -62,96 +64,6 @@ interface CommandRuntimeOptions {
   isAiCommandOverviewQuery(query: string): boolean;
   buildAiCommandsOverview(interaction: any): string;
   canManageNicknames(member: any): boolean;
-}
-
-function createGuildStorageFallback(guildId: string, storage: any) {
-  if (!storage) return null;
-  return {
-    ensureMember(memberId: string) {
-      return storage.ensureGuildMember(guildId, memberId);
-    },
-    activityScore(memberId: string) {
-      return storage.guildActivityScore(guildId, memberId);
-    },
-    pointsScore(memberId: string) {
-      return storage.guildPointsScore(guildId, memberId);
-    },
-    voiceMinutes(memberId: string) {
-      return storage.guildVoiceMinutes(guildId, memberId);
-    },
-    addVoiceMinutes(memberId: string, minutes: number) {
-      return storage.addGuildVoiceMinutes(guildId, memberId, minutes);
-    },
-    addVoiceMinutesInChannel(memberId: string, minutes: number, channelId: string) {
-      return storage.addGuildVoiceMinutes(guildId, memberId, minutes, channelId);
-    },
-    trackMessage(memberId: string) {
-      return storage.trackGuildMessage(guildId, memberId);
-    },
-    trackMessageInChannel(memberId: string, channelId: string) {
-      return storage.trackGuildMessage(guildId, memberId, channelId);
-    },
-    trackAnalyticsMessage(memberId: string, channelId: string) {
-      return storage.trackGuildAnalyticsMessage(guildId, memberId, channelId);
-    },
-    trackPresence(memberId: string) {
-      return storage.trackGuildPresence(guildId, memberId);
-    },
-    addReaction(memberId: string) {
-      return storage.addGuildReaction(guildId, memberId);
-    },
-    addWarn({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
-      return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
-    },
-    listWarns(userId: string, limit = 10) {
-      return storage.listGuildWarnsForUser(guildId, userId, limit);
-    },
-    clearWarns(userId: string) {
-      return storage.clearGuildWarnsForUser(guildId, userId);
-    },
-    addCommend({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
-      return storage.addGuildCommend({ guildId, userId, moderatorId, reason });
-    },
-    getCooldown(userId: string) {
-      return storage.getGuildCooldown(guildId, userId);
-    },
-    setCooldown(userId: string, value?: number) {
-      return storage.setGuildCooldown(guildId, userId, value);
-    },
-    createApplication(payload: Record<string, unknown>) {
-      return storage.createGuildApplication({ guildId, ...payload });
-    },
-    findApplication(applicationId: string) {
-      return storage.findGuildApplication(guildId, applicationId);
-    },
-    setApplicationTicketInfo(application: any, ticketInfo: Record<string, unknown>) {
-      return storage.setApplicationTicketInfo(application, ticketInfo);
-    },
-    listRecentApplications(limit?: number) {
-      return storage.listGuildRecentApplications(guildId, limit);
-    },
-    listBlacklist() {
-      return storage.listGuildBlacklist(guildId);
-    },
-    getBlacklistEntry(userId: string) {
-      return storage.getGuildBlacklistEntry(guildId, userId);
-    },
-    isBlacklisted(userId: string) {
-      return storage.isGuildBlacklisted(guildId, userId);
-    },
-    addBlacklistEntry({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
-      return storage.addGuildBlacklistEntry({ guildId, userId, moderatorId, reason });
-    },
-    removeBlacklistEntry(userId: string) {
-      return storage.removeGuildBlacklistEntry(guildId, userId);
-    },
-    markAfkWarningSent(memberId: string, value?: string) {
-      return storage.markGuildAfkWarningSent(guildId, memberId, value);
-    },
-    getPeriodAnalytics(periodDays: number) {
-      return storage.getGuildPeriodAnalytics(guildId, periodDays);
-    }
-  };
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -236,7 +148,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   const ephemeral = typeof rawEphemeral === 'function' ? rawEphemeral : ((payload: Record<string, unknown> = {}) => payload);
   const guildStorage = rawGuildStorage && typeof rawGuildStorage.addCommend === 'function'
     ? rawGuildStorage
-    : createGuildStorageFallback(guildId, storage);
+    : createGuildScopedStorage(guildId, storage);
   const buildProfilePayload = typeof rawBuildProfilePayload === 'function'
     ? rawBuildProfilePayload
     : ((_member: any, _allowRankButtons: boolean, content = '') => ephemeral({ content: content || 'Произошла ошибка. Попробуй ещё раз.' }));
@@ -309,8 +221,12 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   }
 
   if (interaction.commandName === 'help') {
+    const catalog = getHelpCatalog(interaction);
     await interaction.reply(ephemeral({
-      embeds: [embeds.buildHelpEmbed(getHelpCatalog(interaction))]
+      embeds: [embeds.buildHelpEmbed(catalog, 0)],
+      components: typeof embeds.buildHelpPaginationButtons === 'function'
+        ? embeds.buildHelpPaginationButtons(catalog, 0)
+        : []
     }));
     return true;
   }

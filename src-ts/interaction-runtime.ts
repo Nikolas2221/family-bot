@@ -47,6 +47,7 @@ interface InteractionRuntimeOptions {
   syncAutoRanks(guildId: string, reason?: string): Promise<unknown>;
   doPanelUpdate(guildId: string, force?: boolean): Promise<unknown>;
   sendScheduledReport(guild: any, period: string, channelId: string): Promise<boolean>;
+  getHelpCatalog(interaction: any): any;
 }
 
 async function handleWelcomeCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
@@ -1015,6 +1016,18 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
   client.removeAllListeners('interactionCreate');
   client.on('interactionCreate', async (interaction: any) => {
     try {
+      if (interaction.isButton?.() && interaction.customId?.startsWith('help_page:')) {
+        const page = Number(interaction.customId.split(':')[1] || 0);
+        const catalog = options.getHelpCatalog(interaction);
+        await interaction.update({
+          embeds: [options.embeds.buildHelpEmbed(catalog, page)],
+          components: typeof options.embeds.buildHelpPaginationButtons === 'function'
+            ? options.embeds.buildHelpPaginationButtons(catalog, page)
+            : []
+        });
+        return;
+      }
+
       if (interaction.isChatInputCommand && interaction.isChatInputCommand()) {
         if (await options.handleCommand(interaction)) return;
         if (await handleWelcomeCommands(interaction, options)) return;
