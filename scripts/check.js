@@ -20,6 +20,7 @@ const files = [
   path.join('tests', 'applications.test.js'),
   path.join('tests', 'automod.test.js'),
   path.join('tests', 'commands.test.js'),
+  path.join('tests', 'copy-runtime.test.js'),
   path.join('tests', 'database.test.js'),
   path.join('tests', 'config.test.js'),
   path.join('tests', 'embeds.test.js'),

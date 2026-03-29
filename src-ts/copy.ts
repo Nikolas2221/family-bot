@@ -28,8 +28,8 @@ function repairCopyValue<T>(value: T, seen = new WeakMap<object, unknown>()): T 
   }
 
   if (typeof value === 'function') {
-    return ((...args: unknown[]) => {
-      const result = value(...args);
+    return (function repairedFunction(this: unknown, ...args: unknown[]) {
+      const result = (value as unknown as (...innerArgs: unknown[]) => unknown).apply(this, args);
       return repairCopyValue(result, seen);
     }) as T;
   }

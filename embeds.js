@@ -36,7 +36,9 @@ function repairCopyValue(value, seen = new WeakMap()) {
   }
 
   if (typeof value === 'function') {
-    return (...args) => repairCopyValue(value(...args), seen);
+    return function repairedFunction(...args) {
+      return repairCopyValue(value.apply(this, args), seen);
+    };
   }
 
   if (!value || typeof value !== 'object') {
@@ -4304,3 +4306,19 @@ module.exports.buildReportScheduleEmbed = buildReportScheduleEmbedFinal2;
 module.exports.buildLeaderboardEmbed = buildLeaderboardEmbedFinal2;
 module.exports.buildVoiceActivityEmbed = buildVoiceActivityEmbedFinal2;
 module.exports.buildAdminPanelEmbed = buildAdminPanelEmbedFinal2;
+
+function getStatusEmoji(member) {
+  const status = member.presence?.status || 'offline';
+  if (status === 'online') return '🟢';
+  if (status === 'idle') return '🟡';
+  if (status === 'dnd') return '⛔';
+  return '⚫';
+}
+
+function getStatusLabel(member) {
+  const status = member.presence?.status || 'offline';
+  if (status === 'online') return 'Онлайн';
+  if (status === 'idle') return 'Отошёл';
+  if (status === 'dnd') return 'Не беспокоить';
+  return 'Оффлайн';
+}
