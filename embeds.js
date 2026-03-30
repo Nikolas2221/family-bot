@@ -180,7 +180,7 @@ function panelButtons() {
       new ButtonBuilder().setCustomId('admin_applications').setLabel(copy.family.adminApplicationsButton).setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_aiadvisor').setLabel(copy.family.adminAiAdvisorButton).setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_panel').setLabel(copy.family.adminPanelButton).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_blacklist').setLabel(copy.family.adminBlacklistButton).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('admin_blacklist').setLabel('ЧС').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('admin_activityreport').setLabel(copy.family.adminReportButton).setStyle(ButtonStyle.Secondary)
     )
   ];

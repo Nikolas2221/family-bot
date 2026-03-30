@@ -1,4 +1,15 @@
 const releaseNotes = {
+  '1.0.5': {
+    added: [],
+    updated: [
+      'панель семьи больше не зависит от агрессивного text-repair для коротких кириллических меток',
+      'слой release notes переведён на чистый UTF-8 без битых строк в исходниках'
+    ],
+    fixed: [
+      'кнопка ЧС в панели семьи больше не превращается в !',
+      'TS repair-слой больше не ломает уже нормальный кириллический текст'
+    ]
+  },
   '1.0.4': {
     added: [
       'финальный UTF-8 override-слой для family panel, help, welcome, leaderboard, voice и admin panel'
