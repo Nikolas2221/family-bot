@@ -209,7 +209,7 @@ function formatTimeAgo(timestamp) {
 
 function getLiveVoiceMinutes(member) {
   const guildStorage = getGuildStorage(member.guild.id);
-  const storedMinutes = guildStorage.voiceMinutes(member.id);
+  const storedMinutes = guildStorage.getVoiceMinutes(member.id);
   const session = voiceSessions.get(memberSessionKey(member.guild.id, member.id));
   if (!session?.startedAt) return storedMinutes;
 
@@ -251,15 +251,15 @@ function buildFamilyDashboardStats(guild) {
   }
 
   const afkRiskCount = familyMembers.filter(member => {
-    const data = guildStorage.ensureMember(member.id);
+    const data = guildStorage.ensureMemberRecord(member.id);
     return Date.now() - Number(data.lastSeenAt || 0) >= AFK_WARNING_THRESHOLD_MS;
   }).length;
 
   const topEntry = familyMembers
     .map(member => ({
       member,
-      activity: guildStorage.activityScore(member.id),
-      points: guildStorage.pointsScore(member.id)
+      activity: guildStorage.getActivityScore(member.id),
+      points: guildStorage.getPointsScore(member.id)
     }))
     .sort((left, right) => {
       const byActivity = right.activity - left.activity;
@@ -295,7 +295,7 @@ function buildLeaderboardLines(guild, limit = 10) {
   return getFamilyMembers(guild)
     .map(member => ({
       member,
-      points: guildStorage.pointsScore(member.id),
+      points: guildStorage.getPointsScore(member.id),
       voiceHours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
       roleName: getDisplayRankName(member)
     }))
@@ -319,7 +319,7 @@ function buildVoiceActivityLines(guild, limit = 10) {
     .map(member => ({
       member,
       hours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
-      points: guildStorage.pointsScore(member.id)
+      points: guildStorage.getPointsScore(member.id)
     }))
     .sort((left, right) => {
       const byHours = right.hours - left.hours;
@@ -341,7 +341,7 @@ function buildLeaderboardSummary(guild) {
   const ranked = members
     .map(member => ({
       member,
-      points: guildStorage.pointsScore(member.id),
+      points: guildStorage.getPointsScore(member.id),
       voiceHours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
       roleName: getDisplayRankName(member)
     }))
@@ -378,7 +378,7 @@ function buildVoiceActivitySummary(guild) {
     .map(member => ({
       member,
       hours: Number(formatVoiceHours(getLiveVoiceMinutes(member))),
-      points: guildStorage.pointsScore(member.id)
+      points: guildStorage.getPointsScore(member.id)
     }))
     .sort((left, right) => {
       const byHours = right.hours - left.hours;
@@ -409,14 +409,14 @@ function buildActivityReportEmbed(guild, targetMember = null) {
   const guildStorage = getGuildStorage(guild.id);
 
   if (targetMember) {
-    const data = guildStorage.ensureMember(targetMember.id);
+    const data = guildStorage.ensureMemberRecord(targetMember.id);
     return new EmbedBuilder()
       .setColor(0x2563eb)
       .setTitle(`Отчёт по участнику: ${targetMember.displayName}`)
       .setDescription(`Сервер: **${guild.name}**`)
       .addFields(
         { name: 'Ранг', value: getDisplayRankName(targetMember), inline: true },
-        { name: 'Репутация', value: `${guildStorage.pointsScore(targetMember.id)}/100`, inline: true },
+        { name: 'Репутация', value: `${guildStorage.getPointsScore(targetMember.id)}/100`, inline: true },
         { name: 'Последняя активность', value: formatTimeAgo(data.lastSeenAt), inline: true },
         {
           name: 'Статистика',
@@ -434,10 +434,10 @@ function buildActivityReportEmbed(guild, targetMember = null) {
 
   const lines = getFamilyMembers(guild)
     .map(member => {
-      const data = guildStorage.ensureMember(member.id);
+      const data = guildStorage.ensureMemberRecord(member.id);
       return {
         member,
-        line: `${getDisplayRankName(member)} - <@${member.id}> - ${guildStorage.pointsScore(member.id)}/100 - ${formatVoiceHours(getLiveVoiceMinutes(member))} ч - ${formatTimeAgo(data.lastSeenAt)}`
+        line: `${getDisplayRankName(member)} - <@${member.id}> - ${guildStorage.getPointsScore(member.id)}/100 - ${formatVoiceHours(getLiveVoiceMinutes(member))} ч - ${formatTimeAgo(data.lastSeenAt)}`
       };
     })
     .sort((left, right) => left.member.displayName.localeCompare(right.member.displayName, 'ru'))
@@ -461,8 +461,8 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
   const settings = resolveGuildSettings(guild.id);
 
   if (targetMember) {
-    const data = guildStorage.ensureMember(targetMember.id);
-    const reputation = guildStorage.pointsScore(targetMember.id);
+    const data = guildStorage.ensureMemberRecord(targetMember.id);
+    const reputation = guildStorage.getPointsScore(targetMember.id);
     const voiceHours = formatVoiceHours(getLiveVoiceMinutes(targetMember));
 
     return new EmbedBuilder()
@@ -492,7 +492,7 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
           value: [
             `Похвалы: ${data.commends || 0}`,
             `Преды: ${data.warns || 0}`,
-            `Актив-очки: ${guildStorage.activityScore(targetMember.id)}`
+            `Актив-очки: ${guildStorage.getActivityScore(targetMember.id)}`
           ].join('\n'),
           inline: true
         },
@@ -512,16 +512,16 @@ function buildPremiumActivityReportEmbed(guild, targetMember = null) {
   const members = getFamilyMembers(guild);
   const lines = members
     .map(member => {
-      const data = guildStorage.ensureMember(member.id);
-      return `${getDisplayRankName(member)} - <@${member.id}> - ${guildStorage.pointsScore(member.id)}/100 - ${formatVoiceHours(getLiveVoiceMinutes(member))} ч - ${formatTimeAgo(data.lastSeenAt)}`;
+      const data = guildStorage.ensureMemberRecord(member.id);
+      return `${getDisplayRankName(member)} - <@${member.id}> - ${guildStorage.getPointsScore(member.id)}/100 - ${formatVoiceHours(getLiveVoiceMinutes(member))} ч - ${formatTimeAgo(data.lastSeenAt)}`;
     })
     .sort((left, right) => left.localeCompare(right, 'ru'))
     .slice(0, 25);
 
-  const totalPoints = members.reduce((sum, member) => sum + guildStorage.pointsScore(member.id), 0);
+  const totalPoints = members.reduce((sum, member) => sum + guildStorage.getPointsScore(member.id), 0);
   const totalVoiceHours = members.reduce((sum, member) => sum + Number(formatVoiceHours(getLiveVoiceMinutes(member))), 0);
   const afkRiskCount = members.filter(member => {
-    const data = guildStorage.ensureMember(member.id);
+    const data = guildStorage.ensureMemberRecord(member.id);
     return Date.now() - Number(data.lastSeenAt || 0) >= AFK_WARNING_THRESHOLD_MS;
   }).length;
 
@@ -776,14 +776,14 @@ async function resolveMemberQuery(guild, query, fallbackUserId = '') {
 
 async function buildAiAdvisorEmbed(guild, member) {
   const guildStorage = getGuildStorage(guild.id);
-  const memberData = guildStorage.ensureMember(member.id);
+  const memberData = guildStorage.ensureMemberRecord(member.id);
   const rankInfo = getRankService(guild.id).describeMember(member);
   const analysis = await aiService.analyzeMember({
     displayName: member.displayName,
     currentRoleName: rankInfo.currentRole?.name || copy.profile.noRoles,
     autoTargetRoleName: rankInfo.autoTargetRole?.name || '',
-    activityScore: guildStorage.activityScore(member.id),
-    points: guildStorage.pointsScore(member.id),
+    activityScore: guildStorage.getActivityScore(member.id),
+    points: guildStorage.getPointsScore(member.id),
     warns: memberData.warns || 0,
     commends: memberData.commends || 0,
     messageCount: memberData.messageCount || 0,
@@ -1893,7 +1893,7 @@ async function refreshMember(member) {
 function buildProfilePayload(member, allowRankButtons, content = '') {
   const guildStorage = getGuildStorage(member.guild.id);
   const rankService = getRankService(member.guild.id);
-  const memberData = { ...guildStorage.ensureMember(member.id), voiceMinutes: getLiveVoiceMinutes(member) };
+  const memberData = { ...guildStorage.ensureMemberRecord(member.id), voiceMinutes: getLiveVoiceMinutes(member) };
   const rankInfo = {
     ...rankService.describeMember(member),
     autoEnabled: isPremiumGuild(member.guild.id) && AUTO_RANKS.enabled
@@ -1901,7 +1901,7 @@ function buildProfilePayload(member, allowRankButtons, content = '') {
   const payload = {
     embeds: [
       embeds.buildProfileEmbed(member, {
-        activityScore: guildStorage.activityScore,
+        activityScore: guildStorage.getActivityScore,
         memberData,
         familyRoleIds: getRoleIds(member.guild.id),
         rankInfo
@@ -2050,7 +2050,7 @@ async function doPanelUpdate(guildId, force = false) {
       roles: settings.roles,
       familyTitle: settings.familyTitle,
       updateIntervalMs: UPDATE_INTERVAL_MS,
-      activityScore: guildStorage.activityScore,
+      activityScore: guildStorage.getActivityScore,
       summary,
       imageUrl: settings.visuals.familyBanner
     });
@@ -2281,7 +2281,7 @@ async function runAfkWarnings(guildId) {
   for (const member of guild.members.cache.values()) {
     if (member.user?.bot || !hasFamilyRole(member)) continue;
 
-    const memberData = guildStorage.ensureMember(member.id);
+    const memberData = guildStorage.ensureMemberRecord(member.id);
     const inactiveMs = Date.now() - Number(memberData.lastSeenAt || 0);
 
     if (inactiveMs < AFK_WARNING_THRESHOLD_MS) {

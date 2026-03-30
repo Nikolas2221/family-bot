@@ -1,4 +1,4 @@
-import { createGuildScopedStorage } from './storage';
+import { createGuildStorageContext } from './guild-runtime';
 
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
@@ -148,7 +148,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   const ephemeral = typeof rawEphemeral === 'function' ? rawEphemeral : ((payload: Record<string, unknown> = {}) => payload);
   const guildStorage = rawGuildStorage && typeof rawGuildStorage.addCommend === 'function'
     ? rawGuildStorage
-    : createGuildScopedStorage(guildId, storage);
+    : createGuildStorageContext(guildId, storage);
   const buildProfilePayload = typeof rawBuildProfilePayload === 'function'
     ? rawBuildProfilePayload
     : ((_member: any, _allowRankButtons: boolean, content = '') => ephemeral({ content: content || 'Произошла ошибка. Попробуй ещё раз.' }));

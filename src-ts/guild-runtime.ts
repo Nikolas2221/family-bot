@@ -1,11 +1,10 @@
 import { defaultModulesForMode } from './database';
-import { createGuildScopedStorage } from './storage';
 import type {
   ApplicationRecord,
   AutomodConfig,
   AutoRanksConfig,
   DatabaseApi,
-  GuildScopedStorageApi,
+  GuildStorageContext,
   GuildFeatures,
   GuardConfig,
   GuildSettings,
@@ -37,6 +36,121 @@ export function memberSessionKey(guildId: string, memberId: string): string {
   return `${guildId}:${memberId}`;
 }
 
+export function createGuildStorageContext(guildId: string, storage: StorageApi): GuildStorageContext {
+  return {
+    ensureMemberRecord(memberId: string) {
+      return storage.ensureGuildMember(guildId, memberId);
+    },
+    getActivityScore(memberId: string) {
+      return storage.guildActivityScore(guildId, memberId);
+    },
+    getPointsScore(memberId: string) {
+      return storage.guildPointsScore(guildId, memberId);
+    },
+    getVoiceMinutes(memberId: string) {
+      return storage.guildVoiceMinutes(guildId, memberId);
+    },
+    addVoiceMinutes(memberId: string, minutes: number) {
+      return storage.addGuildVoiceMinutes(guildId, memberId, minutes);
+    },
+    addVoiceMinutesInChannel(memberId: string, minutes: number, channelId: string) {
+      return storage.addGuildVoiceMinutes(guildId, memberId, minutes, channelId);
+    },
+    recordMessage(memberId: string) {
+      return storage.trackGuildMessage(guildId, memberId);
+    },
+    recordMessageInChannel(memberId: string, channelId: string) {
+      return storage.trackGuildMessage(guildId, memberId, channelId);
+    },
+    recordAnalyticsMessage(memberId: string, channelId: string) {
+      return storage.trackGuildAnalyticsMessage(guildId, memberId, channelId);
+    },
+    recordPresence(memberId: string) {
+      return storage.trackGuildPresence(guildId, memberId);
+    },
+    recordReaction(memberId: string) {
+      return storage.addGuildReaction(guildId, memberId);
+    },
+    addWarn({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
+      return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
+    },
+    listWarns(userId: string, limit = 10) {
+      return storage.listGuildWarnsForUser(guildId, userId, limit);
+    },
+    clearWarns(userId: string) {
+      return storage.clearGuildWarnsForUser(guildId, userId);
+    },
+    addCommend({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
+      return storage.addGuildCommend({ guildId, userId, moderatorId, reason });
+    },
+    getCooldown(userId: string) {
+      return storage.getGuildCooldown(guildId, userId);
+    },
+    setCooldown(userId: string, value?: number) {
+      return storage.setGuildCooldown(guildId, userId, value);
+    },
+    createApplication(payload: {
+      userId: string;
+      nickname: string;
+      level?: string;
+      inviter?: string;
+      discovery?: string;
+      about?: string;
+      age?: string;
+      text?: string;
+    }) {
+      return storage.createGuildApplication({ guildId, ...payload });
+    },
+    findApplication(applicationId: string) {
+      return storage.findGuildApplication(guildId, applicationId);
+    },
+    setApplicationTicketInfo(application: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>) {
+      return storage.setApplicationTicketInfo(application, ticketInfo);
+    },
+    listRecentApplications(limit?: number) {
+      return storage.listGuildRecentApplications(guildId, limit);
+    },
+    listBlacklist() {
+      return storage.listGuildBlacklist(guildId);
+    },
+    getBlacklistEntry(userId: string) {
+      return storage.getGuildBlacklistEntry(guildId, userId);
+    },
+    isBlacklisted(userId: string) {
+      return storage.isGuildBlacklisted(guildId, userId);
+    },
+    addBlacklistEntry({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
+      return storage.addGuildBlacklistEntry({ guildId, userId, moderatorId, reason });
+    },
+    removeBlacklistEntry(userId: string) {
+      return storage.removeGuildBlacklistEntry(guildId, userId);
+    },
+    markAfkWarningSent(memberId: string, value?: string) {
+      return storage.markGuildAfkWarningSent(guildId, memberId, value);
+    },
+    clearAfkWarningSent(memberId: string) {
+      return storage.clearGuildAfkWarningSent(guildId, memberId);
+    },
+    trackJoin() {
+      return storage.trackGuildJoin(guildId);
+    },
+    trackLeave() {
+      return storage.trackGuildLeave(guildId);
+    },
+    getPeriodAnalytics(days?: number, now?: Date) {
+      return storage.getGuildPeriodAnalytics(guildId, days, now);
+    },
+    getReportMarker(markerKey: string) {
+      return storage.getGuildReportMarker(guildId, markerKey);
+    },
+    setReportMarker(markerKey: string, value: string) {
+      return storage.setGuildReportMarker(guildId, markerKey, value);
+    },
+    sanitizeApplicationInput: storage.sanitizeApplicationInput,
+    setApplicationStatus: storage.setApplicationStatus
+  };
+}
+
 export function createGuildRuntimeApi(options: {
   database: DatabaseApi;
   storage: StorageApi;
@@ -44,6 +158,10 @@ export function createGuildRuntimeApi(options: {
   defaults: GuildRuntimeDefaults;
 }) {
   const { database, storage, roleTemplates, defaults } = options;
+
+  function getScopedGuildStorage(guildId: string): GuildStorageContext {
+    return createGuildStorageContext(guildId, storage);
+  }
 
   function resolveGuildSettings(guildId: string) {
     const guild = database.getGuild(guildId);
@@ -129,8 +247,8 @@ export function createGuildRuntimeApi(options: {
     return resolveGuildSettings(guildId).roles.map(role => role.id).filter(Boolean);
   }
 
-  function getGuildStorage(guildId: string): GuildScopedStorageApi {
-    return createGuildScopedStorage(guildId, storage);
+  function getGuildStorage(guildId: string): GuildStorageContext {
+    return getScopedGuildStorage(guildId);
   }
 
   function getGuildPlan(guildId: string) {
@@ -203,6 +321,7 @@ export function createGuildRuntimeApi(options: {
   }
 
   return {
+    createGuildStorageContext: getScopedGuildStorage,
     resolveGuildSettings,
     getRoleIds,
     getGuildStorage,

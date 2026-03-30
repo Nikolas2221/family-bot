@@ -605,18 +605,18 @@ export interface StorageApi {
   removeGuildBlacklistEntry(guildId: string, userId: string): boolean;
 }
 
-export interface GuildScopedStorageApi {
-  ensureMember(memberId: string): MemberRecord;
-  activityScore(memberId: string): number;
-  pointsScore(memberId: string): number;
-  voiceMinutes(memberId: string): number;
+export interface GuildStorageContext {
+  ensureMemberRecord(memberId: string): MemberRecord;
+  getActivityScore(memberId: string): number;
+  getPointsScore(memberId: string): number;
+  getVoiceMinutes(memberId: string): number;
   addVoiceMinutes(memberId: string, minutes: number): number;
   addVoiceMinutesInChannel(memberId: string, minutes: number, channelId: string): number;
-  trackMessage(memberId: string): void;
-  trackMessageInChannel(memberId: string, channelId: string): void;
-  trackAnalyticsMessage(memberId: string, channelId: string): void;
-  trackPresence(memberId: string): void;
-  addReaction(memberId: string): void;
+  recordMessage(memberId: string): void;
+  recordMessageInChannel(memberId: string, channelId: string): void;
+  recordAnalyticsMessage(memberId: string, channelId: string): void;
+  recordPresence(memberId: string): void;
+  recordReaction(memberId: string): void;
   addWarn(payload: { userId: string; moderatorId: string; reason: string }): void;
   listWarns(userId: string, limit?: number): WarnEntry[];
   clearWarns(userId: string): number;

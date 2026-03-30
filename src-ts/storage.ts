@@ -6,7 +6,6 @@ import type {
   ApplicationRecord,
   BlacklistEntry,
   GuildPeriodAnalytics,
-  GuildScopedStorageApi,
   MemberRecord,
   SanitizedApplicationInput,
   StorageApi,
@@ -50,7 +49,7 @@ function looksLikeApplicationNoise(value: unknown): boolean {
   if (/(.)\1{4,}/u.test(compact)) return true;
   if (/^(.{1,3})\1{3,}$/u.test(compact)) return true;
 
-  const lettersOnly = compact.replace(/[^a-zа-яё0-9]/giu, '');
+  const lettersOnly = compact.replace(/[^\p{L}\p{N}]/gu, '');
   if (lettersOnly.length < 6) return false;
 
   const uniqueCount = new Set(lettersOnly).size;
@@ -722,124 +721,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
   };
 }
 
-function createGuildScopedStorage(guildId: string, storage: StorageApi): GuildScopedStorageApi {
-  return {
-    ensureMember(memberId: string) {
-      return storage.ensureGuildMember(guildId, memberId);
-    },
-    activityScore(memberId: string) {
-      return storage.guildActivityScore(guildId, memberId);
-    },
-    pointsScore(memberId: string) {
-      return storage.guildPointsScore(guildId, memberId);
-    },
-    voiceMinutes(memberId: string) {
-      return storage.guildVoiceMinutes(guildId, memberId);
-    },
-    addVoiceMinutes(memberId: string, minutes: number) {
-      return storage.addGuildVoiceMinutes(guildId, memberId, minutes);
-    },
-    addVoiceMinutesInChannel(memberId: string, minutes: number, channelId: string) {
-      return storage.addGuildVoiceMinutes(guildId, memberId, minutes, channelId);
-    },
-    trackMessage(memberId: string) {
-      return storage.trackGuildMessage(guildId, memberId);
-    },
-    trackMessageInChannel(memberId: string, channelId: string) {
-      return storage.trackGuildMessage(guildId, memberId, channelId);
-    },
-    trackAnalyticsMessage(memberId: string, channelId: string) {
-      return storage.trackGuildAnalyticsMessage(guildId, memberId, channelId);
-    },
-    trackPresence(memberId: string) {
-      return storage.trackGuildPresence(guildId, memberId);
-    },
-    addReaction(memberId: string) {
-      return storage.addGuildReaction(guildId, memberId);
-    },
-    addWarn({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
-      return storage.addGuildWarn({ guildId, userId, moderatorId, reason });
-    },
-    listWarns(userId: string, limit = 10) {
-      return storage.listGuildWarnsForUser(guildId, userId, limit);
-    },
-    clearWarns(userId: string) {
-      return storage.clearGuildWarnsForUser(guildId, userId);
-    },
-    addCommend({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
-      return storage.addGuildCommend({ guildId, userId, moderatorId, reason });
-    },
-    getCooldown(userId: string) {
-      return storage.getGuildCooldown(guildId, userId);
-    },
-    setCooldown(userId: string, value?: number) {
-      return storage.setGuildCooldown(guildId, userId, value);
-    },
-    createApplication(payload: {
-      userId: string;
-      nickname: string;
-      level?: string;
-      inviter?: string;
-      discovery?: string;
-      about?: string;
-      age?: string;
-      text?: string;
-    }) {
-      return storage.createGuildApplication({ guildId, ...payload });
-    },
-    findApplication(applicationId: string) {
-      return storage.findGuildApplication(guildId, applicationId);
-    },
-    setApplicationTicketInfo(application: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>) {
-      return storage.setApplicationTicketInfo(application, ticketInfo);
-    },
-    listRecentApplications(limit?: number) {
-      return storage.listGuildRecentApplications(guildId, limit);
-    },
-    listBlacklist() {
-      return storage.listGuildBlacklist(guildId);
-    },
-    getBlacklistEntry(userId: string) {
-      return storage.getGuildBlacklistEntry(guildId, userId);
-    },
-    isBlacklisted(userId: string) {
-      return storage.isGuildBlacklisted(guildId, userId);
-    },
-    addBlacklistEntry({ userId, moderatorId, reason }: { userId: string; moderatorId: string; reason: string }) {
-      return storage.addGuildBlacklistEntry({ guildId, userId, moderatorId, reason });
-    },
-    removeBlacklistEntry(userId: string) {
-      return storage.removeGuildBlacklistEntry(guildId, userId);
-    },
-    markAfkWarningSent(memberId: string, value?: string) {
-      return storage.markGuildAfkWarningSent(guildId, memberId, value);
-    },
-    clearAfkWarningSent(memberId: string) {
-      return storage.clearGuildAfkWarningSent(guildId, memberId);
-    },
-    trackJoin() {
-      return storage.trackGuildJoin(guildId);
-    },
-    trackLeave() {
-      return storage.trackGuildLeave(guildId);
-    },
-    getPeriodAnalytics(days?: number, now?: Date) {
-      return storage.getGuildPeriodAnalytics(guildId, days, now);
-    },
-    getReportMarker(markerKey: string) {
-      return storage.getGuildReportMarker(guildId, markerKey);
-    },
-    setReportMarker(markerKey: string, value: string) {
-      return storage.setGuildReportMarker(guildId, markerKey, value);
-    },
-    sanitizeApplicationInput: storage.sanitizeApplicationInput,
-    setApplicationStatus: storage.setApplicationStatus
-  };
-}
-
 export {
   clampPoints,
-  createGuildScopedStorage,
   createStorage,
   defaultStore,
   looksLikeApplicationNoise

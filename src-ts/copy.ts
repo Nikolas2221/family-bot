@@ -16,7 +16,16 @@ function hasReadableCyrillic(value: string): boolean {
 }
 
 function hasSuspiciousMojibake(value: string): boolean {
-  return mojibakeMarkers.some((marker) => value.includes(marker));
+  if (mojibakeMarkers.some((marker) => value.includes(marker))) {
+    return true;
+  }
+
+  if (value.includes('вЂ')) {
+    return true;
+  }
+
+  const suspiciousPairs = value.match(/[РС][^ \n\r\t]/gu) || [];
+  return suspiciousPairs.length >= 3;
 }
 
 function scoreRepairCandidate(input: string): number {

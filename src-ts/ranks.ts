@@ -18,7 +18,7 @@ interface GuildLike {
 }
 
 interface StorageLike {
-  activityScore(memberId: string): number;
+  getActivityScore(memberId: string): number;
 }
 
 interface AutoRanksLike {
@@ -66,7 +66,7 @@ export function createRankService(options: {
   function describeMember(member: MemberLike): RankDescription {
     const currentRole = getCurrentRole(member);
     const currentRoleIndex = getCurrentRoleIndex(member);
-    const score = storage.activityScore(member.id);
+    const score = storage.getActivityScore(member.id);
     const hasManualOnlyRole = Boolean(currentRole && (currentRole.key === 'leader' || currentRole.key === 'deputy'));
     const autoTargetRole = currentRole && !hasManualOnlyRole ? getAutoTargetRole(score) : null;
 
@@ -147,7 +147,7 @@ export function createRankService(options: {
       return { ok: false, code: 'manual_only', currentRole };
     }
 
-    const score = storage.activityScore(member.id);
+    const score = storage.getActivityScore(member.id);
     const targetRole = getAutoTargetRole(score);
 
     if (!targetRole) {

@@ -100,12 +100,12 @@ interface ChannelDeleteLike {
 }
 
 interface GuildStorageLike {
-  trackAnalyticsMessage(memberId: string, channelId: string): unknown;
-  trackMessage(memberId: string): unknown;
-  trackPresence(memberId: string): unknown;
+  recordAnalyticsMessage(memberId: string, channelId: string): unknown;
+  recordMessage(memberId: string): unknown;
+  recordPresence(memberId: string): unknown;
   trackJoin(): unknown;
   trackLeave(): unknown;
-  addReaction(memberId: string): unknown;
+  recordReaction(memberId: string): unknown;
 }
 
 interface WelcomeSettingsLike {
@@ -268,17 +268,17 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       return;
     }
 
-    guildStorage.trackAnalyticsMessage(message.member.id, message.channel.id);
+    guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
     await handleCustomTriggerMessage(message).catch(() => null);
 
     if (!hasFamilyRole(message.member)) return;
-    guildStorage.trackMessage(message.member.id);
+    guildStorage.recordMessage(message.member.id);
   });
 
   client.on('presenceUpdate', (_oldPresence: PresenceLike | null, presence: PresenceLike | null) => {
     const member = presence?.member;
     if (!member || !hasFamilyRole(member)) return;
-    getGuildStorage(member.guild.id).trackPresence(member.id);
+    getGuildStorage(member.guild.id).recordPresence(member.id);
   });
 
   client.on('voiceStateUpdate', (oldState: VoiceStateLike, newState: VoiceStateLike) => {
@@ -334,7 +334,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       || (await hydratedReaction.message.guild.members.fetch(user.id).catch(() => null));
     if (!member) return;
 
-    getGuildStorage(hydratedReaction.message.guild.id).addReaction(user.id);
+    getGuildStorage(hydratedReaction.message.guild.id).recordReaction(user.id);
     await applyReactionRoleChange(hydratedReaction, user, 'add', {
       findReactionRoleEntry,
       getReactionEmojiKey,

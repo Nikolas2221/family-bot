@@ -2,7 +2,7 @@ import packageMeta from '../package.json';
 import { getReleaseNotes, normalizeReleaseGroups } from './release-notes';
 import type { ReleaseNoteGroups } from './types';
 
-export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.5';
+export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.8';
 
 function resolveProductVersionLabel(version: string): string {
   if (/beta/i.test(version)) return 'BRHD/PHOENIX 0.1 BETA';
@@ -18,7 +18,7 @@ const FALLBACK_FIXED_PREFIXES = ['fix', 'repair', 'correct', 'stabilize', 'harde
 
 function splitCommitMessage(commitMessage?: string | null): string[] {
   return String(commitMessage || '')
-    .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])/i)
+    .split(/\r?\n|;|,(?=\s*[\p{L}\p{N}])/u)
     .map((line) => line.trim())
     .filter(Boolean);
 }

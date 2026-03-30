@@ -1655,6 +1655,474 @@ copy.help.line = function line(name, description) {
   return `/${name} - ${description}`;
 };
 
+function copy107Hours(value) {
+  return `${Number(value || 0).toFixed(1)} ч`;
+}
+
+copy.common = {
+  ...copy.common,
+  noAccess: 'У тебя нет доступа к этой команде.',
+  moduleDisabled: 'Этот модуль сервера сейчас отключён.'
+};
+
+copy.family = {
+  ...copy.family,
+  menuTitle: 'Панель семьи',
+  refreshButton: 'Обновить',
+  profileButton: 'Профиль',
+  leaderboardButton: 'Топ',
+  voiceButton: 'Голос',
+  applyButton: 'Подать заявку',
+  adminApplicationsButton: 'Заявки',
+  adminAiAdvisorButton: 'AI-совет',
+  adminPanelButton: 'Админка',
+  adminBlacklistButton: 'ЧС',
+  adminReportButton: 'Отчёт',
+  legend: '🟢 Онлайн • 🟡 Отошёл • ⛔ Не беспокоить • ⚫ Оффлайн',
+  panelUpdated: 'Панель обновлена.'
+};
+
+copy.profile = {
+  ...copy.profile,
+  title: '👤 Профиль участника',
+  description: userId => `Информация о <@${userId}>`,
+  fieldRoles: '📌 Роли семьи',
+  fieldAutoRank: '📊 Авто-ранг',
+  noRoles: 'Без семейной роли',
+  notFound: 'Участник не найден.'
+};
+
+copy.stats = {
+  ...copy.stats,
+  leaderboardTitle: '🏆 Таблица участников',
+  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: '🎙 Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours: copy107Hours,
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${copy107Hours(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${copy107Hours(hours)} • ${points}/100`;
+  }
+};
+
+copy.ai = {
+  ...copy.ai,
+  commandsOverviewTitle: 'Что тебе доступно сейчас',
+  commandsOverviewEmpty: 'Не нашёл доступных команд для твоих прав.',
+  advisorUnavailable: 'AI-советник временно недоступен.',
+  nicknameMissingTarget: 'Для смены ника укажи пользователя и новый ник.',
+  nicknameNoAccess: 'Для смены ника через AI нужны права администратора или Manage Nicknames.',
+  nicknameTooLong: 'Новый ник должен быть от 1 до 32 символов.',
+  nicknameDone: (userId, nickname) => `AI изменил ник для <@${userId}> на **${nickname}**.`,
+  nicknameFailed: 'AI не смог изменить ник. Проверь права бота и иерархию ролей.'
+};
+
+copy.admin = {
+  ...copy.admin,
+  noOwnerAccess: 'Эта команда доступна только владельцам бота.',
+  premiumOnly: 'Эта функция доступна только на тарифе Premium.',
+  setupSaved: 'Настройки сервера сохранены в базе.',
+  panelTitle: '🛠 Админ-панель сервера',
+  panelFree: 'Free - 0$',
+  panelPremium: 'Premium - 5$'
+};
+
+copy.help = {
+  ...copy.help,
+  title: plan => `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
+  regularSection: 'Обычные команды',
+  adminSection: 'Команды администрации',
+  premiumRegularSection: 'Обычные команды в Premium',
+  premiumAdminSection: 'Админ-команды в Premium',
+  freeSection: 'Доступно сейчас',
+  premiumSection: 'В Premium',
+  none: 'Нет доступных команд для этого раздела.',
+  line: (name, description) => `/${name} - ${description}`
+};
+
+function release106CopyHours(value) {
+  return `${Number(value || 0).toFixed(1)} ч`;
+}
+
+copy.family = {
+  ...copy.family,
+  refreshButton: 'Обновить',
+  profileButton: 'Профиль',
+  leaderboardButton: 'Топ',
+  voiceButton: 'Голос',
+  applyButton: 'Подать заявку',
+  adminApplicationsButton: 'Заявки',
+  adminAiAdvisorButton: 'AI-совет',
+  adminPanelButton: 'Админка',
+  adminBlacklistButton: 'ЧС',
+  adminReportButton: 'Отчёт',
+  legend: '🟢 Онлайн • 🟡 Отошёл • ⛔ Не беспокоить • ⚫ Оффлайн',
+  panelUpdated: 'Панель обновлена.'
+};
+
+copy.profile = {
+  ...copy.profile,
+  title: '👤 Профиль участника',
+  description: userId => `Информация о <@${userId}>`,
+  fieldRoles: '📌 Роли семьи',
+  fieldAutoRank: '📊 Авто-ранг',
+  noRoles: 'Без семейной роли',
+  notFound: 'Участник не найден.'
+};
+
+copy.stats = {
+  ...copy.stats,
+  leaderboardTitle: '🏆 Таблица участников',
+  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: '🎙 Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours: release106CopyHours,
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${release106CopyHours(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${release106CopyHours(hours)} • ${points}/100`;
+  }
+};
+
+copy.ai = {
+  ...copy.ai,
+  commandsOverviewTitle: 'Что тебе доступно сейчас',
+  commandsOverviewEmpty: 'Не нашёл доступных команд для твоих прав.',
+  advisorUnavailable: 'AI-советник временно недоступен.'
+};
+
+copy.admin = {
+  ...copy.admin,
+  panelTitle: '🛠 Админ-панель сервера',
+  panelFree: 'Free - 0$',
+  panelPremium: 'Premium - 5$',
+  setupSaved: 'Настройки сервера сохранены в базе.',
+  premiumOnly: 'Эта функция доступна только на тарифе Premium.'
+};
+
+copy.help = {
+  ...copy.help,
+  title: plan => `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
+  regularSection: 'Обычные команды',
+  adminSection: 'Команды администрации',
+  premiumRegularSection: 'Обычные команды в Premium',
+  premiumAdminSection: 'Админ-команды в Premium',
+  freeSection: 'Доступно сейчас',
+  premiumSection: 'В Premium',
+  none: 'Нет доступных команд для этого раздела.',
+  line: (name, description) => `/${name} - ${description}`
+};
+function finalHoursFormatter(value) {
+  return `${Number(value || 0).toFixed(1)} ч`;
+}
+
+copy.common = {
+  ...copy.common,
+  unknownError: 'Произошла ошибка. Попробуй ещё раз.',
+  noAccess: 'У тебя нет доступа к этой команде.'
+};
+
+copy.family = {
+  ...copy.family,
+  refreshButton: 'Обновить',
+  profileButton: 'Профиль',
+  leaderboardButton: 'Топ',
+  voiceButton: 'Голос',
+  applyButton: 'Подать заявку',
+  adminApplicationsButton: 'Заявки',
+  adminAiAdvisorButton: 'AI-совет',
+  adminPanelButton: 'Админка',
+  adminBlacklistButton: 'ЧС',
+  adminReportButton: 'Отчёт',
+  panelUpdated: 'Панель обновлена.',
+  legend: '🟢 Онлайн • 🟡 Отошёл • ⛔ Не беспокоить • ⚫ Оффлайн'
+};
+
+copy.profile = {
+  ...copy.profile,
+  title: '👤 Профиль участника',
+  description(userId) {
+    return `Информация о <@${userId}>`;
+  },
+  fieldRoles: '📌 Роли семьи',
+  fieldAutoRank: '📊 Авто-ранг',
+  noRoles: 'Нет семейной роли.',
+  notFound: 'Участник не найден.'
+};
+
+copy.admin = {
+  ...copy.admin,
+  panelFree: 'Free — 0$',
+  panelPremium: 'Premium — 5$',
+  premiumOnly: 'Эта функция доступна только на тарифе Premium.'
+};
+
+copy.stats = {
+  ...copy.stats,
+  leaderboardTitle: '🏆 Таблица участников',
+  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: '🎙 Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours: finalHoursFormatter,
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${finalHoursFormatter(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${finalHoursFormatter(hours)} • ${points}/100`;
+  }
+};
+
+copy.ai = {
+  ...copy.ai,
+  commandsOverviewTitle: 'Что тебе доступно сейчас',
+  commandsOverviewEmpty: 'Не нашёл доступных команд для твоих прав.',
+  advisorUnavailable: 'AI-советник временно недоступен.'
+};
+
+copy.help = {
+  ...copy.help,
+  title(plan) {
+    return `📚 Команды бота • ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}`;
+  },
+  regularSection: 'Обычные команды',
+  adminSection: 'Команды администрации',
+  premiumRegularSection: 'Обычные команды в Premium',
+  premiumAdminSection: 'Админ-команды в Premium',
+  freeSection: 'Доступно сейчас',
+  premiumSection: 'В Premium',
+  none: 'Нет доступных команд для этого раздела.',
+  line(name, description) {
+    return `/${name} - ${description}`;
+  }
+};
+
+function liveHoursFormatter(value) {
+  return `${Number(value || 0).toFixed(1)} ч`;
+}
+
+copy.common = {
+  ...copy.common,
+  unknownError: 'Произошла ошибка. Попробуй ещё раз.',
+  noAccess: 'У тебя нет доступа к этой команде.'
+};
+
+copy.roles = {
+  ...copy.roles,
+  leader: 'Лидер',
+  deputy: 'Заместители',
+  elder: 'Старшие',
+  member: 'Участники',
+  newbie: 'Новички',
+  mute: 'Мут'
+};
+
+copy.family = {
+  ...copy.family,
+  refreshButton: 'Обновить',
+  profileButton: 'Профиль',
+  leaderboardButton: 'Топ',
+  voiceButton: 'Голос',
+  applyButton: 'Подать заявку',
+  adminApplicationsButton: 'Заявки',
+  adminAiAdvisorButton: 'AI-совет',
+  adminPanelButton: 'Админка',
+  adminBlacklistButton: 'ЧС',
+  adminReportButton: 'Отчёт',
+  panelUpdated: 'Панель обновлена.',
+  aiAdvisorModalTitle: 'AI-совет по участнику',
+  aiAdvisorModalLabel: 'Участник',
+  aiAdvisorModalPlaceholder: 'ID, @упоминание или ник'
+};
+
+copy.profile = {
+  ...copy.profile,
+  title: 'Профиль участника',
+  description: userId => `Информация о <@${userId}>`,
+  noRoles: 'Нет семейных ролей',
+  fieldRoles: 'Роли семьи',
+  fieldAutoRank: 'Авто-ранг'
+};
+
+copy.ranks = {
+  ...copy.ranks,
+  autoDisabled: 'Авто-ранги выключены.',
+  manualOnly: roleName => `Авто-ранг работает в ручном режиме. Текущий ранг: ${roleName}.`,
+  alreadySynced: (roleName, score) => `Авто-ранг уже синхронизирован с ролью ${roleName}. Очки: ${score}.`,
+  autoStatus: (targetRoleName, score) => `Следующий авто-ранг: ${targetRoleName}. Очки: ${score}.`,
+  autoUnavailable: 'Авто-ранг пока не определён.'
+};
+
+copy.help = {
+  ...copy.help,
+  regularSection: 'Обычные команды',
+  adminSection: 'Команды администрации',
+  premiumRegularSection: 'Обычные команды в Premium',
+  premiumAdminSection: 'Админ-команды в Premium',
+  freeSection: 'Доступно сейчас',
+  premiumSection: 'В Premium',
+  none: 'Нет доступных команд для этого раздела.',
+  line: (name, description) => `/${name} - ${description}`
+};
+
+copy.admin = {
+  ...copy.admin,
+  panelTitle: 'Панель администратора',
+  panelFree: 'Free - 0$',
+  panelPremium: 'Premium - 5$',
+  panelFieldPlan: 'Тариф',
+  panelFieldSetup: 'Setup',
+  panelFieldFeatures: 'Возможности',
+  panelFieldChannels: 'Каналы',
+  panelFieldRoles: 'Роли',
+  panelFieldVisuals: 'Баннеры',
+  panelSetupDone: 'Настроен',
+  panelSetupPending: 'Не настроен'
+};
+
+copy.admin.panelFeatures = function panelFeatures(plan) {
+  if (plan === 'premium') {
+    return [
+      '• всё из Free',
+      '• лидерборд и голосовая активность',
+      '• админ-отчёты по активности',
+      '• оффлайн AI и AI-анализ заявок',
+      '• авто-ранги и авто-DM',
+      '• чёрный список и бан-лист',
+      '• anti-leak и защита каналов',
+      '• еженедельная очистка без ролей',
+      '• AFK-предупреждения за 3 дня'
+    ].join('\n');
+  }
+
+  return [
+    '• панель семьи',
+    '• заявки и кнопка подачи',
+    '• профили участников',
+    '• настройка ролей и каналов через Discord',
+    '• ручные похвалы и выговоры',
+    '• базовая админка сервера'
+  ].join('\n');
+};
+
+copy.welcome = {
+  ...copy.welcome,
+  title: 'Добро пожаловать',
+  enabled: 'Включено',
+  disabled: 'Выключено',
+  channel: 'Канал',
+  dm: 'ЛС',
+  message: 'Текст',
+  autorole: 'Автороль',
+  messageCleared: 'Текст welcome очищен.',
+  testSent: 'Тестовое welcome-сообщение отправлено.',
+  updated: label => `Настройки welcome обновлены: ${label}.`
+};
+
+copy.reports = {
+  ...copy.reports,
+  title: 'Расписание отчётов',
+  periodWeekly: 'Weekly',
+  periodMonthly: 'Monthly',
+  channelMissing: 'Сначала укажи канал отчётов или передай канал в команду.',
+  enabled: (period, channelId) => `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`,
+  disabled: period => `${period} отчёт выключен.`,
+  sent: (period, channelId) => `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`
+};
+
+copy.verification = {
+  ...copy.verification,
+  title: 'Проверка новичков',
+  enabled: 'Проверка включена.',
+  disabled: 'Проверка выключена.',
+  alreadyVerified: 'Ты уже прошёл подтверждение.',
+  roleMissing: 'Сначала укажи роль после подтверждения или autorole.',
+  noPermission: 'Бот не смог выдать роль после подтверждения. Проверь права и иерархию ролей.',
+  modalTitle: 'Стартовая анкета',
+  modalNick: 'Игровой ник',
+  modalReason: 'Зачем пришёл',
+  modalRules: 'Подтверди, что ознакомился с правилами',
+  rulesButton: 'Правила',
+  verifyButton: 'Подтвердить',
+  applyButton: 'Подать заявку',
+  status: (enabled, roleId, questionnaireEnabled) => [
+    `Статус: ${enabled ? 'включено' : 'выключено'}`,
+    `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
+    `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
+  ].join('\n'),
+  updated: label => `Настройки verification обновлены: ${label}.`,
+  success: roleId => `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`
+};
+
+copy.roleMenus = {
+  ...copy.roleMenus,
+  title: 'Меню ролей',
+  empty: 'Role-menu пока не созданы.',
+  notFound: 'Такое role-menu не найдено.',
+  created: menuId => `Role-menu \`${menuId}\` создано.`,
+  itemAdded: (menuId, roleId) => `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`,
+  itemRemoved: (menuId, roleId) => `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`,
+  published: (menuId, channelId) => `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`,
+  roleAdded: roleId => `Роль <@&${roleId}> выдана.`,
+  roleRemoved: roleId => `Роль <@&${roleId}> снята.`
+};
+
+copy.customCommands = {
+  ...copy.customCommands,
+  title: 'Пользовательские команды',
+  empty: 'Пользовательские триггеры пока не настроены.',
+  notFound: 'Такой триггер не найден.',
+  added: name => `Триггер \`${name}\` сохранён.`,
+  removed: name => `Триггер \`${name}\` удалён.`
+};
+
+copy.stats = {
+  ...copy.stats,
+  leaderboardTitle: 'Таблица участников',
+  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardEmpty: 'Пока нет участников для таблицы.',
+  voiceTitle: 'Голосовая активность',
+  voiceDescription: 'Топ участников по времени в голосовых каналах.',
+  voiceEmpty: 'Пока нет активности в голосовых каналах.',
+  pointsField: 'Очки',
+  voiceField: 'Голос',
+  hours: liveHoursFormatter,
+  leaderboardLine(index, member, roleName, points, voiceHours) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${liveHoursFormatter(voiceHours)}`;
+  },
+  voiceLine(index, member, hours, points) {
+    return `${index + 1}. <@${member.id}> • ${liveHoursFormatter(hours)} • ${points}/100`;
+  }
+};
+
+copy.ai = {
+  ...copy.ai,
+  advisorTitle: displayName => `AI-советник: ${displayName}`,
+  advisorFooter: 'BRHD • Phoenix • AI Advisor',
+  advisorUnavailable: 'AI-советник временно недоступен.',
+  commandsOverviewTitle: 'Что тебе доступно сейчас',
+  commandsOverviewEmpty: 'Не нашёл доступных команд для твоих прав.',
+  nicknameMissingTarget: 'Для смены ника укажи пользователя и новый ник.',
+  nicknameNoAccess: 'Для смены ника через AI нужны права администратора или Manage Nicknames.',
+  nicknameTooLong: 'Новый ник должен быть от 1 до 32 символов.',
+  nicknameDone: (userId, nickname) => `AI изменил ник для <@${userId}> на **${nickname}**.`,
+  nicknameFailed: 'AI не смог изменить ник. Проверь права бота и иерархию ролей.'
+};
+
 copy.common = copy.common || {};
 Object.assign(copy.common, {
   noAccess: 'У тебя нет доступа к этой команде.',
