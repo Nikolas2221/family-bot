@@ -1,6 +1,6 @@
 import type { CopyCatalog } from './types';
 
-const copyJs = require('../copy') as CopyCatalog;
+const copyJs = require('./copy-source') as CopyCatalog;
 
 const mojibakeMarkers = [
   'Р ',
@@ -113,6 +113,39 @@ function repairCopyValue<T>(value: T, seen = new WeakMap<object, unknown>()): T 
 }
 
 const repairedCopy = repairCopyValue(copyJs);
+
+function stableHoursFormatter(value: unknown): string {
+  return `${Number(value || 0).toFixed(1)} ч`;
+}
+
+if (repairedCopy.stats && typeof repairedCopy.stats === 'object') {
+  repairedCopy.stats.hours = stableHoursFormatter;
+  repairedCopy.stats.leaderboardLine = function leaderboardLine(index: number, member: { id: string }, roleName: string, points: number, voiceHours: number) {
+    return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${stableHoursFormatter(voiceHours)}`;
+  };
+  repairedCopy.stats.voiceLine = function voiceLine(index: number, member: { id: string }, hours: number, points: number) {
+    return `${index + 1}. <@${member.id}> • ${stableHoursFormatter(hours)} • ${points}/100`;
+  };
+}
+
+if (repairedCopy.family && typeof repairedCopy.family === 'object') {
+  repairedCopy.family.adminBlacklistButton = 'ЧС';
+  repairedCopy.family.refreshButton = 'Обновить';
+  repairedCopy.family.profileButton = 'Профиль';
+  repairedCopy.family.leaderboardButton = 'Топ';
+  repairedCopy.family.voiceButton = 'Голос';
+  repairedCopy.family.applyButton = 'Подать заявку';
+  repairedCopy.family.adminApplicationsButton = 'Заявки';
+  repairedCopy.family.adminAiAdvisorButton = 'AI-совет';
+  repairedCopy.family.adminPanelButton = 'Админка';
+  repairedCopy.family.adminReportButton = 'Отчёт';
+  repairedCopy.family.legend = '🟢 Онлайн • 🟡 Отошёл • ⛔ Не беспокоить • ⚫ Оффлайн';
+}
+
+if (repairedCopy.profile && typeof repairedCopy.profile === 'object') {
+  repairedCopy.profile.fieldStatusRank = 'Статус и ранг';
+  repairedCopy.profile.fieldVoice = 'Голосовые каналы';
+}
 
 export const copy = repairedCopy;
 export default repairedCopy;

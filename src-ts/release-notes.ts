@@ -1,6 +1,34 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.10': {
+    added: [
+      'финальный тест миграции теперь сканирует весь src-ts и не позволяет снова тянуть корневые JS-модули',
+      'формальная проверка production entrypoint закреплена на dist-ts/index.js'
+    ],
+    updated: [
+      'copy и embeds окончательно закреплены как source of truth внутри src-ts',
+      'TypeScript-переезд закрыт на уровне боевого рантайма и исходного слоя приложения'
+    ],
+    fixed: [
+      'случайный возврат импортов вида ../copy и ../embeds теперь ловится до релиза',
+      'проверка TS-миграции больше не ограничена двумя файлами и покрывает весь src-ts'
+    ]
+  },
+  '1.0.9': {
+    added: [
+      'последние source-файлы copy и embeds перенесены в src-ts как часть TS runtime',
+      'добавлена проверка миграции, чтобы src-ts больше не тянул ../copy и ../embeds'
+    ],
+    updated: [
+      'TS runtime теперь берёт copy и embed-builder слой из src-ts source of truth',
+      'команда check теперь собирает dist-ts перед полным прогоном проверок'
+    ],
+    fixed: [
+      'стык между dist-ts/embeds и dist-ts/copy больше не ломает panelButtons и живые embed-экраны',
+      'voiceLine и короткие UI-метки вроде ЧС/Голос/Статус проходят через единый TS repair-слой'
+    ]
+  },
   '1.0.8': {
     added: [],
     updated: [

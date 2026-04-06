@@ -27,6 +27,7 @@ const files = [
   path.join('tests', 'release-notes.test.js'),
   path.join('tests', 'ranks.test.js'),
   path.join('tests', 'storage.test.js'),
+  path.join('tests', 'ts-migration.test.js'),
   path.join('tests', 'run.js')
 ];
 

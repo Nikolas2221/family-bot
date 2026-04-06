@@ -1,11 +1,11 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "1.0.8",
+  "version": "1.0.10",
   "main": "dist-ts/index.js",
   "scripts": {
     "start": "npm run build:ts && node dist-ts/index.js",
     "test": "node tests/run.js",
-    "check": "npm run typecheck && node scripts/check.js",
+    "check": "npm run typecheck && npm run build:ts && node scripts/check.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:ts": "tsc -p tsconfig.json",
     "start:ts": "node dist-ts/index.js"

@@ -11,6 +11,7 @@ async function main() {
   const { main: runRanksTests } = require('./ranks.test');
   const { main: runSecurityTests } = require('./security.test');
   const { main: runStorageTests } = require('./storage.test');
+  const { main: runTsMigrationTests } = require('./ts-migration.test');
 
   await runAiTests();
   await runAutomodTests();
@@ -24,6 +25,7 @@ async function main() {
   await runRanksTests();
   await runSecurityTests();
   await runStorageTests();
+  await runTsMigrationTests();
   console.log('ALL TEST SUITES PASSED');
 }
 
