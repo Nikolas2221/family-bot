@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.12': {
+    added: [
+      'добавлен typed helper-модуль для AI-overview, update-log и automod rule/limit логики',
+      'добавлен unit-тест на runtime-command helpers'
+    ],
+    updated: [
+      'src-ts/index.ts стал тоньше: чистые runtime helper-функции вынесены из середины entrypoint',
+      'карточка обновления теперь берёт release groups через единый helper без дублирующего splitUpdateChangeLines'
+    ],
+    fixed: [
+      'убран мёртвый дублирующий код вокруг update-log parsing внутри src-ts/index.ts',
+      'automod state/rule/limit helper-ы больше не спрятаны в монолите entrypoint'
+    ]
+  },
   '1.0.11': {
     added: [
       'добавлен отдельный тест-контур для остаточного TypeScript-долга в src-ts',

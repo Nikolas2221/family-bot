@@ -21,6 +21,17 @@ const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
 const { registerInteractionRuntime } = require('./interaction-runtime');
 const { handleCommandRuntime } = require('./command-runtime');
+const {
+  buildAiCommandsOverview: buildAiCommandsOverviewHelper,
+  buildAutomodRulePatch,
+  getAutomodStateKey,
+  getAutomodTargetLimits,
+  getUpdateChangeGroups,
+  isAiCommandOverviewQuery,
+  isAiNicknameRequest,
+  isPremiumAutomodRule,
+  isPremiumAutomodTarget
+} = require('./runtime-command-helpers');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./guild-runtime');
 const {
   editReplyAndAutoDelete: editReplyAndAutoDeleteHelper,
@@ -1005,227 +1016,17 @@ function canUseCommandInContext(commandName, interaction) {
   }
 }
 
-function isAiCommandOverviewQuery(query) {
-  const value = String(query || '').toLowerCase();
-  return (
-    value.includes('что я умею') ||
-    value.includes('что мне доступно') ||
-    value.includes('какие команды') ||
-    value.includes('что я могу') ||
-    value.includes('мои команды')
-  );
-}
-
-function isAiNicknameRequest(query, targetUser, newNickname) {
-  if (!targetUser || !newNickname) return false;
-  const value = String(query || '').toLowerCase();
-  return (
-    value.includes('смени ник') ||
-    value.includes('измени ник') ||
-    value.includes('переименуй') ||
-    value.includes('rename nick')
-  );
-}
-
 function buildAiCommandsOverview(interaction) {
-  const catalog = getHelpCatalog(interaction);
-  const available = [...catalog.regularCommands, ...catalog.adminCommands];
-
-  if (!available.length) {
-    return copy.ai.commandsOverviewEmpty;
-  }
-
-  const planLabel = isPremiumGuild(interaction.guild.id) ? 'Premium' : 'Free';
-  return [
-    `${copy.ai.commandsOverviewTitle}:`,
-    `План: **${planLabel}**`,
-    `Пользователь: <@${interaction.user.id}>`,
-    '',
-    ...available.map(command => `/${command.name} - ${command.description}`)
-  ].join('\n').slice(0, 1900);
-}
-
-function splitUpdateChangeLines() {
-  const raw = DEPLOY_COMMIT_MESSAGE
-    .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])/i)
-    .map(item => item.replace(/^[-*]\s*/, '').trim())
-    .filter(Boolean);
-
-  if (!raw.length) {
-    return [
-      'Новая сборка развёрнута и готова к работе.',
-      'Команды и модули сервера синхронизированы.',
-      `Текущая версия: ${PRODUCT_VERSION_LABEL}.`
-    ];
-  }
-
-  return raw.slice(0, 6);
+  return buildAiCommandsOverviewHelper({
+    catalog: getHelpCatalog(interaction),
+    isPremium: isPremiumGuild(interaction.guild.id),
+    userId: interaction.user.id,
+    copy
+  });
 }
 
 function canBypassAutomod(member) {
   return Boolean(member?.user?.bot);
-}
-
-function detectUpdateBucket(line) {
-  const normalized = String(line || '').trim().toLowerCase();
-  if (!normalized) return 'updated';
-  if (/^(add|added|feat|feature|introduce|introduced|implement|implemented)\b/.test(normalized)) return 'added';
-  if (/^(fix|fixed|bugfix|hotfix|patch|patched|resolve|resolved|correct|corrected)\b/.test(normalized)) return 'fixed';
-  return 'updated';
-}
-
-function stripUpdatePrefix(line) {
-  return String(line || '')
-    .trim()
-    .replace(
-      /^(add|added|feat|feature|introduce|introduced|implement|implemented|fix|fixed|bugfix|hotfix|patch|patched|resolve|resolved|correct|corrected|update|updated|upgrade|upgraded|improve|improved|optimize|optimized|optimise|optimised|refactor|refactored|polish|polished|adjust|adjusted|change|changed|rework|reworked|move|moved|cleanup|clean up|remove|removed)\s*:?\s*/i,
-      ''
-    )
-    .replace(/^[-*]\s*/, '')
-    .trim();
-}
-
-function humanizeUpdatePart(part) {
-  const text = String(part || '').trim();
-  if (!text) return '';
-
-  const normalized = text
-    .toLowerCase()
-    .replace(/\bthe\b/g, '')
-    .replace(/\ba\b/g, '')
-    .replace(/\ban\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const mapped = [
-    [/embed updates?/i, 'окно обновлений'],
-    [/embed(?:s| message| messages| card| cards| panel| panels)?/i, 'embed-карточки'],
-    [/welcome messages?/i, 'welcome-сообщения'],
-    [/welcome/i, 'welcome-модуль'],
-    [/autoroles?/i, 'система автороли'],
-    [/reaction roles?/i, 'меню управления ролями'],
-    [/report schedule/i, 'расписание отчётов'],
-    [/scheduled reports?/i, 'автоотправка отчётов'],
-    [/server reports?/i, 'серверные отчёты'],
-    [/activity reports?/i, 'отчёты по активности'],
-    [/automod/i, 'automod'],
-    [/command sync/i, 'синхронизация команд'],
-    [/guild warmup/i, 'оптимизация запуска guild'],
-    [/startup/i, 'оптимизация старта'],
-    [/ticket(?:s)?/i, 'тикеты'],
-    [/application(?:s)?/i, 'заявки'],
-    [/leaderboard/i, 'лидерборд'],
-    [/voice activity/i, 'голосовая активность'],
-    [/\bvoice\b/i, 'голосовая активность'],
-    [/ai advisor/i, 'AI-советник'],
-    [/\bai\b/i, 'AI-модуль'],
-    [/security/i, 'модуль безопасности'],
-    [/moderation/i, 'модерация'],
-    [/logs?/i, 'логи'],
-    [/nickname(?:s)?/i, 'смена ников'],
-    [/cleanup/i, 'очистка'],
-    [/performance/i, 'оптимизация производительности']
-  ].find(([pattern]) => pattern.test(normalized));
-
-  if (mapped) {
-    return mapped[1];
-  }
-
-  return text.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function extractUpdateParts(body) {
-  const knownPhrases = [
-    ['embed update', 'окно обновлений'],
-    ['embeds', 'embed-карточки'],
-    ['embed', 'embed-карточки'],
-    ['reaction roles', 'меню управления ролями'],
-    ['report schedule', 'расписание отчётов'],
-    ['welcome messages', 'welcome-сообщения'],
-    ['welcome', 'welcome-сообщения'],
-    ['autorole', 'автороль'],
-    ['automod', 'automod'],
-    ['server report', 'серверные отчёты'],
-    ['activity report', 'отчёты по активности'],
-    ['command sync', 'синхронизация команд'],
-    ['guild warmup', 'оптимизация запуска guild'],
-    ['voice activity', 'голосовая активность'],
-    ['leaderboard', 'лидерборд'],
-    ['tickets', 'тикеты'],
-    ['applications', 'заявки'],
-    ['logs', 'логи']
-  ];
-
-  let remaining = String(body || '').trim();
-  const parts = [];
-
-  for (const [needle, label] of knownPhrases) {
-    const pattern = new RegExp(`\\b${needle.replace(/\s+/g, '\\s+')}\\b`, 'i');
-    if (pattern.test(remaining)) {
-      parts.push(label);
-      remaining = remaining.replace(pattern, ' ');
-    }
-  }
-
-  remaining
-    .split(/\r?\n|;|,(?=\s*[a-zа-я0-9])|\s+\band\b\s+|\s+&\s+/i)
-    .map(item => humanizeUpdatePart(item))
-    .filter(Boolean)
-    .forEach(item => parts.push(item));
-
-  return [...new Set(parts)].slice(0, 8);
-}
-
-function splitUpdateChangeLines() {
-  return getCurrentReleaseChangeGroups(DEPLOY_COMMIT_MESSAGE);
-}
-
-function getAutomodStateKey(guildId, userId) {
-  return `${guildId}:${userId}`;
-}
-
-function buildAutomodRulePatch(rule, state) {
-  switch (rule) {
-    case 'invites':
-      return { invitesEnabled: state };
-    case 'links':
-      return { linksEnabled: state };
-    case 'caps':
-      return { capsEnabled: state };
-    case 'mentions':
-      return { mentionsEnabled: state };
-    case 'spam':
-      return { spamEnabled: state };
-    case 'badWords':
-      return { badWordsEnabled: state };
-    default:
-      return {};
-  }
-}
-
-function getAutomodTargetLimits(target, value) {
-  switch (target) {
-    case 'capsPercent':
-      return { capsPercent: Math.max(50, Math.min(100, value)) };
-    case 'capsMinLength':
-      return { capsMinLength: Math.max(4, Math.min(200, value)) };
-    case 'mentionLimit':
-      return { mentionLimit: Math.max(2, Math.min(50, value)) };
-    case 'spamCount':
-      return { spamCount: Math.max(3, Math.min(20, value)) };
-    case 'spamWindowSeconds':
-      return { spamWindowSeconds: Math.max(3, Math.min(60, value)) };
-    default:
-      return {};
-  }
-}
-
-function isPremiumAutomodRule(rule) {
-  return rule === 'spam' || rule === 'badWords';
-}
-
-function isPremiumAutomodTarget(target) {
-  return target === 'spamCount' || target === 'spamWindowSeconds';
 }
 
 function canApplications(member) {
@@ -1634,7 +1435,7 @@ async function announceBuildUpdate(guild) {
         semver: PRODUCT_VERSION_SEMVER,
         buildId: DEPLOY_BUILD_ID,
         commitMessage: DEPLOY_COMMIT_MESSAGE,
-        changeLines: splitUpdateChangeLines()
+        changeLines: getUpdateChangeGroups(DEPLOY_COMMIT_MESSAGE, getCurrentReleaseChangeGroups)
       })
     ]
   }).catch(() => null);
