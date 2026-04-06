@@ -32,6 +32,21 @@ const {
   isPremiumAutomodRule,
   isPremiumAutomodTarget
 } = require('./runtime-command-helpers');
+const {
+  canApplications: canApplicationsHelper,
+  canBypassChannelGuard: canBypassChannelGuardHelper,
+  canBypassLeakGuard: canBypassLeakGuardHelper,
+  canDebugConfig: canDebugConfigHelper,
+  canDiscipline: canDisciplineHelper,
+  canManageNicknames: canManageNicknamesHelper,
+  canManageRanks: canManageRanksHelper,
+  canManageTargetChannel: canManageTargetChannelHelper,
+  canModerate: canModerateHelper,
+  canUseSecurity: canUseSecurityHelper,
+  fetchTextChannel: fetchTextChannelHelper,
+  formatModerationTimestamp: formatModerationTimestampHelper,
+  resolveTargetTextChannel: resolveTargetTextChannelHelper
+} = require('./runtime-access-helpers');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./guild-runtime');
 const {
   editReplyAndAutoDelete: editReplyAndAutoDeleteHelper,
@@ -1030,75 +1045,55 @@ function canBypassAutomod(member) {
 }
 
 function canApplications(member) {
-  return accessApi.canApplications(member);
+  return canApplicationsHelper(accessApi, member);
 }
 
 function canDiscipline(member) {
-  return accessApi.canDiscipline(member);
+  return canDisciplineHelper(accessApi, member);
 }
 
 function canManageRanks(member) {
-  return accessApi.canManageRanks(member);
+  return canManageRanksHelper(accessApi, member);
 }
 
 function canModerate(member) {
-  return accessApi.canModerate(member);
+  return canModerateHelper(accessApi, member);
 }
 
 function canManageNicknames(member) {
-  return accessApi.canManageNicknames(member);
+  return canManageNicknamesHelper(accessApi, member);
 }
 
 function canDebugConfig(interaction) {
-  const memberPermissions = interaction.memberPermissions || interaction.member?.permissions;
-  if (!memberPermissions) return false;
-
-  return (
-    memberPermissions.has(PermissionFlagsBits.Administrator) ||
-    memberPermissions.has(PermissionFlagsBits.ManageGuild) ||
-    memberPermissions.has(PermissionFlagsBits.ManageRoles)
-  );
+  return canDebugConfigHelper(interaction);
 }
 
 function canUseSecurity(member) {
-  return accessApi.canUseSecurity(member);
+  return canUseSecurityHelper(accessApi, member);
 }
 
 function canBypassLeakGuard(member) {
-  return accessApi.canBypassLeakGuard(member);
+  return canBypassLeakGuardHelper(accessApi, member);
 }
 
 function canBypassChannelGuard(member) {
-  return accessApi.canBypassChannelGuard(member);
+  return canBypassChannelGuardHelper(accessApi, member);
 }
 
 async function fetchTextChannel(guild, id) {
-  if (!id) return null;
-  const channel = await guild.channels.fetch(id).catch(() => null);
-  if (!channel || channel.type !== ChannelType.GuildText) return null;
-  return channel;
+  return fetchTextChannelHelper(guild, id);
 }
 
 function resolveTargetTextChannel(interaction) {
-  const channel = interaction.options.getChannel(copy.commands.channelOptionName) || interaction.channel;
-  if (!channel || channel.type !== ChannelType.GuildText) {
-    return null;
-  }
-
-  return channel;
+  return resolveTargetTextChannelHelper(interaction, copy.commands.channelOptionName);
 }
 
 function canManageTargetChannel(member, channel) {
-  return accessApi.canManageTargetChannel(member, channel);
+  return canManageTargetChannelHelper(accessApi, member, channel);
 }
 
 function formatModerationTimestamp(timestamp) {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) {
-    return 'неизвестно';
-  }
-
-  return date.toLocaleString('ru-RU');
+  return formatModerationTimestampHelper(timestamp);
 }
 
 async function deleteMessagesFast(messages) {

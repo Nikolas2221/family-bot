@@ -9,6 +9,7 @@ async function main() {
   const { main: runEmbedsTests } = require('./embeds.test');
   const { main: runReleaseNotesTests } = require('./release-notes.test');
   const { main: runRanksTests } = require('./ranks.test');
+  const { main: runRuntimeAccessHelpersTests } = require('./runtime-access-helpers.test');
   const { main: runRuntimeCommandHelpersTests } = require('./runtime-command-helpers.test');
   const { main: runSecurityTests } = require('./security.test');
   const { main: runStorageTests } = require('./storage.test');
@@ -25,6 +26,7 @@ async function main() {
   await runEmbedsTests();
   await runReleaseNotesTests();
   await runRanksTests();
+  await runRuntimeAccessHelpersTests();
   await runRuntimeCommandHelpersTests();
   await runSecurityTests();
   await runStorageTests();

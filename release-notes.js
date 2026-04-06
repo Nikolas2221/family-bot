@@ -1,4 +1,18 @@
 const releaseNotes = {
+  '1.0.13': {
+    added: [
+      'добавлен typed helper-модуль для access, moderation checks и text-channel runtime-утилит',
+      'добавлен unit-тест на runtime-access helpers'
+    ],
+    updated: [
+      'src-ts/index.ts стал компактнее: access и moderation helper-ы вынесены из entrypoint',
+      'права, bypass-проверки и channel resolver теперь живут в отдельном TS-модуле'
+    ],
+    fixed: [
+      'убрана дублирующая access-логика из середины src-ts/index.ts',
+      'formatModerationTimestamp и text-channel resolver больше не спрятаны внутри монолитного entrypoint'
+    ]
+  },
   '1.0.12': {
     added: [
       'добавлен typed helper-модуль для AI-overview, update-log и automod rule/limit логики',
