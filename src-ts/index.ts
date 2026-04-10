@@ -48,6 +48,7 @@ const {
   resolveTargetTextChannel: resolveTargetTextChannelHelper
 } = require('./runtime-access-helpers');
 const { createFamilyRuntimeHelpers } = require('./runtime-family-helpers');
+const { createNotificationRuntimeHelpers } = require('./runtime-notification-helpers');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./guild-runtime');
 const {
   editReplyAndAutoDelete: editReplyAndAutoDeleteHelper,
@@ -237,6 +238,39 @@ const {
   resolveGuildSettings,
   memberSessionKey,
   EmbedBuilderCtor: EmbedBuilder
+});
+
+const {
+  announceBuildUpdate,
+  applyAutorole,
+  applyVerificationRole,
+  getVerificationRoleId,
+  sendAcceptLog,
+  sendAcceptanceDm,
+  sendAfkWarningDm,
+  sendAutomodLog,
+  sendBlacklistDm,
+  sendDisciplineDm,
+  sendDisciplineLog,
+  sendRankDm,
+  sendSecurityLog,
+  sendServerLogEmbed,
+  sendWelcomeInvite
+} = createNotificationRuntimeHelpers({
+  copy,
+  embeds,
+  database,
+  EmbedBuilderCtor: EmbedBuilder,
+  fetchTextChannel,
+  isPremiumGuild,
+  resolveGuildSettings,
+  currentBuildSignature: CURRENT_BUILD_SIGNATURE,
+  productVersionLabel: PRODUCT_VERSION_LABEL,
+  productVersionSemver: PRODUCT_VERSION_SEMVER,
+  deployBuildId: DEPLOY_BUILD_ID,
+  deployCommitMessage: DEPLOY_COMMIT_MESSAGE,
+  getUpdateChangeGroups,
+  getCurrentReleaseChangeGroups
 });
 
 function formatPeriodLabel(period) {
@@ -931,245 +965,6 @@ function remapConfiguredChannelIds(guildId, oldChannelId, newChannelId) {
 
 async function fetchMemberFast(guild, userId) {
   return guild.members.cache.get(userId) || guild.members.fetch(userId).catch(() => null);
-}
-
-async function sendDirectNotification(user, { title, description, color = 0x7c3aed, footer = 'BRHD - Phoenix - Notify' }) {
-  if (!user) return false;
-
-  const channel = await user.createDM().catch(() => null);
-  if (!channel) return false;
-
-  const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(description).setFooter({ text: footer }).setTimestamp();
-  const sent = await channel.send({ embeds: [embed] }).then(() => true).catch(() => false);
-  return sent;
-}
-
-async function sendAcceptanceDm({ guild, member, moderatorUser, reason, rankName }) {
-  return sendDirectNotification(member.user, {
-    title: 'Заявка принята',
-    color: 0x10b981,
-    footer: 'BRHD - Phoenix - Family',
-    description: [
-      `Ты принят в семью **${resolveGuildSettings(guild.id).familyTitle}** на сервере **${guild.name}**.`,
-      '',
-      `Модератор: <@${moderatorUser.id}>`,
-      `Причина: ${reason}`,
-      `Выданный ранг: ${rankName}`
-    ].join('\n')
-  });
-}
-
-async function sendDisciplineDm(type, guild, targetUser, moderatorUser, reason) {
-  const isWarn = type === 'warn';
-  return sendDirectNotification(targetUser, {
-    title: isWarn ? 'Получен выговор' : 'Получена похвала',
-    color: isWarn ? 0xf97316 : 0x2563eb,
-    footer: 'BRHD - Phoenix - Discipline',
-    description: [
-      `Сервер: **${guild.name}**`,
-      `Модератор: <@${moderatorUser.id}>`,
-      `Причина: ${reason}`,
-      '',
-      isWarn ? 'Следи за активностью и дисциплиной, чтобы не получить дополнительные санкции.' : 'Так держать. Активность и вклад в семью замечены.'
-    ].join('\n')
-  });
-}
-
-async function sendRankDm(guild, member, result) {
-  if (!result?.ok) return false;
-
-  const isPromotion = result.code === 'promoted' || result.code === 'auto_applied';
-  const title = isPromotion ? 'Ранг повышен' : 'Ранг понижен';
-
-  return sendDirectNotification(member.user, {
-    title,
-    color: isPromotion ? 0x10b981 : 0xe11d48,
-    footer: 'BRHD - Phoenix - Ranks',
-    description: [
-      `Сервер: **${guild.name}**`,
-      `Было: ${result.fromRole?.name || '—'}`,
-      `Стало: ${result.toRole?.name || '—'}`,
-      result.score !== undefined ? `Текущие очки активности: ${result.score}` : null
-    ]
-      .filter(Boolean)
-      .join('\n')
-  });
-}
-
-async function sendBlacklistDm(user, guild, reason) {
-  return sendDirectNotification(user, {
-    title: 'Чёрный список',
-    color: 0xe11d48,
-    footer: 'BRHD - Phoenix - Security',
-    description: [
-      `Твой доступ на сервер **${guild.name}** ограничен.`,
-      `Причина: ${reason}`,
-      '',
-      'Если это ошибка, свяжись с администрацией сервера.'
-    ].join('\n')
-  });
-}
-
-async function sendAfkWarningDm(member) {
-  return sendDirectNotification(member.user, {
-    title: 'Предупреждение об AFK',
-    color: 0xf59e0b,
-    footer: 'BRHD - Phoenix - Activity',
-    description: [
-      `На сервере **${member.guild.name}** от тебя не было активности уже 3 дня.`,
-      'Если не проявишь активность, администрация может кикнуть тебя за AFK.',
-      '',
-      'Отправь сообщение, зайди в голосовой канал или просто прояви активность в Discord.'
-    ].join('\n')
-  });
-}
-
-async function sendAcceptLog(
-  guild,
-  member,
-  moderatorUser,
-  reason = copy.applications.acceptReason,
-  rankName = copy.applications.acceptRank
-) {
-  if (!isPremiumGuild(guild.id)) return;
-  const { channels } = resolveGuildSettings(guild.id);
-  if (!channels.logs) return;
-  const channel = await fetchTextChannel(guild, channels.logs);
-  if (!channel) return;
-
-  await channel.send({
-    embeds: [embeds.buildAcceptLogEmbed({ member, moderatorUser, reason, rankName })]
-  });
-}
-
-async function sendDisciplineLog(guild, embed) {
-  if (!isPremiumGuild(guild.id)) return;
-  const { channels } = resolveGuildSettings(guild.id);
-  if (!channels.disciplineLogs) return;
-  const channel = await fetchTextChannel(guild, channels.disciplineLogs);
-  if (!channel) return;
-  await channel.send({ embeds: [embed] });
-}
-
-async function sendSecurityLog(guild, content) {
-  if (!isPremiumGuild(guild.id)) return;
-  const { channels } = resolveGuildSettings(guild.id);
-  if (!channels.logs) return;
-  const channel = await fetchTextChannel(guild, channels.logs);
-  if (!channel) return;
-  await channel.send({ content }).catch(() => {});
-}
-
-async function sendServerLogEmbed(guild, embed) {
-  const { channels } = resolveGuildSettings(guild.id);
-  if (!channels.logs) return;
-  const channel = await fetchTextChannel(guild, channels.logs);
-  if (!channel) return;
-  await channel.send({ embeds: [embed] }).catch(() => {});
-}
-
-async function announceBuildUpdate(guild) {
-  const record = database.getGuild(guild.id);
-  if (record.maintenance?.lastUpdateAnnouncementId === CURRENT_BUILD_SIGNATURE) {
-    return;
-  }
-
-  const settings = resolveGuildSettings(guild.id);
-  const channelId = settings.channels.updates || settings.channels.logs;
-  if (!channelId) return;
-
-  const channel = await fetchTextChannel(guild, channelId);
-  if (!channel) return;
-
-  const sent = await channel.send({
-    embeds: [
-      embeds.buildUpdateAnnouncementEmbed({
-        versionLabel: PRODUCT_VERSION_LABEL,
-        semver: PRODUCT_VERSION_SEMVER,
-        buildId: DEPLOY_BUILD_ID,
-        commitMessage: DEPLOY_COMMIT_MESSAGE,
-        changeLines: getUpdateChangeGroups(DEPLOY_COMMIT_MESSAGE, getCurrentReleaseChangeGroups)
-      })
-    ]
-  }).catch(() => null);
-
-  if (sent) {
-    database.updateGuildMaintenance(guild.id, { lastUpdateAnnouncementId: CURRENT_BUILD_SIGNATURE });
-  }
-}
-
-async function sendAutomodLog(guild, payload) {
-  const embed = embeds.buildAutomodActionEmbed(payload);
-  const settings = resolveGuildSettings(guild.id);
-  const channelId = settings.channels.automod || settings.channels.logs;
-  if (!channelId) return;
-  const channel = await fetchTextChannel(guild, channelId);
-  if (!channel) return;
-  await channel.send({ embeds: [embed] }).catch(() => {});
-}
-
-async function sendWelcomeInvite(member) {
-  const settings = resolveGuildSettings(member.guild.id);
-  if (!settings.welcome.enabled) return;
-
-  const channel = (await fetchTextChannel(member.guild, settings.channels.welcome))
-    || (await fetchTextChannel(member.guild, settings.channels.applications))
-    || (await fetchTextChannel(member.guild, settings.channels.panel));
-
-  if (channel) {
-    await channel.send({
-      content: [`<@${member.id}>`, settings.welcome.message || ''].filter(Boolean).join('\n'),
-      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message, {
-        rulesChannelId: settings.channels.rules,
-        panelChannelId: settings.channels.panel,
-        applicationsChannelId: settings.channels.applications,
-        verificationEnabled: settings.verification.enabled
-      })],
-      components: embeds.buildWelcomeButtons()
-    }).catch(() => {});
-  }
-
-  if (settings.welcome.dmEnabled) {
-    await member.send({
-      embeds: [embeds.buildWelcomeEmbed(member, settings.familyTitle, settings.visuals.applicationsBanner, settings.welcome.message, {
-        rulesChannelId: settings.channels.rules,
-        panelChannelId: settings.channels.panel,
-        applicationsChannelId: settings.channels.applications,
-        verificationEnabled: settings.verification.enabled
-      })]
-    }).catch(() => {});
-  }
-}
-
-async function applyAutorole(member) {
-  const settings = resolveGuildSettings(member.guild.id);
-  if (!settings.autoroleRoleId) return false;
-
-  const role = member.guild.roles.cache.get(settings.autoroleRoleId)
-    || await member.guild.roles.fetch(settings.autoroleRoleId).catch(() => null);
-  if (!role) return false;
-
-  return member.roles.add(role, `Autorole via bot for ${member.id}`).then(() => true).catch(() => false);
-}
-
-function getVerificationRoleId(guildId) {
-  const settings = resolveGuildSettings(guildId);
-  return settings.verification.roleId || settings.verificationRoleId || settings.autoroleRoleId || '';
-}
-
-async function applyVerificationRole(member) {
-  const roleId = getVerificationRoleId(member.guild.id);
-  if (!roleId) return { ok: false, roleId: '' };
-
-  const role = member.guild.roles.cache.get(roleId)
-    || await member.guild.roles.fetch(roleId).catch(() => null);
-  if (!role) return { ok: false, roleId };
-
-  const hasRole = member.roles.cache.has(role.id);
-  if (hasRole) return { ok: true, roleId: role.id, already: true };
-
-  const ok = await member.roles.add(role, `Verification via bot for ${member.id}`).then(() => true).catch(() => false);
-  return { ok, roleId: role.id };
 }
 
 function getRoleMenuEntries(guildId) {

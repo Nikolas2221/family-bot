@@ -1,4 +1,17 @@
 const releaseNotes = {
+  '1.0.16': {
+    added: [
+      'добавлен отдельный runtime-notification helper-модуль для DM, логов, welcome, automod и verification'
+    ],
+    updated: [
+      'src-ts/index.ts стал тоньше: уведомления, лог-каналы и welcome-flow вынесены из entrypoint',
+      'build-update, automod log и verification/autorole теперь проходят через единый notification helper-слой'
+    ],
+    fixed: [
+      'битая кириллица в новом notification helper-слое',
+      'риск дублирования DM и логической рассинхронизации между локальными функциями и вынесенным runtime-модулем'
+    ]
+  },
   '1.0.15': {
     added: [
       'добавлен отдельный runtime-family helper-модуль для family dashboard, leaderboard, voice summary и activity report'
