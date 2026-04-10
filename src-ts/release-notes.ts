@@ -1,6 +1,19 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.14': {
+    added: [
+      'добавлен тест, который ловит кракозябры в описаниях slash-команд до релиза'
+    ],
+    updated: [
+      'описания subcommand-ов для customcommand, rolemenu и verification переведены на чистый UTF-8'
+    ],
+    fixed: [
+      'битые подписи у /customcommand',
+      'битые подписи у /rolemenu',
+      'битые подписи у /verification'
+    ]
+  },
   '1.0.13': {
     added: [
       'добавлен typed helper-модуль для access, moderation checks и text-channel runtime-утилит',

@@ -444,12 +444,12 @@ export function buildCommands(): CommandJson[] {
       .setName('verification')
       .setDescription(copy.commands.verificationDescription)
       .addSubcommand(subcommand =>
-        subcommand.setName(copy.commands.verificationStatusSubcommand).setDescription('РџРѕРєР°Р·Р°С‚СЊ СЃС‚Р°С‚СѓСЃ verification')
+        subcommand.setName(copy.commands.verificationStatusSubcommand).setDescription('Показать статус verification')
       )
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.verificationToggleSubcommand)
-          .setDescription('Р’РєР»СЋС‡РёС‚СЊ РёР»Рё РІС‹РєР»СЋС‡РёС‚СЊ verification')
+          .setDescription('Включить или выключить verification')
           .addStringOption(option =>
             option
               .setName(copy.commands.stateOptionName)
@@ -464,7 +464,7 @@ export function buildCommands(): CommandJson[] {
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.verificationRoleSubcommand)
-          .setDescription('РЈРєР°Р·Р°С‚СЊ СЂРѕР»СЊ РїРѕСЃР»Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ')
+          .setDescription('Указать роль после подтверждения')
           .addRoleOption(option =>
             option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true)
           )
@@ -472,7 +472,7 @@ export function buildCommands(): CommandJson[] {
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.verificationQuestionnaireSubcommand)
-          .setDescription('Р’РєР»СЋС‡РёС‚СЊ РёР»Рё РІС‹РєР»СЋС‡РёС‚СЊ СЃС‚Р°СЂС‚РѕРІСѓСЋ Р°РЅРєРµС‚Сѓ')
+          .setDescription('Включить или выключить стартовую анкету')
           .addStringOption(option =>
             option
               .setName(copy.commands.stateOptionName)
@@ -488,12 +488,12 @@ export function buildCommands(): CommandJson[] {
       .setName('rolemenu')
       .setDescription(copy.commands.roleMenuDescription)
       .addSubcommand(subcommand =>
-        subcommand.setName(copy.commands.roleMenuStatusSubcommand).setDescription('РџРѕРєР°Р·Р°С‚СЊ РІСЃРµ role-menu')
+        subcommand.setName(copy.commands.roleMenuStatusSubcommand).setDescription('Показать все role-menu')
       )
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.roleMenuCreateSubcommand)
-          .setDescription('РЎРѕР·РґР°С‚СЊ РЅРѕРІРѕРµ role-menu')
+          .setDescription('Создать новое role-menu')
           .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
           .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription(copy.commands.titleOptionDescription).setRequired(true))
           .addStringOption(option => option.setName(copy.commands.descriptionOptionName).setDescription(copy.commands.descriptionOptionDescription).setRequired(false))
@@ -503,24 +503,24 @@ export function buildCommands(): CommandJson[] {
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.roleMenuAddSubcommand)
-          .setDescription('Р”РѕР±Р°РІРёС‚СЊ СЂРѕР»СЊ РІ menu')
+          .setDescription('Добавить роль в menu')
           .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
           .addRoleOption(option => option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true))
-          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('РўРµРєСЃС‚ РєРЅРѕРїРєРё').setRequired(true))
+          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('Текст кнопки').setRequired(true))
           .addStringOption(option => option.setName(copy.commands.emojiOptionName).setDescription(copy.commands.emojiOptionDescription).setRequired(false))
           .addStringOption(option => option.setName(copy.commands.descriptionOptionName).setDescription(copy.commands.descriptionOptionDescription).setRequired(false))
       )
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.roleMenuRemoveSubcommand)
-          .setDescription('РЈРґР°Р»РёС‚СЊ СЂРѕР»СЊ РёР· menu')
+          .setDescription('Удалить роль из menu')
           .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
           .addRoleOption(option => option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true))
       )
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.roleMenuPublishSubcommand)
-          .setDescription('РћРїСѓР±Р»РёРєРѕРІР°С‚СЊ role-menu РІ РєР°РЅР°Р»')
+          .setDescription('Опубликовать role-menu в канал')
           .addStringOption(option => option.setName(copy.commands.menuOptionName).setDescription(copy.commands.menuOptionDescription).setRequired(true))
           .addChannelOption(option => option.setName(copy.commands.channelValueOptionName).setDescription(copy.commands.channelValueDescription).addChannelTypes(ChannelType.GuildText).setRequired(false))
       ),
@@ -528,13 +528,13 @@ export function buildCommands(): CommandJson[] {
       .setName('customcommand')
       .setDescription(copy.commands.customCommandDescription)
       .addSubcommand(subcommand =>
-        subcommand.setName(copy.commands.customCommandStatusSubcommand).setDescription('РџРѕРєР°Р·Р°С‚СЊ РЅР°СЃС‚СЂРѕРµРЅРЅС‹Рµ С‚СЂРёРіРіРµСЂС‹')
+        subcommand.setName(copy.commands.customCommandStatusSubcommand).setDescription('Показать настроенные триггеры')
       )
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.customCommandAddSubcommand)
-          .setDescription('Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІС‹Р№ С‚СЂРёРіРіРµСЂ')
-          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('РљРѕСЂРѕС‚РєРѕРµ РёРјСЏ С‚СЂРёРіРіРµСЂР°').setRequired(true))
+          .setDescription('Добавить новый триггер')
+          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('Короткое имя триггера').setRequired(true))
           .addStringOption(option => option.setName(copy.commands.triggerOptionName).setDescription(copy.commands.triggerOptionDescription).setRequired(true))
           .addStringOption(option => option.setName(copy.commands.responseOptionName).setDescription(copy.commands.responseOptionDescription).setRequired(true))
           .addStringOption(option =>
@@ -552,8 +552,8 @@ export function buildCommands(): CommandJson[] {
       .addSubcommand(subcommand =>
         subcommand
           .setName(copy.commands.customCommandRemoveSubcommand)
-          .setDescription('РЈРґР°Р»РёС‚СЊ С‚СЂРёРіРіРµСЂ')
-          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('РРјСЏ С‚СЂРёРіРіРµСЂР°').setRequired(true))
+          .setDescription('Удалить триггер')
+          .addStringOption(option => option.setName(copy.commands.titleOptionName).setDescription('Имя триггера').setRequired(true))
       ),
     new SlashCommandBuilder().setName('leaderboard').setDescription(copy.commands.leaderboardDescription),
     new SlashCommandBuilder().setName('voiceactivity').setDescription(copy.commands.voiceActivityDescription),

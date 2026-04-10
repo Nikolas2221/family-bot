@@ -89,11 +89,44 @@ async function testCommandSignatureIsStable() {
   assert.equal(getCommandsSignature(first), getCommandsSignature(second));
 }
 
+function collectDescriptions(command, bucket = []) {
+  if (typeof command.description === 'string') {
+    bucket.push({ name: command.name, description: command.description });
+  }
+
+  for (const option of command.options || []) {
+    if (typeof option.description === 'string') {
+      bucket.push({ name: `${command.name}.${option.name}`, description: option.description });
+    }
+    for (const nested of option.options || []) {
+      if (typeof nested.description === 'string') {
+        bucket.push({ name: `${command.name}.${option.name}.${nested.name}`, description: nested.description });
+      }
+    }
+  }
+
+  return bucket;
+}
+
+async function testCommandDescriptionsDoNotContainMojibake() {
+  const commands = buildCommands();
+  const descriptions = commands.flatMap((command) => collectDescriptions(command));
+  const mojibakeMarkers = ['Рџ', 'РЎ', 'СЃ', 'С‚', 'СЊ', 'Рђ', 'Р‘', 'Р’', 'Р“', 'Р”', 'Р•', 'Р–', 'Р—', 'Р', 'Р™', 'Рљ', 'Р›', 'Рњ', 'Рќ', 'Рћ', 'Рџ', 'Р ', 'РЎ'];
+  const mojibake = descriptions.filter((entry) => mojibakeMarkers.some((marker) => entry.description.includes(marker)));
+
+  assert.deepEqual(
+    mojibake,
+    [],
+    `Found mojibake in command descriptions: ${mojibake.map((entry) => `${entry.name} => ${entry.description}`).join('; ')}`
+  );
+}
+
 async function main() {
   await runTest('commands keep required options before optional ones', testRequiredOptionsPrecedeOptionalOptions);
   await runTest('clearallchannel keeps confirmation as the first required option', testClearAllChannelConfirmationStaysRequiredAndFirst);
   await runTest('automod and serverreport commands are registered', testAutomodAndServerReportCommandsAreRegistered);
   await runTest('command signature stays stable between builds', testCommandSignatureIsStable);
+  await runTest('command descriptions stay free of mojibake', testCommandDescriptionsDoNotContainMojibake);
   console.log('ALL COMMAND TESTS PASSED');
 }
 
