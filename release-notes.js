@@ -1,4 +1,17 @@
 const releaseNotes = {
+  '1.0.15': {
+    added: [
+      'добавлен отдельный runtime-family helper-модуль для family dashboard, leaderboard, voice summary и activity report'
+    ],
+    updated: [
+      'src-ts/index.ts стал заметно тоньше: family/profile/report helper-логика вынесена из entrypoint',
+      'runtime family-статистика теперь собирается через единый helper-слой вместо набора локальных функций'
+    ],
+    fixed: [
+      'риск дальнейшего разрастания монолитного index.ts перед снятием @ts-nocheck',
+      'повторяющаяся family dashboard и activity report логика больше не размазана по entrypoint'
+    ]
+  },
   '1.0.14': {
     added: [
       'добавлен тест, который ловит кракозябры в описаниях slash-команд до релиза'

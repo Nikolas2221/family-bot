@@ -2,7 +2,7 @@ import packageMeta from '../package.json';
 import { getReleaseNotes, normalizeReleaseGroups } from './release-notes';
 import type { ReleaseNoteGroups } from './types';
 
-export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.14';
+export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.15';
 
 function resolveProductVersionLabel(version: string): string {
   if (/beta/i.test(version)) return 'BRHD/PHOENIX 0.1 BETA';
