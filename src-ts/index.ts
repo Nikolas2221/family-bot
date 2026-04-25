@@ -47,6 +47,7 @@ const {
   formatModerationTimestamp: formatModerationTimestampHelper,
   resolveTargetTextChannel: resolveTargetTextChannelHelper
 } = require('./runtime-access-helpers');
+const { createAutomationRuntimeHelpers } = require('./runtime-automation-helpers');
 const { createFamilyRuntimeHelpers } = require('./runtime-family-helpers');
 const { createNotificationRuntimeHelpers } = require('./runtime-notification-helpers');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./guild-runtime');
@@ -271,6 +272,38 @@ const {
   deployCommitMessage: DEPLOY_COMMIT_MESSAGE,
   getUpdateChangeGroups,
   getCurrentReleaseChangeGroups
+});
+
+const {
+  getRoleMenuEntries,
+  findRoleMenu,
+  saveRoleMenu,
+  removeRoleMenuItem,
+  getCustomCommands,
+  handleCustomTriggerMessage,
+  sendScheduledReport,
+  runScheduledReports,
+  handleAutomodMessage
+} = createAutomationRuntimeHelpers({
+  database,
+  automodState,
+  copy,
+  resolveGuildSettings,
+  isModuleEnabled,
+  isPremiumGuild,
+  getGuildStorage,
+  fetchTextChannel,
+  buildServerStatsReportEmbed,
+  getWeeklyReportKey,
+  getMonthlyReportKey,
+  isScheduledReportDue,
+  fetchGuild: async (guildId) =>
+    client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null),
+  evaluateAutomodMessage,
+  evaluateSpamActivity,
+  getAutomodStateKey,
+  canBypassAutomod,
+  sendAutomodLog
 });
 
 function formatPeriodLabel(period) {
@@ -967,95 +1000,6 @@ async function fetchMemberFast(guild, userId) {
   return guild.members.cache.get(userId) || guild.members.fetch(userId).catch(() => null);
 }
 
-function getRoleMenuEntries(guildId) {
-  return resolveGuildSettings(guildId).roleMenus || [];
-}
-
-function findRoleMenu(guildId, menuId) {
-  const normalized = String(menuId || '').trim().toLowerCase();
-  return getRoleMenuEntries(guildId).find(menu => menu.menuId === normalized) || null;
-}
-
-function saveRoleMenu(guildId, nextMenu) {
-  const current = getRoleMenuEntries(guildId).filter(menu => menu.menuId !== nextMenu.menuId);
-  database.updateGuildSettings(guildId, { roleMenus: [...current, nextMenu] });
-  return findRoleMenu(guildId, nextMenu.menuId);
-}
-
-function removeRoleMenuItem(guildId, menuId, roleId) {
-  const menu = findRoleMenu(guildId, menuId);
-  if (!menu) return null;
-  const nextMenu = {
-    ...menu,
-    items: (menu.items || []).filter(item => item.roleId !== roleId)
-  };
-  saveRoleMenu(guildId, nextMenu);
-  return nextMenu;
-}
-
-function getCustomCommands(guildId) {
-  return resolveGuildSettings(guildId).customCommands || [];
-}
-
-function matchCustomCommand(command, content) {
-  const haystack = String(content || '').trim().toLowerCase();
-  const trigger = String(command?.trigger || '').trim().toLowerCase();
-  if (!haystack || !trigger) return false;
-  if (command.mode === 'exact') return haystack === trigger;
-  if (command.mode === 'startsWith') return haystack.startsWith(trigger);
-  return haystack.includes(trigger);
-}
-
-async function handleCustomTriggerMessage(message) {
-  if (!message.guild || message.author?.bot) return false;
-  const guildId = message.guild.id;
-  if (!isModuleEnabled(guildId, 'customCommands')) return false;
-  if (!isPremiumGuild(guildId)) return false;
-
-  const match = getCustomCommands(guildId).find(command => matchCustomCommand(command, message.content));
-  if (!match) return false;
-
-  await message.channel.send({ content: match.response }).catch(() => {});
-  return true;
-}
-
-async function sendScheduledReport(guild, period, channelId = '') {
-  const targetChannelId = channelId || resolveGuildSettings(guild.id).reportSchedule?.[period]?.channelId || resolveGuildSettings(guild.id).channels.reports;
-  if (!targetChannelId) return false;
-
-  const channel = await fetchTextChannel(guild, targetChannelId);
-  if (!channel) return false;
-
-  await channel.send({ embeds: [buildServerStatsReportEmbed(guild, period)] }).catch(() => null);
-  return true;
-}
-
-async function runScheduledReports(guildId, now = new Date()) {
-  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-  if (!guild) return;
-
-  if (!isModuleEnabled(guildId, 'analytics') || !isPremiumGuild(guildId)) {
-    return;
-  }
-
-  const settings = resolveGuildSettings(guildId);
-  const schedule = settings.reportSchedule || {};
-  const plans = [
-    { period: 'weekly', key: getWeeklyReportKey(now), enabled: schedule.weekly?.enabled, channelId: schedule.weekly?.channelId },
-    { period: 'monthly', key: getMonthlyReportKey(now), enabled: schedule.monthly?.enabled, channelId: schedule.monthly?.channelId }
-  ];
-
-  for (const plan of plans) {
-    if (!plan.enabled || !isScheduledReportDue(plan.period, now)) continue;
-    if (getGuildStorage(guildId).getReportMarker(`scheduled:${plan.period}`) === plan.key) continue;
-
-    const sent = await sendScheduledReport(guild, plan.period, plan.channelId);
-    if (sent) {
-      getGuildStorage(guildId).setReportMarker(`scheduled:${plan.period}`, plan.key);
-    }
-  }
-}
-
 function getApplicationsService(guildId) {
   const settings = resolveGuildSettings(guildId);
 
@@ -1073,65 +1017,6 @@ function getApplicationsService(guildId) {
     sendAcceptLog,
     sendAcceptanceDm
   });
-}
-
-async function handleAutomodMessage(message) {
-  const guildId = message.guild.id;
-  if (!isModuleEnabled(guildId, 'automod')) return false;
-  if (canBypassAutomod(message.member)) return false;
-
-  const settings = resolveGuildSettings(guildId);
-  const automod = settings.automod;
-  let triggered = evaluateAutomodMessage({
-    content: message.content,
-    mentionCount: message.mentions?.users?.size || 0,
-    config: automod
-  });
-
-  if (!triggered && automod.spamEnabled) {
-    const stateKey = getAutomodStateKey(guildId, message.author.id);
-    const now = Date.now();
-    const current = automodState.get(stateKey) || [];
-    const spam = evaluateSpamActivity(current, now, automod);
-    automodState.set(stateKey, spam.recent);
-    if (spam.triggered) {
-      triggered = {
-        rule: 'spam',
-        detail: `${spam.recent.length}/${automod.spamCount}`
-      };
-    }
-  }
-
-  if (!triggered) {
-    return false;
-  }
-
-  await message.delete().catch(() => {});
-  let punishmentLabel = 'soft';
-  if (automod.actionMode === 'hard' && message.member?.moderatable) {
-    const timeoutMs = Math.max(1, Number(automod.timeoutMinutes) || 10) * 60 * 1000;
-    const timedOut = await message.member.timeout(timeoutMs, `Automod: ${triggered.rule}`).then(() => true).catch(() => false);
-    if (timedOut) {
-      punishmentLabel = `hard/${automod.timeoutMinutes || 10}m`;
-    }
-  }
-  const notice = await message.channel.send({
-    content: copy.automod.notice(message.author.id, copy.automod.ruleLabel(triggered.rule), triggered.detail)
-  }).catch(() => null);
-
-  if (notice) {
-    setTimeout(() => notice.delete().catch(() => {}), 8000);
-  }
-
-  await sendAutomodLog(message.guild, {
-    member: message.member,
-    rule: triggered.rule,
-    detail: [triggered.detail, punishmentLabel].filter(Boolean).join(' - '),
-    channelId: message.channel.id,
-    content: message.content
-  }).catch(() => {});
-
-  return true;
 }
 
 async function refreshMember(member) {

@@ -10,6 +10,7 @@ async function main() {
   const { main: runReleaseNotesTests } = require('./release-notes.test');
   const { main: runRanksTests } = require('./ranks.test');
   const { main: runRuntimeAccessHelpersTests } = require('./runtime-access-helpers.test');
+  const { main: runRuntimeAutomationHelpersTests } = require('./runtime-automation-helpers.test');
   const { main: runRuntimeCommandHelpersTests } = require('./runtime-command-helpers.test');
   const { main: runRuntimeFamilyHelpersTests } = require('./runtime-family-helpers.test');
   const { main: runRuntimeNotificationHelpersTests } = require('./runtime-notification-helpers.test');
@@ -29,6 +30,7 @@ async function main() {
   await runReleaseNotesTests();
   await runRanksTests();
   await runRuntimeAccessHelpersTests();
+  await runRuntimeAutomationHelpersTests();
   await runRuntimeCommandHelpersTests();
   await runRuntimeFamilyHelpersTests();
   await runRuntimeNotificationHelpersTests();

@@ -1,4 +1,17 @@
 const releaseNotes = {
+  '1.0.17': {
+    added: [
+      'добавлен отдельный runtime-automation helper-модуль для role menu, custom triggers, scheduled reports и automod'
+    ],
+    updated: [
+      'src-ts/index.ts стал тоньше: menu, custom trigger, scheduled report и automod-логика вынесены из entrypoint',
+      'clientReady, event runtime и interaction runtime теперь получают automation-flow через единый helper-слой'
+    ],
+    fixed: [
+      'риск скрытой регрессии scheduled reports после выноса логики из entrypoint',
+      'локальные дубли role menu, custom command и automod-обработки больше не живут внутри src-ts/index.ts'
+    ]
+  },
   '1.0.16': {
     added: [
       'добавлен отдельный runtime-notification helper-модуль для DM, логов, welcome, automod и verification'
