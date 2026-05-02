@@ -49,6 +49,7 @@ const {
 } = require('./runtime-access-helpers');
 const { createAutomationRuntimeHelpers } = require('./runtime-automation-helpers');
 const { createFamilyRuntimeHelpers } = require('./runtime-family-helpers');
+const { createRuntimeLifecycleHelpers } = require('./runtime-lifecycle-helpers');
 const { createNotificationRuntimeHelpers } = require('./runtime-notification-helpers');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./guild-runtime');
 const {
@@ -304,6 +305,33 @@ const {
   getAutomodStateKey,
   canBypassAutomod,
   sendAutomodLog
+});
+
+const {
+  startVoiceSession,
+  stopVoiceSession,
+  flushVoiceSessions,
+  doPanelUpdate,
+  doPanelUpdateAll,
+  syncAutoRanks,
+  syncAutoRanksAll
+} = createRuntimeLifecycleHelpers({
+  client,
+  storage,
+  embeds,
+  voiceSessions,
+  autoRanks: AUTO_RANKS,
+  fixedGuildId: GUILD_ID,
+  fixedMessageId: MESSAGE_ID,
+  updateIntervalMs: UPDATE_INTERVAL_MS,
+  memberSessionKey,
+  getGuildStorage,
+  getRankService,
+  isPremiumGuild,
+  resolveGuildSettings,
+  fetchTextChannel,
+  buildFamilyDashboardStats,
+  sendRankDm
 });
 
 function formatPeriodLabel(period) {
@@ -1106,164 +1134,6 @@ async function enforceBlacklist(member) {
     await sendSecurityLog(member.guild, copy.security.blacklistAdded(member.id, entry.reason));
   }
   return kicked;
-}
-
-const panelUpdateStates = new Map();
-const autoRankSyncInProgress = new Set();
-
-function getPanelUpdateState(guildId) {
-  if (!panelUpdateStates.has(guildId)) {
-    panelUpdateStates.set(guildId, {
-      inProgress: false,
-      pending: false,
-      lastUpdate: 0
-    });
-  }
-
-  return panelUpdateStates.get(guildId);
-}
-
-function startVoiceSession(member) {
-  if (!member?.id || !member.voice?.channelId || member.user?.bot) return;
-  const key = memberSessionKey(member.guild.id, member.id);
-  if (!voiceSessions.has(key)) {
-    voiceSessions.set(key, {
-      startedAt: Date.now(),
-      channelId: member.voice.channelId
-    });
-  }
-}
-
-function stopVoiceSession(member) {
-  if (!member?.id) return 0;
-  const key = memberSessionKey(member.guild.id, member.id);
-  const session = voiceSessions.get(key);
-  if (!session?.startedAt) return 0;
-
-  voiceSessions.delete(key);
-  const elapsedMs = Date.now() - session.startedAt;
-  const minutes = Math.floor(elapsedMs / 60000);
-  if (minutes <= 0) return 0;
-
-  return getGuildStorage(member.guild.id).addVoiceMinutesInChannel(member.id, minutes, session.channelId);
-}
-
-function flushVoiceSessions() {
-  for (const guild of client.guilds.cache.values()) {
-    for (const member of guild.members.cache.values()) {
-      if (voiceSessions.has(memberSessionKey(guild.id, member.id))) {
-        stopVoiceSession(member);
-      }
-    }
-  }
-}
-
-async function doPanelUpdate(guildId, force = false) {
-  const state = getPanelUpdateState(guildId);
-  if (state.inProgress) {
-    state.pending = true;
-    return;
-  }
-
-  const now = Date.now();
-  if (!force && now - state.lastUpdate < 15000) return;
-
-  state.inProgress = true;
-  try {
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return;
-
-    const settings = resolveGuildSettings(guild.id);
-    const guildStorage = getGuildStorage(guild.id);
-    const channel = await fetchTextChannel(guild, settings.channels.panel);
-    if (!channel) return;
-    const summary = buildFamilyDashboardStats(guild);
-
-    const familyEmbeds = await embeds.buildFamilyEmbeds(guild, {
-      roles: settings.roles,
-      familyTitle: settings.familyTitle,
-      updateIntervalMs: UPDATE_INTERVAL_MS,
-      activityScore: guildStorage.getActivityScore,
-      summary,
-      imageUrl: settings.visuals.familyBanner
-    });
-
-    const fixedMessageId = guild.id === GUILD_ID ? MESSAGE_ID : '';
-    const panelMessageId = storage.getGuildPanelMessageId(guild.id, fixedMessageId);
-    if (panelMessageId) {
-      try {
-        const message = await channel.messages.fetch(panelMessageId);
-        await message.edit({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
-      } catch {
-        const message = await channel.send({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
-        storage.setGuildPanelMessageId(guild.id, message.id, fixedMessageId);
-        console.log('Скопируй MESSAGE_ID:', message.id);
-      }
-    } else {
-      const message = await channel.send({ embeds: familyEmbeds, components: embeds.panelButtons(), content: '' });
-      storage.setGuildPanelMessageId(guild.id, message.id, fixedMessageId);
-      console.log('Скопируй MESSAGE_ID:', message.id);
-    }
-
-    state.lastUpdate = Date.now();
-  } catch (error) {
-    console.error('Ошибка обновления панели:', error);
-  } finally {
-    state.inProgress = false;
-    if (state.pending) {
-      state.pending = false;
-      setTimeout(() => doPanelUpdate(guildId, false), 3000);
-    }
-  }
-}
-
-async function doPanelUpdateAll(force = false) {
-  for (const guild of client.guilds.cache.values()) {
-    await doPanelUpdate(guild.id, force);
-  }
-}
-
-async function syncAutoRanks(guildId, reason = 'interval') {
-  if (!AUTO_RANKS.enabled || !isPremiumGuild(guildId) || autoRankSyncInProgress.has(guildId)) return;
-
-  autoRankSyncInProgress.add(guildId);
-  try {
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return;
-
-    const rankService = getRankService(guild.id);
-    const result = await rankService.syncAutoRanks(guild);
-    if (result.changes.length) {
-      console.log(`[auto-ranks:${reason}] ${result.changes.length} change(s)`);
-      for (const change of result.changes) {
-        const member = guild.members.cache.get(change.memberId) || (await guild.members.fetch(change.memberId).catch(() => null));
-        if (member) {
-          await sendRankDm(guild, member, {
-            ok: true,
-            code: 'auto_applied',
-            fromRole: change.fromRole,
-            toRole: change.toRole,
-            score: change.score
-          }).catch(() => {});
-        }
-      }
-      await doPanelUpdate(guild.id, false);
-    }
-
-    for (const failure of result.failures) {
-      console.error(`Ошибка авто-ранга для ${failure.memberId}:`, failure.error);
-    }
-  } catch (error) {
-    console.error('Ошибка авто-рангов:', error);
-  } finally {
-    autoRankSyncInProgress.delete(guildId);
-  }
-}
-
-async function syncAutoRanksAll(reason = 'interval') {
-  for (const guild of client.guilds.cache.values()) {
-    await syncAutoRanks(guild.id, reason);
-  }
 }
 
 function buildMaintenanceEmbed({ title, description, color, fieldName, lines }) {
