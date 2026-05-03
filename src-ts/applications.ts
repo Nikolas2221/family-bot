@@ -183,20 +183,20 @@ export function createApplicationsService({
 
     const ordinalAliases = new Map<string, RoleDefinition['key']>([
       ['1', 'newbie'],
-      ['1СЂР°РЅРі', 'newbie'],
-      ['СЂР°РЅРі1', 'newbie'],
+      ['1ранг', 'newbie'],
+      ['ранг1', 'newbie'],
       ['2', 'member'],
-      ['2СЂР°РЅРі', 'member'],
-      ['СЂР°РЅРі2', 'member'],
+      ['2ранг', 'member'],
+      ['ранг2', 'member'],
       ['3', 'elder'],
-      ['3СЂР°РЅРі', 'elder'],
-      ['СЂР°РЅРі3', 'elder'],
+      ['3ранг', 'elder'],
+      ['ранг3', 'elder'],
       ['4', 'deputy'],
-      ['4СЂР°РЅРі', 'deputy'],
-      ['СЂР°РЅРі4', 'deputy'],
+      ['4ранг', 'deputy'],
+      ['ранг4', 'deputy'],
       ['5', 'leader'],
-      ['5СЂР°РЅРі', 'leader'],
-      ['СЂР°РЅРі5', 'leader']
+      ['5ранг', 'leader'],
+      ['ранг5', 'leader']
     ]);
 
     const directRole = familyRoles.find(role => {

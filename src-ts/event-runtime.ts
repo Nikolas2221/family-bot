@@ -382,7 +382,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
         await sendSecurityLog(channel.guild, copySecurity.channelRestored(channel.name)).catch(() => null);
       }
     } catch (error) {
-      console.error('РћС€РёР±РєР° Р·Р°С‰РёС‚С‹ РєР°РЅР°Р»РѕРІ:', error);
+      console.error('Ошибка защиты каналов:', error);
     }
   });
 }

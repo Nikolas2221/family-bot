@@ -266,7 +266,7 @@ export function createRuntimeLifecycleHelpers(options: LifecycleRuntimeHelpersOp
             }).catch(() => {});
           }
         }
-        await doPanelUpdate(guild.id, false);
+        await doPanelUpdate(guild.id, true);
       }
 
       for (const failure of result.failures) {

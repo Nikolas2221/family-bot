@@ -1,6 +1,33 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.21': {
+    added: [
+      'утилита scripts/annotate-implicit-any.js — массовая расстановка : any по выводу tsc для снятия @ts-nocheck',
+      'тест tests/mojibake.test.js ловит регрессии битой кириллицы в src-ts через детектор scripts/detect-mojibake.js'
+    ],
+    updated: [
+      'снят @ts-nocheck с src-ts/copy-source.ts — файл стал нормальным TS-модулем с export default copy',
+      'снят @ts-nocheck с src-ts/index.ts — entrypoint теперь под полной TS-проверкой',
+      'src-ts/copy.ts использует import вместо require для copy-source',
+      'tests/ts-debt.test.js обновлён: copy-source.ts и index.ts убраны из allowlist остаточного TS-долга',
+      'корневые JS-модули стали тонкими адаптерами над dist-ts — тесты теперь проверяют скомпилированный TS-код',
+      'mock storage в tests/ranks.test.js приведён к актуальному API getActivityScore вместо устаревшего activityScore',
+      'typescript в devDependencies зафиксирован на ~6.0.2 — minor-обновления больше не подтянутся автоматически',
+      '.env.example уточнён: DATABASE_FILE и STORAGE_FILE помечены как optional с подсказкой про persistent volume на Railway',
+      '.gitignore исключает database.local.json, storage.local.json, *.bak, .gitignoregit и .claude/'
+    ],
+    fixed: [
+      'битая кириллица в src-ts/ai.ts — ключевые слова анализа заявок и текст рекомендаций теперь корректные',
+      'битая кириллица в src-ts/applications.ts — алиасы рангов 1ранг, ранг1 и т.п. снова работают',
+      'битая кириллица в src-ts/embeds-source.ts — welcome embed и admin panel выводят читаемый русский',
+      'битая кириллица в src-ts/command-runtime.ts и src-ts/event-runtime.ts — ярлыки automod и сообщения защиты каналов',
+      'параметры функций-шаблонов в copy-source.ts получили явные аннотации : any вместо неявного',
+      'индексирование labels по any-ключу приведено к as keyof typeof labels',
+      'скрытый ReferenceError на updateAutomodConfig в index.ts:1616 — функция нигде не была определена, но вызывалась; заменена на database.updateGuildSettings(guildId, { automod: patch })',
+      'auto-rank sync теперь сразу обновляет панель семьи: doPanelUpdate вызывается с force=true, иначе throttle на 15 сек блокировал отображение новых рангов'
+    ]
+  },
   '1.0.17': {
     added: [
       'добавлен отдельный runtime-automation helper-модуль для role menu, custom triggers, scheduled reports и automod'

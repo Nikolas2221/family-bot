@@ -68,7 +68,7 @@ function createRankServiceForTest(scoreByUserId = {}) {
       { key: 'newbie', id: 'role-newbie', name: 'Newbie' }
     ],
     storage: {
-      activityScore(userId) {
+      getActivityScore(userId) {
         return scoreByUserId[userId] || 0;
       }
     },

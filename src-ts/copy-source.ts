@@ -1,5 +1,7 @@
-// @ts-nocheck
-const copy = {
+// Data file: structure is validated at import time via `as CopyCatalog`
+// in copy.ts. Inside this file we add fields dynamically (copy.foo = ...,
+// copy.section = { ...copy.section, extra: ... }), so the literal stays `any`.
+const copy: any = {
   defaults: {
     familyTitle: '🏠 Семья'
   },
@@ -7,7 +9,7 @@ const copy = {
     noAccess: 'У тебя нет доступа к этому действию.',
     noDebugAccess: 'У тебя нет доступа к просмотру конфигурации бота.',
     unknownError: 'Произошла ошибка. Попробуй ещё раз.',
-    cooldown(secondsLeft) {
+    cooldown(secondsLeft: any) {
       return `Подожди ${secondsLeft} сек. перед новой заявкой.`;
     }
   },
@@ -85,16 +87,16 @@ const copy = {
     panelUpdated: 'Панель обновлена.',
     legend: '🟢 Онлайн • 🟡 Отошёл • ⛔ Не беспокоить • ⚫ Оффлайн',
     emptyMembers: 'Нет участников в выбранных ролях.',
-    totalMembers(total) {
+    totalMembers(total: any) {
       return `Всего участников: ${total}`;
     },
-    updateInterval(seconds) {
+    updateInterval(seconds: any) {
       return `Обновление каждые ${seconds} сек.`;
     },
-    continued(name) {
+    continued(name: any) {
       return `${name} — продолжение`;
     },
-    points(value) {
+    points(value: any) {
       return `${value} очк.`;
     }
   },
@@ -129,40 +131,40 @@ const copy = {
     invalidShort: 'Текст заявки слишком короткий. Напиши хотя бы 10 символов.',
     invalidNonsense: 'Похоже, в заявке есть бессмысленный текст. Напиши нормальный ник, кто пригласил, откуда узнал и немного о себе.',
     notFound: 'Заявка не найдена.',
-    closed(statusLabel) {
+    closed(statusLabel: any) {
       return `Заявка уже закрыта: ${statusLabel}.`;
     },
-    closedForReview(statusLabel) {
+    closedForReview(statusLabel: any) {
       return `Нельзя вернуть закрытую заявку в рассмотрение. Текущий статус: ${statusLabel}.`;
     },
     memberNotFound: 'Пользователь не найден на сервере.',
     roleAssignFailed: 'Не удалось выдать роль. Проверь права бота и позицию роли.',
-    acceptedReply(userId) {
+    acceptedReply(userId: any) {
       return `✅ <@${userId}> принят в семью.`;
     },
     reviewReply: '🕒 Заявка переведена в статус "На рассмотрении".',
-    rejectedReply(userId) {
+    rejectedReply(userId: any) {
       return `❌ <@${userId}> отклонён.`;
     },
-    statusLabel(status) {
+    statusLabel(status: any) {
       const labels = {
         pending: 'На рассмотрении',
         review: 'На рассмотрении',
         accepted: 'Принята',
         rejected: 'Отклонена'
       };
-      return labels[status] || status;
+      return labels[status as keyof typeof labels] || status;
     },
-    description(source, userId, status) {
+    description(source: any, userId: any, status: any) {
       return `> **${source} от <@${userId}>**\n> Статус: **${status}**`;
     },
-    acceptedFooter(username) {
+    acceptedFooter(username: any) {
       return `Принял: ${username}`;
     },
-    reviewFooter(username) {
+    reviewFooter(username: any) {
       return `Рассматривает: ${username}`;
     },
-    rejectedFooter(username) {
+    rejectedFooter(username: any) {
       return `Отклонил: ${username}`;
     },
     acceptReason: 'Собеседование',
@@ -171,25 +173,25 @@ const copy = {
   },
   logs: {
     acceptTitle: '🏠 Отчёт о приёме в семью',
-    acceptDescription(moderatorId, memberId) {
+    acceptDescription(moderatorId: any, memberId: any) {
       return `**<@${moderatorId}> принимает <@${memberId}> в семью**`;
     },
     acceptedMember: '👤 Принят в семью',
     acceptedBy: '🕴 Кто принял',
     acceptDetails: '📋 Детали приёма',
     rejectTitle: '❌ Отчёт об отказе',
-    rejectDescription(moderatorId, userId) {
+    rejectDescription(moderatorId: any, userId: any) {
       return `**<@${moderatorId}> отклоняет заявку <@${userId}>**`;
     },
     candidate: '👤 Кандидат',
     rejectedBy: '🕴 Кто отклонил',
     reason: '📋 Причина',
     warnTitle: '⚠️ Выговор',
-    warnDescription(moderatorId, userId) {
+    warnDescription(moderatorId: any, userId: any) {
       return `**<@${moderatorId}> выдал выговор <@${userId}>**`;
     },
     commendTitle: '🏅 Похвала',
-    commendDescription(moderatorId, userId) {
+    commendDescription(moderatorId: any, userId: any) {
       return `**<@${moderatorId}> отметил <@${userId}>**`;
     },
     participant: '👤 Участник',
@@ -201,7 +203,7 @@ const copy = {
   },
   profile: {
     title: '👤 Профиль участника',
-    description(userId) {
+    description(userId: any) {
       return `> Информация о <@${userId}>`;
     },
     fieldNick: '📛 Ник',
@@ -224,54 +226,54 @@ const copy = {
     demoteButton: 'Понизить',
     autoSyncButton: 'Авто-ранг',
     noFamilyRole: 'У участника нет семейной роли.',
-    promoted(userId, fromRole, toRole) {
+    promoted(userId: any, fromRole: any, toRole: any) {
       return `⬆️ <@${userId}> повышен: ${fromRole} -> ${toRole}.`;
     },
-    demoted(userId, fromRole, toRole) {
+    demoted(userId: any, fromRole: any, toRole: any) {
       return `⬇️ <@${userId}> понижен: ${fromRole} -> ${toRole}.`;
     },
-    autoApplied(userId, fromRole, toRole, score) {
+    autoApplied(userId: any, fromRole: any, toRole: any, score: any) {
       return `📊 Авто-ранг применён для <@${userId}>: ${fromRole} -> ${toRole} (${score} очк.).`;
     },
-    topRank(roleName) {
+    topRank(roleName: any) {
       return `${roleName} уже является максимальным рангом.`;
     },
-    bottomRank(roleName) {
+    bottomRank(roleName: any) {
       return `${roleName} уже является минимальным рангом.`;
     },
-    alreadySynced(roleName, score) {
+    alreadySynced(roleName: any, score: any) {
       return `📊 Авто-ранг уже совпадает с текущим рангом: ${roleName} (${score} очк.).`;
     },
-    manualOnly(roleName) {
+    manualOnly(roleName: any) {
       return `${roleName} управляется только вручную.`;
     },
     autoDisabled: 'Авто-ранги выключены.',
     autoUnavailable: 'Авто-ранг сейчас недоступен.',
-    autoStatus(targetRoleName, score) {
+    autoStatus(targetRoleName: any, score: any) {
       return `Цель: ${targetRoleName} • Очки: ${score}`;
     }
   },
   discipline: {
-    warnReply(userId) {
+    warnReply(userId: any) {
       return `⚠️ Выговор выдан <@${userId}>.`;
     },
-    commendReply(userId) {
+    commendReply(userId: any) {
       return `🏅 Похвала выдана <@${userId}>.`;
     }
   },
   list: {
     title: '🗂 Последние заявки',
     empty: 'Нет заявок',
-    line(index, application) {
+    line(index: any, application: any) {
       return `${index + 1}. \`${application.id}\` • <@${application.discordId}> • ${copy.applications.statusLabel(application.status)}`;
     }
   },
   ai: {
     buttonTitle: '🤖 AI-анализ заявки',
-    buttonFooter(applicationId) {
+    buttonFooter(applicationId: any) {
       return `Заявка ${applicationId}`;
     },
-    unavailable(errorMessage) {
+    unavailable(errorMessage: any) {
       return `AI временно недоступен: ${errorMessage}`;
     },
     assistantPrompt:
@@ -292,30 +294,30 @@ const copy = {
   },
   security: {
     defaultBlacklistReason: 'Запрещён доступ на сервер',
-    blacklistAdded(userId, reason) {
+    blacklistAdded(userId: any, reason: any) {
       return `⛔ <@${userId}> добавлен в чёрный список. Причина: ${reason}`;
     },
-    blacklistUpdated(userId, reason) {
+    blacklistUpdated(userId: any, reason: any) {
       return `⛔ <@${userId}> уже был в чёрном списке. Причина обновлена: ${reason}`;
     },
-    blacklistRemoved(userId) {
+    blacklistRemoved(userId: any) {
       return `✅ <@${userId}> удалён из чёрного списка.`;
     },
     blacklistNotFound: 'Пользователь не найден в чёрном списке.',
     blacklistEmpty: 'Чёрный список пуст.',
     blacklistTitle: '⛔ Чёрный список',
-    blacklistLine(index, entry) {
+    blacklistLine(index: any, entry: any) {
       return `${index + 1}. <@${entry.userId}> • ${entry.reason}`;
     },
     noSecurityAccess: 'У тебя нет доступа к защитным функциям.',
-    blacklistBanReason(reason) {
+    blacklistBanReason(reason: any) {
       return `Чёрный список: ${reason}`;
     },
     inviteBlocked: 'Инвайт-ссылки запрещены. Сообщение удалено.',
-    inviteGuardNotice(userId) {
+    inviteGuardNotice(userId: any) {
       return `⚠️ <@${userId}>, инвайт-ссылки на серверы запрещены.`;
     },
-    channelRestored(channelName) {
+    channelRestored(channelName: any) {
       return `🛡 Канал "${channelName}" был восстановлен после удаления.`;
     },
     channelGuardReason: 'Автовосстановление удалённого канала'
@@ -325,7 +327,7 @@ const copy = {
     premiumOnly: 'Эта функция доступна только на тарифе Premium.',
     setupSaved: 'Настройки сервера сохранены в базе.',
     setupTitle: '⚙️ Setup сервера',
-    setupDescription(guildName) {
+    setupDescription(guildName: any) {
       return `Конфигурация для сервера "${guildName}" сохранена.`;
     },
     panelTitle: '🛠 Админ-панель сервера',
@@ -339,7 +341,7 @@ const copy = {
     panelFieldVisuals: 'Баннеры',
     panelSetupDone: 'Настроен',
     panelSetupPending: 'Не настроен',
-    panelFeatures(plan) {
+    panelFeatures(plan: any) {
       if (plan === 'premium') {
         return [
           '• всё из Free',
@@ -363,26 +365,26 @@ const copy = {
         '• базовая админка сервера'
       ].join('\n');
     },
-    channelLine(label, value) {
+    channelLine(label: any, value: any) {
       return `${label}: ${value || 'не задан'}`;
     },
-    roleLine(label, value) {
+    roleLine(label: any, value: any) {
       return `${label}: ${value || 'не задана'}`;
     },
-    visualLine(label, value) {
+    visualLine(label: any, value: any) {
       return `${label}: ${value || 'не задан'}`;
     },
-    subscriptionUpdated(plan) {
+    subscriptionUpdated(plan: any) {
       return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}.`;
     }
   },
   help: {
-    title(plan) {
+    title(plan: any) {
       return `📚 Команды бота • ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}`;
     },
     freeSection: 'Доступно сейчас',
     premiumSection: 'В Premium',
-    line(name, description) {
+    line(name: any, description: any) {
       return `/${name} — ${description}`;
     }
   },
@@ -417,7 +419,7 @@ copy.commands.channelTargetDiscipline = 'Дисциплина';
 copy.commands.userIdOptionName = 'id';
 copy.commands.userIdDescription = 'Discord ID пользователя';
 
-copy.ranks.autoKeepCurrent = function autoKeepCurrent(roleName, score) {
+copy.ranks.autoKeepCurrent = function autoKeepCurrent(roleName: any, score: any) {
   return `Авто-ранг сохранил текущую роль ${roleName}. Автоматическое понижение не применяется (${score} очк.).`;
 };
 copy.ranks.permissionFailed = 'Не удалось изменить ранг. Проверь, что роль бота выше семейных ролей и у него есть право Manage Roles.';
@@ -431,18 +433,18 @@ copy.stats = {
   voiceEmpty: 'Пока нет активности в голосовых каналах.',
   pointsField: 'Очки',
   voiceField: 'Голос',
-  hours(value) {
+  hours(value: any) {
     return `${value.toFixed(1)} ч`;
   },
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
   }
 };
 
-copy.ai.advisorTitle = function advisorTitle(displayName) {
+copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
 copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
@@ -450,15 +452,15 @@ copy.ai.advisorUnavailable = 'AI-советник временно недост�
 
 copy.security.banListTitle = '🔨 Список банов';
 copy.security.banListEmpty = 'На сервере сейчас нет активных банов.';
-copy.security.banListLine = function banListLine(index, ban) {
+copy.security.banListLine = function banListLine(index: any, ban: any) {
   const username = ban?.user?.username || 'unknown';
   const reason = ban?.reason || 'без причины';
   return `${index + 1}. ${username} • \`${ban.user.id}\` • ${reason}`;
 };
-copy.security.unbanSuccess = function unbanSuccess(userId) {
+copy.security.unbanSuccess = function unbanSuccess(userId: any) {
   return `✅ Пользователь \`${userId}\` разбанен и удалён из чёрного списка.`;
 };
-copy.security.unbanFailed = function unbanFailed(userId) {
+copy.security.unbanFailed = function unbanFailed(userId: any) {
   return `Не удалось разбанить пользователя \`${userId}\`. Проверь ID и наличие бана.`;
 };
 
@@ -474,16 +476,16 @@ copy.applications.applyModalText = 'О себе';
 copy.applications.closeTicketButton = '🔒 Закрыть тикет';
 copy.applications.ticketClosedReply = '🔒 Тикет по заявке закрыт.';
 copy.applications.ticketOnlyInThread = 'Закрыть тикет можно только внутри треда заявки.';
-copy.applications.ticketThreadName = function ticketThreadName(nickname, applicationId) {
+copy.applications.ticketThreadName = function ticketThreadName(nickname: any, applicationId: any) {
   return `ticket-${nickname}-${applicationId}`.slice(0, 90);
 };
-copy.applications.ticketStarter = function ticketStarter(userId, threadId) {
+copy.applications.ticketStarter = function ticketStarter(userId: any, threadId: any) {
   return `Новая заявка от <@${userId}> • тикет: <#${threadId}>`;
 };
-copy.applications.ticketThreadHeader = function ticketThreadHeader(userId, applicationId) {
+copy.applications.ticketThreadHeader = function ticketThreadHeader(userId: any, applicationId: any) {
   return `Тикет по заявке <@${userId}> • ID: \`${applicationId}\``;
 };
-copy.applications.ticketReason = function ticketReason(userId) {
+copy.applications.ticketReason = function ticketReason(userId: any) {
   return `Тикет по заявке ${userId}`;
 };
 
@@ -515,66 +517,66 @@ copy.moderation = {
   invalidSeconds: 'Укажи значение от 0 до 21600 секунд.',
   invalidConfirmation: 'Для полной очистки канала нужно написать `CLEAR`.',
   notTextChannel: 'Эта команда работает только с текстовыми каналами сервера.',
-  purgeDone(count, channelId) {
+  purgeDone(count: any, channelId: any) {
     return `Удалено сообщений: **${count}** в канале <#${channelId}>.`;
   },
-  purgeUserDone(count, userId, channelId) {
+  purgeUserDone(count: any, userId: any, channelId: any) {
     return `Удалено сообщений участника <@${userId}>: **${count}** в канале <#${channelId}>.`;
   },
-  purgeUserScanDone(count, matched, userId, channelId) {
+  purgeUserScanDone(count: any, matched: any, userId: any, channelId: any) {
     return `Удалено сообщений участника <@${userId}>: **${count}** из **${matched}** найденных в канале <#${channelId}>.`;
   },
-  clearChannelDone(oldChannelId, newChannelId) {
+  clearChannelDone(oldChannelId: any, newChannelId: any) {
     return `Канал <#${oldChannelId}> очищен. Новый канал: <#${newChannelId}>.`;
   },
-  clearChannelPartial(channelId, deleted, skippedSystem) {
+  clearChannelPartial(channelId: any, deleted: any, skippedSystem: any) {
     return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Служебных системных сообщений осталось: **${skippedSystem}**.`;
   },
-  muteDone(userId, roleId) {
+  muteDone(userId: any, roleId: any) {
     return `Участнику <@${userId}> выдан мут <@&${roleId}>.`;
   },
-  unmuteDone(userId) {
+  unmuteDone(userId: any) {
     return `С участника <@${userId}> снят мут.`;
   },
-  slowmodeDone(channelId, seconds) {
+  slowmodeDone(channelId: any, seconds: any) {
     return seconds > 0
       ? `Slowmode для <#${channelId}> установлен на **${seconds}** сек.`
       : `Slowmode для <#${channelId}> отключён.`;
   },
-  lockDone(channelId) {
+  lockDone(channelId: any) {
     return `Канал <#${channelId}> закрыт для @everyone.`;
   },
-  unlockDone(channelId) {
+  unlockDone(channelId: any) {
     return `Канал <#${channelId}> снова открыт для @everyone.`;
   },
-  warnHistoryTitle(userTag) {
+  warnHistoryTitle(userTag: any) {
     return `История выговоров: ${userTag}`;
   },
   warnHistoryEmpty: 'У участника пока нет сохранённых выговоров.',
-  warnHistoryLine(index, entry) {
+  warnHistoryLine(index: any, entry: any) {
     return `${index + 1}. ${entry.reason} • модератор <@${entry.moderatorId}> • ${entry.createdAt}`;
   },
-  clearWarnsDone(userId, count) {
+  clearWarnsDone(userId: any, count: any) {
     return `Для <@${userId}> очищено выговоров: **${count}**.`;
   },
-  actionFailed(action) {
+  actionFailed(action: any) {
     return `Не удалось выполнить действие: ${action}. Проверь права бота и иерархию ролей.`;
   }
 };
 
-copy.security.banListLine = function banListLine(index, ban) {
+copy.security.banListLine = function banListLine(index: any, ban: any) {
   const username = ban?.user?.username || 'unknown';
   const reason = ban?.reason || 'без причины';
   return `${index + 1}. <@${ban.user.id}> • \`${ban.user.id}\` • ${username} • ${reason}`;
 };
 
-copy.security.blacklistLine = function blacklistLine(index, entry) {
+copy.security.blacklistLine = function blacklistLine(index: any, entry: any) {
   return `${index + 1}. <@${entry.userId}> • \`${entry.userId}\` • ${entry.reason}`;
 };
 
 copy.commands.channelTargetApplications = 'Подача заявки';
 
-copy.moderation.purgeUserDetailed = function purgeUserDetailed(count, matched, blocked, system, userId, channelId) {
+copy.moderation.purgeUserDetailed = function purgeUserDetailed(count: any, matched: any, blocked: any, system: any, userId: any, channelId: any) {
   const details = [
     `Удалено сообщений участника <@${userId}>: **${count}**`,
     `Найдено совпадений: **${matched}**`,
@@ -592,7 +594,7 @@ copy.moderation.purgeUserDetailed = function purgeUserDetailed(count, matched, b
   return details.join(' • ');
 };
 
-copy.moderation.clearChannelPartial = function clearChannelPartial(channelId, deleted, skipped) {
+copy.moderation.clearChannelPartial = function clearChannelPartial(channelId: any, deleted: any, skipped: any) {
   return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Осталось неудаляемых или системных сообщений: **${skipped}**.`;
 };
 
@@ -600,7 +602,7 @@ copy.commands.nicknameOptionName = 'новый_ник';
 copy.commands.nicknameOptionDescription = 'Новый ник для AI-действия';
 copy.commands.kickRolessDescription = 'Кикнуть участников без ролей вручную';
 
-copy.moderation.kickRolessDone = function kickRolessDone(kicked, failed) {
+copy.moderation.kickRolessDone = function kickRolessDone(kicked: any, failed: any) {
   return `Чистка безрольных завершена: кикнуто **${kicked}**, ошибок **${failed}**.`;
 };
 
@@ -609,7 +611,7 @@ copy.ai.commandsOverviewEmpty = 'Не нашел доступных команд
 copy.ai.nicknameMissingTarget = 'Для смены ника укажи пользователя и новый ник.';
 copy.ai.nicknameNoAccess = 'Для смены ника через AI нужны права администратора или Manage Nicknames.';
 copy.ai.nicknameTooLong = 'Новый ник должен быть от 1 до 32 символов.';
-copy.ai.nicknameDone = function nicknameDone(userId, nickname) {
+copy.ai.nicknameDone = function nicknameDone(userId: any, nickname: any) {
   return `AI изменил ник для <@${userId}> на **${nickname}**.`;
 };
 copy.ai.nicknameFailed = 'AI не смог изменить ник. Проверь права бота и иерархию ролей.';
@@ -687,7 +689,7 @@ copy.commands.periodWeekly = 'Weekly';
 copy.commands.periodMonthly = 'Monthly';
 
 copy.automod = copy.automod || {};
-copy.automod.ruleLabel = function ruleLabel(rule) {
+copy.automod.ruleLabel = function ruleLabel(rule: any) {
   const labels = {
     invites: 'Инвайты',
     links: 'Ссылки',
@@ -697,9 +699,9 @@ copy.automod.ruleLabel = function ruleLabel(rule) {
     badWords: 'Стоп-слова'
   };
 
-  return labels[rule] || rule;
+  return labels[rule as keyof typeof labels] || rule;
 };
-copy.automod.targetLabel = function targetLabel(target) {
+copy.automod.targetLabel = function targetLabel(target: any) {
   const labels = {
     capsPercent: 'Порог капса',
     capsMinLength: 'Мин. длина капса',
@@ -708,21 +710,21 @@ copy.automod.targetLabel = function targetLabel(target) {
     spamWindowSeconds: 'Окно флуда'
   };
 
-  return labels[target] || target;
+  return labels[target as keyof typeof labels] || target;
 };
-copy.automod.notice = function notice(userId, rule, detail = '') {
+copy.automod.notice = function notice(userId: any, rule: any, detail = '') {
   return `<@${userId}>, automod удалил сообщение по правилу **${rule}**${detail ? ` (${detail})` : ''}.`;
 };
-copy.automod.toggleDone = function toggleDone(rule, enabled) {
+copy.automod.toggleDone = function toggleDone(rule: any, enabled: any) {
   return `Правило automod **${rule}** теперь **${enabled ? 'включено' : 'выключено'}**.`;
 };
-copy.automod.limitDone = function limitDone(target, value) {
+copy.automod.limitDone = function limitDone(target: any, value: any) {
   return `Порог automod **${target}** обновлён: **${value}**.`;
 };
-copy.automod.wordAdded = function wordAdded(word) {
+copy.automod.wordAdded = function wordAdded(word: any) {
   return `Слово **${word}** добавлено в стоп-лист automod.`;
 };
-copy.automod.wordRemoved = function wordRemoved(word) {
+copy.automod.wordRemoved = function wordRemoved(word: any) {
   return `Слово **${word}** удалено из стоп-листа automod.`;
 };
 copy.automod.wordsCleared = 'Список стоп-слов automod очищен.';
@@ -786,7 +788,7 @@ copy.welcome.channel = 'Канал';
 copy.welcome.dm = 'ЛС';
 copy.welcome.message = 'Текст';
 copy.welcome.autorole = 'Автороль';
-copy.welcome.updated = function updated(label) {
+copy.welcome.updated = function updated(label: any) {
   return `Настройки welcome обновлены: ${label}.`;
 };
 copy.welcome.messageCleared = 'Текст welcome очищен.';
@@ -795,10 +797,10 @@ copy.welcome.testSent = 'Тестовое welcome-сообщение отпра�
 copy.reactionRoles = copy.reactionRoles || {};
 copy.reactionRoles.title = '✨ Reaction Roles';
 copy.reactionRoles.empty = 'Связки реакций пока не настроены.';
-copy.reactionRoles.added = function added(emoji, roleId, messageId) {
+copy.reactionRoles.added = function added(emoji: any, roleId: any, messageId: any) {
   return `Reaction role добавлена: ${emoji} -> <@&${roleId}> для сообщения \`${messageId}\`.`;
 };
-copy.reactionRoles.removed = function removed(emoji, messageId) {
+copy.reactionRoles.removed = function removed(emoji: any, messageId: any) {
   return `Reaction role удалена: ${emoji} для сообщения \`${messageId}\`.`;
 };
 copy.reactionRoles.notFound = 'Такая reaction role не найдена.';
@@ -808,13 +810,13 @@ copy.reports = copy.reports || {};
 copy.reports.title = '📆 Расписание отчётов';
 copy.reports.periodWeekly = 'Weekly';
 copy.reports.periodMonthly = 'Monthly';
-copy.reports.enabled = function enabled(period, channelId) {
+copy.reports.enabled = function enabled(period: any, channelId: any) {
   return `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`;
 };
-copy.reports.disabled = function disabled(period) {
+copy.reports.disabled = function disabled(period: any) {
   return `${period} отчёт выключен.`;
 };
-copy.reports.sent = function sent(period, channelId) {
+copy.reports.sent = function sent(period: any, channelId: any) {
   return `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`;
 };
 copy.reports.channelMissing = 'Сначала укажи канал отчётов или передай канал в команду.';
@@ -870,19 +872,19 @@ copy.verification = copy.verification || {};
 copy.verification.title = 'Проверка новичков';
 copy.verification.enabled = 'Проверка включена.';
 copy.verification.disabled = 'Проверка выключена.';
-copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+copy.verification.status = function status(enabled: any, roleId: any, questionnaireEnabled: any) {
   return [
     `Статус: ${enabled ? 'включено' : 'выключено'}`,
     `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
     `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
   ].join('\n');
 };
-copy.verification.updated = function updated(label) {
+copy.verification.updated = function updated(label: any) {
   return `Настройки verification обновлены: ${label}.`;
 };
 copy.verification.alreadyVerified = 'Ты уже прошёл подтверждение.';
 copy.verification.roleMissing = 'Сначала укажи роль после подтверждения или autorole.';
-copy.verification.success = function success(roleId) {
+copy.verification.success = function success(roleId: any) {
   return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
 };
 copy.verification.noPermission = 'Бот не смог выдать роль после подтверждения. Проверь права и иерархию ролей.';
@@ -897,38 +899,38 @@ copy.verification.applyButton = 'Подать заявку';
 copy.roleMenus = copy.roleMenus || {};
 copy.roleMenus.title = 'Role Menus';
 copy.roleMenus.empty = 'Role-menu пока не созданы.';
-copy.roleMenus.created = function created(menuId) {
+copy.roleMenus.created = function created(menuId: any) {
   return `Role-menu \`${menuId}\` создано.`;
 };
-copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+copy.roleMenus.itemAdded = function itemAdded(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
 };
-copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+copy.roleMenus.itemRemoved = function itemRemoved(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
 };
-copy.roleMenus.published = function published(menuId, channelId) {
+copy.roleMenus.published = function published(menuId: any, channelId: any) {
   return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
 };
 copy.roleMenus.notFound = 'Такое role-menu не найдено.';
-copy.roleMenus.roleAdded = function roleAdded(roleId) {
+copy.roleMenus.roleAdded = function roleAdded(roleId: any) {
   return `Роль <@&${roleId}> выдана.`;
 };
-copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+copy.roleMenus.roleRemoved = function roleRemoved(roleId: any) {
   return `Роль <@&${roleId}> снята.`;
 };
 
 copy.customCommands = copy.customCommands || {};
 copy.customCommands.title = 'Custom Commands';
 copy.customCommands.empty = 'Пользовательские триггеры пока не настроены.';
-copy.customCommands.added = function added(name) {
+copy.customCommands.added = function added(name: any) {
   return `Триггер \`${name}\` сохранён.`;
 };
-copy.customCommands.removed = function removed(name) {
+copy.customCommands.removed = function removed(name: any) {
   return `Триггер \`${name}\` удалён.`;
 };
 copy.customCommands.notFound = 'Такой триггер не найден.';
 
-copy.automod.actionUpdated = function actionUpdated(mode) {
+copy.automod.actionUpdated = function actionUpdated(mode: any) {
   return `Режим наказания automod обновлён: ${mode}.`;
 };
 
@@ -941,18 +943,18 @@ copy.stats = {
   voiceEmpty: 'Пока нет активности в голосовых каналах.',
   pointsField: 'Очки',
   voiceField: 'Голос',
-  hours(value) {
+  hours(value: any) {
     return `${Number(value || 0).toFixed(1)} ч`;
   },
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
   }
 };
 
-copy.ai.advisorTitle = function advisorTitle(displayName) {
+copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
 copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
@@ -962,7 +964,7 @@ copy.admin.noOwnerAccess = 'Эта команда доступна только 
 copy.admin.premiumOnly = 'Эта функция доступна только на тарифе Premium.';
 copy.admin.setupSaved = 'Настройки сервера сохранены в базе.';
 copy.admin.setupTitle = '⚙️ Setup сервера';
-copy.admin.setupDescription = function setupDescription(guildName) {
+copy.admin.setupDescription = function setupDescription(guildName: any) {
   return `Конфигурация для сервера "${guildName}" сохранена.`;
 };
 copy.admin.panelTitle = '🛠 Админ-панель сервера';
@@ -976,7 +978,7 @@ copy.admin.panelFieldRoles = 'Роли';
 copy.admin.panelFieldVisuals = 'Баннеры';
 copy.admin.panelSetupDone = 'Настроен';
 copy.admin.panelSetupPending = 'Не настроен';
-copy.admin.panelFeatures = function panelFeatures(plan) {
+copy.admin.panelFeatures = function panelFeatures(plan: any) {
   if (plan === 'premium') {
     return [
       '• всё из Free',
@@ -1000,25 +1002,25 @@ copy.admin.panelFeatures = function panelFeatures(plan) {
     '• базовая админка сервера'
   ].join('\n');
 };
-copy.admin.channelLine = function channelLine(label, value) {
+copy.admin.channelLine = function channelLine(label: any, value: any) {
   return `${label}: ${value || 'не задан'}`;
 };
-copy.admin.roleLine = function roleLine(label, value) {
+copy.admin.roleLine = function roleLine(label: any, value: any) {
   return `${label}: ${value || 'не задана'}`;
 };
-copy.admin.visualLine = function visualLine(label, value) {
+copy.admin.visualLine = function visualLine(label: any, value: any) {
   return `${label}: ${value || 'не задан'}`;
 };
-copy.admin.subscriptionUpdated = function subscriptionUpdated(plan) {
+copy.admin.subscriptionUpdated = function subscriptionUpdated(plan: any) {
   return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}.`;
 };
 
-copy.help.title = function title(plan) {
+copy.help.title = function title(plan: any) {
   return `📚 Команды бота • ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}`;
 };
 copy.help.freeSection = 'Доступно сейчас';
 copy.help.premiumSection = 'В Premium';
-copy.help.line = function line(name, description) {
+copy.help.line = function line(name: any, description: any) {
   return `/${name} — ${description}`;
 };
 
@@ -1034,32 +1036,32 @@ copy.applications.applyModalText = 'О себе';
 copy.applications.closeTicketButton = '🔒 Закрыть тикет';
 copy.applications.ticketClosedReply = '🔒 Тикет по заявке закрыт.';
 copy.applications.ticketOnlyInThread = 'Закрыть тикет можно только внутри треда заявки.';
-copy.applications.ticketStarter = function ticketStarter(userId, threadId) {
+copy.applications.ticketStarter = function ticketStarter(userId: any, threadId: any) {
   return `Новая заявка от <@${userId}> • тикет: <#${threadId}>`;
 };
-copy.applications.ticketThreadHeader = function ticketThreadHeader(userId, applicationId) {
+copy.applications.ticketThreadHeader = function ticketThreadHeader(userId: any, applicationId: any) {
   return `Тикет по заявке <@${userId}> • ID: \`${applicationId}\``;
 };
-copy.applications.ticketReason = function ticketReason(userId) {
+copy.applications.ticketReason = function ticketReason(userId: any) {
   return `Тикет по заявке ${userId}`;
 };
 
 copy.verification.title = 'Проверка новичков';
 copy.verification.enabled = 'Проверка включена.';
 copy.verification.disabled = 'Проверка выключена.';
-copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+copy.verification.status = function status(enabled: any, roleId: any, questionnaireEnabled: any) {
   return [
     `Статус: ${enabled ? 'включено' : 'выключено'}`,
     `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
     `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
   ].join('\n');
 };
-copy.verification.updated = function updated(label) {
+copy.verification.updated = function updated(label: any) {
   return `Настройки verification обновлены: ${label}.`;
 };
 copy.verification.alreadyVerified = 'Ты уже прошёл подтверждение.';
 copy.verification.roleMissing = 'Сначала укажи роль после подтверждения или autorole.';
-copy.verification.success = function success(roleId) {
+copy.verification.success = function success(roleId: any) {
   return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
 };
 copy.verification.noPermission = 'Бот не смог выдать роль после подтверждения. Проверь права и иерархию ролей.';
@@ -1073,41 +1075,42 @@ copy.verification.applyButton = 'Подать заявку';
 
 copy.roleMenus.title = 'Role Menus';
 copy.roleMenus.empty = 'Role-menu пока не созданы.';
-copy.roleMenus.created = function created(menuId) {
+copy.roleMenus.created = function created(menuId: any) {
   return `Role-menu \`${menuId}\` создано.`;
 };
-copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+copy.roleMenus.itemAdded = function itemAdded(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
 };
-copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+copy.roleMenus.itemRemoved = function itemRemoved(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
 };
-copy.roleMenus.published = function published(menuId, channelId) {
+copy.roleMenus.published = function published(menuId: any, channelId: any) {
   return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
 };
 copy.roleMenus.notFound = 'Такое role-menu не найдено.';
-copy.roleMenus.roleAdded = function roleAdded(roleId) {
+copy.roleMenus.roleAdded = function roleAdded(roleId: any) {
   return `Роль <@&${roleId}> выдана.`;
 };
-copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+copy.roleMenus.roleRemoved = function roleRemoved(roleId: any) {
   return `Роль <@&${roleId}> снята.`;
 };
 
 copy.customCommands.title = 'Custom Commands';
 copy.customCommands.empty = 'Пользовательские триггеры пока не настроены.';
-copy.customCommands.added = function added(name) {
+copy.customCommands.added = function added(name: any) {
   return `Триггер \`${name}\` сохранён.`;
 };
-copy.customCommands.removed = function removed(name) {
+copy.customCommands.removed = function removed(name: any) {
   return `Триггер \`${name}\` удалён.`;
 };
 copy.customCommands.notFound = 'Такой триггер не найден.';
 
-copy.automod.actionUpdated = function actionUpdated(mode) {
+copy.automod.actionUpdated = function actionUpdated(mode: any) {
   return `Режим наказания automod обновлён: ${mode}.`;
 };
 
-module.exports = copy;
+export default copy;
+export { copy };
 
 // UTF-8 overrides for late-added modules and admin surfaces.
 Object.assign(copy.applications, {
@@ -1124,16 +1127,16 @@ Object.assign(copy.applications, {
   fieldInvite: '🫂 Кто дал инвайт / Откуда узнали',
   fieldText: '📝 О себе'
 });
-copy.applications.ticketThreadName = function ticketThreadName(nickname, applicationId) {
+copy.applications.ticketThreadName = function ticketThreadName(nickname: any, applicationId: any) {
   return `ticket-${nickname}-${applicationId}`.slice(0, 90);
 };
-copy.applications.ticketStarter = function ticketStarter(userId, threadId) {
+copy.applications.ticketStarter = function ticketStarter(userId: any, threadId: any) {
   return `Новая заявка от <@${userId}> • тикет: <#${threadId}>`;
 };
-copy.applications.ticketThreadHeader = function ticketThreadHeader(userId, applicationId) {
+copy.applications.ticketThreadHeader = function ticketThreadHeader(userId: any, applicationId: any) {
   return `Тикет по заявке <@${userId}> • ID: \`${applicationId}\``;
 };
-copy.applications.ticketReason = function ticketReason(userId) {
+copy.applications.ticketReason = function ticketReason(userId: any) {
   return `Тикет по заявке ${userId}`;
 };
 
@@ -1324,16 +1327,16 @@ copy.moderation = {
   invalidSeconds: 'Укажи значение от 0 до 21600 секунд.',
   invalidConfirmation: 'Для полной очистки канала нужно написать `CLEAR`.',
   notTextChannel: 'Эта команда работает только с текстовыми каналами сервера.',
-  purgeDone(count, channelId) {
+  purgeDone(count: any, channelId: any) {
     return `Удалено сообщений: **${count}** в канале <#${channelId}>.`;
   },
-  purgeUserDone(count, userId, channelId) {
+  purgeUserDone(count: any, userId: any, channelId: any) {
     return `Удалено сообщений участника <@${userId}>: **${count}** в канале <#${channelId}>.`;
   },
-  purgeUserScanDone(count, matched, userId, channelId) {
+  purgeUserScanDone(count: any, matched: any, userId: any, channelId: any) {
     return `Удалено сообщений участника <@${userId}>: **${count}** из **${matched}** найденных в канале <#${channelId}>.`;
   },
-  purgeUserDetailed(count, matched, blocked, system, userId, channelId) {
+  purgeUserDetailed(count: any, matched: any, blocked: any, system: any, userId: any, channelId: any) {
     const details = [
       `Удалено сообщений участника <@${userId}>: **${count}**`,
       `Найдено совпадений: **${matched}**`,
@@ -1343,58 +1346,58 @@ copy.moderation = {
     if (system > 0) details.push(`Системных записей Discord: **${system}**`);
     return details.join(' • ');
   },
-  clearChannelDone(oldChannelId, newChannelId) {
+  clearChannelDone(oldChannelId: any, newChannelId: any) {
     return `Канал <#${oldChannelId}> очищен. Новый канал: <#${newChannelId}>.`;
   },
-  clearChannelPartial(channelId, deleted, skipped) {
+  clearChannelPartial(channelId: any, deleted: any, skipped: any) {
     return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Осталось неудаляемых или системных сообщений: **${skipped}**.`;
   },
-  muteDone(userId, roleId) {
+  muteDone(userId: any, roleId: any) {
     return `Участнику <@${userId}> выдан мут <@&${roleId}>.`;
   },
-  unmuteDone(userId) {
+  unmuteDone(userId: any) {
     return `С участника <@${userId}> снят мут.`;
   },
-  slowmodeDone(channelId, seconds) {
+  slowmodeDone(channelId: any, seconds: any) {
     return seconds > 0
       ? `Slowmode для <#${channelId}> установлен на **${seconds}** сек.`
       : `Slowmode для <#${channelId}> отключён.`;
   },
-  lockDone(channelId) {
+  lockDone(channelId: any) {
     return `Канал <#${channelId}> закрыт для @everyone.`;
   },
-  unlockDone(channelId) {
+  unlockDone(channelId: any) {
     return `Канал <#${channelId}> снова открыт для @everyone.`;
   },
-  warnHistoryTitle(userTag) {
+  warnHistoryTitle(userTag: any) {
     return `История выговоров: ${userTag}`;
   },
   warnHistoryEmpty: 'У участника пока нет сохранённых выговоров.',
-  warnHistoryLine(index, entry) {
+  warnHistoryLine(index: any, entry: any) {
     return `${index + 1}. ${entry.reason} • модератор <@${entry.moderatorId}> • ${entry.createdAt}`;
   },
-  clearWarnsDone(userId, count) {
+  clearWarnsDone(userId: any, count: any) {
     return `Для <@${userId}> очищено выговоров: **${count}**.`;
   },
-  actionFailed(action) {
+  actionFailed(action: any) {
     return `Не удалось выполнить действие: ${action}. Проверь права бота и иерархию ролей.`;
   },
-  kickRolessDone(kicked, failed) {
+  kickRolessDone(kicked: any, failed: any) {
     return `Чистка безрольных завершена: кикнуто **${kicked}**, ошибок **${failed}**.`;
   }
 };
 
-copy.security.banListLine = function banListLine(index, ban) {
+copy.security.banListLine = function banListLine(index: any, ban: any) {
   const username = ban?.user?.username || 'unknown';
   const reason = ban?.reason || 'без причины';
   return `${index + 1}. <@${ban.user.id}> • \`${ban.user.id}\` • ${username} • ${reason}`;
 };
-copy.security.blacklistLine = function blacklistLine(index, entry) {
+copy.security.blacklistLine = function blacklistLine(index: any, entry: any) {
   return `${index + 1}. <@${entry.userId}> • \`${entry.userId}\` • ${entry.reason}`;
 };
 
 copy.automod = copy.automod || {};
-copy.automod.ruleLabel = function ruleLabel(rule) {
+copy.automod.ruleLabel = function ruleLabel(rule: any) {
   const labels = {
     invites: 'Инвайты',
     links: 'Ссылки',
@@ -1403,9 +1406,9 @@ copy.automod.ruleLabel = function ruleLabel(rule) {
     spam: 'Флуд',
     badWords: 'Стоп-слова'
   };
-  return labels[rule] || rule;
+  return labels[rule as keyof typeof labels] || rule;
 };
-copy.automod.targetLabel = function targetLabel(target) {
+copy.automod.targetLabel = function targetLabel(target: any) {
   const labels = {
     capsPercent: 'Порог капса',
     capsMinLength: 'Мин. длина капса',
@@ -1413,26 +1416,26 @@ copy.automod.targetLabel = function targetLabel(target) {
     spamCount: 'Лимит флуда',
     spamWindowSeconds: 'Окно флуда'
   };
-  return labels[target] || target;
+  return labels[target as keyof typeof labels] || target;
 };
-copy.automod.notice = function notice(userId, rule, detail = '') {
+copy.automod.notice = function notice(userId: any, rule: any, detail = '') {
   return `<@${userId}>, automod удалил сообщение по правилу **${rule}**${detail ? ` (${detail})` : ''}.`;
 };
-copy.automod.toggleDone = function toggleDone(rule, enabled) {
+copy.automod.toggleDone = function toggleDone(rule: any, enabled: any) {
   return `Правило automod **${rule}** теперь **${enabled ? 'включено' : 'выключено'}**.`;
 };
-copy.automod.limitDone = function limitDone(target, value) {
+copy.automod.limitDone = function limitDone(target: any, value: any) {
   return `Порог automod **${target}** обновлён: **${value}**.`;
 };
-copy.automod.wordAdded = function wordAdded(word) {
+copy.automod.wordAdded = function wordAdded(word: any) {
   return `Слова **${word}** добавлены в стоп-лист automod.`;
 };
-copy.automod.wordRemoved = function wordRemoved(word) {
+copy.automod.wordRemoved = function wordRemoved(word: any) {
   return `Слова **${word}** удалены из стоп-листа automod.`;
 };
 copy.automod.wordsCleared = 'Список стоп-слов automod очищен.';
 copy.automod.wordMissing = 'Укажи слово или список слов через запятую для этой операции.';
-copy.automod.actionUpdated = function actionUpdated(mode) {
+copy.automod.actionUpdated = function actionUpdated(mode: any) {
   return `Режим наказания automod обновлён: ${mode}.`;
 };
 
@@ -1448,7 +1451,7 @@ Object.assign(copy.welcome, {
   messageCleared: 'Текст welcome очищен.',
   testSent: 'Тестовое welcome-сообщение отправлено.'
 });
-copy.welcome.updated = function updated(label) {
+copy.welcome.updated = function updated(label: any) {
   return `Настройки welcome обновлены: ${label}.`;
 };
 
@@ -1459,10 +1462,10 @@ Object.assign(copy.reactionRoles, {
   notFound: 'Такая reaction role не найдена.',
   messageMissing: 'Не удалось найти сообщение для этой reaction role.'
 });
-copy.reactionRoles.added = function added(emoji, roleId, messageId) {
+copy.reactionRoles.added = function added(emoji: any, roleId: any, messageId: any) {
   return `Reaction role добавлена: ${emoji} -> <@&${roleId}> для сообщения \`${messageId}\`.`;
 };
-copy.reactionRoles.removed = function removed(emoji, messageId) {
+copy.reactionRoles.removed = function removed(emoji: any, messageId: any) {
   return `Reaction role удалена: ${emoji} для сообщения \`${messageId}\`.`;
 };
 
@@ -1473,13 +1476,13 @@ Object.assign(copy.reports, {
   periodMonthly: 'Monthly',
   channelMissing: 'Сначала укажи канал отчётов или передай канал в команду.'
 });
-copy.reports.enabled = function enabled(period, channelId) {
+copy.reports.enabled = function enabled(period: any, channelId: any) {
   return `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`;
 };
-copy.reports.disabled = function disabled(period) {
+copy.reports.disabled = function disabled(period: any) {
   return `${period} отчёт выключен.`;
 };
-copy.reports.sent = function sent(period, channelId) {
+copy.reports.sent = function sent(period: any, channelId: any) {
   return `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`;
 };
 
@@ -1499,17 +1502,17 @@ Object.assign(copy.verification, {
   verifyButton: 'Подтвердить',
   applyButton: 'Подать заявку'
 });
-copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+copy.verification.status = function status(enabled: any, roleId: any, questionnaireEnabled: any) {
   return [
     `Статус: ${enabled ? 'включено' : 'выключено'}`,
     `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
     `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
   ].join('\n');
 };
-copy.verification.updated = function updated(label) {
+copy.verification.updated = function updated(label: any) {
   return `Настройки verification обновлены: ${label}.`;
 };
-copy.verification.success = function success(roleId) {
+copy.verification.success = function success(roleId: any) {
   return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
 };
 
@@ -1519,22 +1522,22 @@ Object.assign(copy.roleMenus, {
   empty: 'Role-menu пока не созданы.',
   notFound: 'Такое role-menu не найдено.'
 });
-copy.roleMenus.created = function created(menuId) {
+copy.roleMenus.created = function created(menuId: any) {
   return `Role-menu \`${menuId}\` создано.`;
 };
-copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+copy.roleMenus.itemAdded = function itemAdded(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
 };
-copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+copy.roleMenus.itemRemoved = function itemRemoved(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
 };
-copy.roleMenus.published = function published(menuId, channelId) {
+copy.roleMenus.published = function published(menuId: any, channelId: any) {
   return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
 };
-copy.roleMenus.roleAdded = function roleAdded(roleId) {
+copy.roleMenus.roleAdded = function roleAdded(roleId: any) {
   return `Роль <@&${roleId}> выдана.`;
 };
-copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+copy.roleMenus.roleRemoved = function roleRemoved(roleId: any) {
   return `Роль <@&${roleId}> снята.`;
 };
 
@@ -1544,10 +1547,10 @@ Object.assign(copy.customCommands, {
   empty: 'Пользовательские триггеры пока не настроены.',
   notFound: 'Такой триггер не найден.'
 });
-copy.customCommands.added = function added(name) {
+copy.customCommands.added = function added(name: any) {
   return `Триггер \`${name}\` сохранён.`;
 };
-copy.customCommands.removed = function removed(name) {
+copy.customCommands.removed = function removed(name: any) {
   return `Триггер \`${name}\` удалён.`;
 };
 
@@ -1561,18 +1564,18 @@ copy.stats = {
   voiceEmpty: 'Пока нет активности в голосовых каналах.',
   pointsField: 'Очки',
   voiceField: 'Голос',
-  hours(value) {
+  hours(value: any) {
     return `${Number(value || 0).toFixed(1)} ч`;
   },
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
   }
 };
 
-copy.ai.advisorTitle = function advisorTitle(displayName) {
+copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
 copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
@@ -1582,7 +1585,7 @@ copy.ai.commandsOverviewEmpty = 'Не нашёл доступных команд
 copy.ai.nicknameMissingTarget = 'Для смены ника укажи пользователя и новый ник.';
 copy.ai.nicknameNoAccess = 'Для смены ника через AI нужны права администратора или Manage Nicknames.';
 copy.ai.nicknameTooLong = 'Новый ник должен быть от 1 до 32 символов.';
-copy.ai.nicknameDone = function nicknameDone(userId, nickname) {
+copy.ai.nicknameDone = function nicknameDone(userId: any, nickname: any) {
   return `AI изменил ник для <@${userId}> на **${nickname}**.`;
 };
 copy.ai.nicknameFailed = 'AI не смог изменить ник. Проверь права бота и иерархию ролей.';
@@ -1591,7 +1594,7 @@ copy.admin.noOwnerAccess = 'Эта команда доступна только 
 copy.admin.premiumOnly = 'Эта функция доступна только на тарифе Premium.';
 copy.admin.setupSaved = 'Настройки сервера сохранены в базе.';
 copy.admin.setupTitle = '⚙️ Setup сервера';
-copy.admin.setupDescription = function setupDescription(guildName) {
+copy.admin.setupDescription = function setupDescription(guildName: any) {
   return `Конфигурация для сервера "${guildName}" сохранена.`;
 };
 copy.admin.panelTitle = '🛠 Админ-панель сервера';
@@ -1605,7 +1608,7 @@ copy.admin.panelFieldRoles = 'Роли';
 copy.admin.panelFieldVisuals = 'Баннеры';
 copy.admin.panelSetupDone = 'Настроен';
 copy.admin.panelSetupPending = 'Не настроен';
-copy.admin.panelFeatures = function panelFeatures(plan) {
+copy.admin.panelFeatures = function panelFeatures(plan: any) {
   if (plan === 'premium') {
     return [
       '• всё из Free',
@@ -1629,20 +1632,20 @@ copy.admin.panelFeatures = function panelFeatures(plan) {
     '• базовая админка сервера'
   ].join('\n');
 };
-copy.admin.channelLine = function channelLine(label, value) {
+copy.admin.channelLine = function channelLine(label: any, value: any) {
   return `${label}: ${value || 'не задан'}`;
 };
-copy.admin.roleLine = function roleLine(label, value) {
+copy.admin.roleLine = function roleLine(label: any, value: any) {
   return `${label}: ${value || 'не задана'}`;
 };
-copy.admin.visualLine = function visualLine(label, value) {
+copy.admin.visualLine = function visualLine(label: any, value: any) {
   return `${label}: ${value || 'не задан'}`;
 };
-copy.admin.subscriptionUpdated = function subscriptionUpdated(plan) {
+copy.admin.subscriptionUpdated = function subscriptionUpdated(plan: any) {
   return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}.`;
 };
 
-copy.help.title = function title(plan) {
+copy.help.title = function title(plan: any) {
   return `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`;
 };
 copy.help.regularSection = 'Обычные команды';
@@ -1652,11 +1655,11 @@ copy.help.premiumAdminSection = 'Админ-команды в Premium';
 copy.help.freeSection = 'Доступно сейчас';
 copy.help.premiumSection = 'В Premium';
 copy.help.none = 'Нет доступных команд для этого раздела.';
-copy.help.line = function line(name, description) {
+copy.help.line = function line(name: any, description: any) {
   return `/${name} - ${description}`;
 };
 
-function copy107Hours(value) {
+function copy107Hours(value: any) {
   return `${Number(value || 0).toFixed(1)} ч`;
 }
 
@@ -1686,7 +1689,7 @@ copy.family = {
 copy.profile = {
   ...copy.profile,
   title: '👤 Профиль участника',
-  description: userId => `Информация о <@${userId}>`,
+  description: (userId: any) => `Информация о <@${userId}>`,
   fieldRoles: '📌 Роли семьи',
   fieldAutoRank: '📊 Авто-ранг',
   noRoles: 'Без семейной роли',
@@ -1704,10 +1707,10 @@ copy.stats = {
   pointsField: 'Очки',
   voiceField: 'Голос',
   hours: copy107Hours,
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${copy107Hours(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${copy107Hours(hours)} • ${points}/100`;
   }
 };
@@ -1720,7 +1723,7 @@ copy.ai = {
   nicknameMissingTarget: 'Для смены ника укажи пользователя и новый ник.',
   nicknameNoAccess: 'Для смены ника через AI нужны права администратора или Manage Nicknames.',
   nicknameTooLong: 'Новый ник должен быть от 1 до 32 символов.',
-  nicknameDone: (userId, nickname) => `AI изменил ник для <@${userId}> на **${nickname}**.`,
+  nicknameDone: (userId: any, nickname: any) => `AI изменил ник для <@${userId}> на **${nickname}**.`,
   nicknameFailed: 'AI не смог изменить ник. Проверь права бота и иерархию ролей.'
 };
 
@@ -1736,7 +1739,7 @@ copy.admin = {
 
 copy.help = {
   ...copy.help,
-  title: plan => `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
+  title: (plan: any) => `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
   regularSection: 'Обычные команды',
   adminSection: 'Команды администрации',
   premiumRegularSection: 'Обычные команды в Premium',
@@ -1744,10 +1747,10 @@ copy.help = {
   freeSection: 'Доступно сейчас',
   premiumSection: 'В Premium',
   none: 'Нет доступных команд для этого раздела.',
-  line: (name, description) => `/${name} - ${description}`
+  line: (name: any, description: any) => `/${name} - ${description}`
 };
 
-function release106CopyHours(value) {
+function release106CopyHours(value: any) {
   return `${Number(value || 0).toFixed(1)} ч`;
 }
 
@@ -1770,7 +1773,7 @@ copy.family = {
 copy.profile = {
   ...copy.profile,
   title: '👤 Профиль участника',
-  description: userId => `Информация о <@${userId}>`,
+  description: (userId: any) => `Информация о <@${userId}>`,
   fieldRoles: '📌 Роли семьи',
   fieldAutoRank: '📊 Авто-ранг',
   noRoles: 'Без семейной роли',
@@ -1788,10 +1791,10 @@ copy.stats = {
   pointsField: 'Очки',
   voiceField: 'Голос',
   hours: release106CopyHours,
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${release106CopyHours(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${release106CopyHours(hours)} • ${points}/100`;
   }
 };
@@ -1814,7 +1817,7 @@ copy.admin = {
 
 copy.help = {
   ...copy.help,
-  title: plan => `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
+  title: (plan: any) => `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`,
   regularSection: 'Обычные команды',
   adminSection: 'Команды администрации',
   premiumRegularSection: 'Обычные команды в Premium',
@@ -1822,9 +1825,9 @@ copy.help = {
   freeSection: 'Доступно сейчас',
   premiumSection: 'В Premium',
   none: 'Нет доступных команд для этого раздела.',
-  line: (name, description) => `/${name} - ${description}`
+  line: (name: any, description: any) => `/${name} - ${description}`
 };
-function finalHoursFormatter(value) {
+function finalHoursFormatter(value: any) {
   return `${Number(value || 0).toFixed(1)} ч`;
 }
 
@@ -1853,7 +1856,7 @@ copy.family = {
 copy.profile = {
   ...copy.profile,
   title: '👤 Профиль участника',
-  description(userId) {
+  description(userId: any) {
     return `Информация о <@${userId}>`;
   },
   fieldRoles: '📌 Роли семьи',
@@ -1880,10 +1883,10 @@ copy.stats = {
   pointsField: 'Очки',
   voiceField: 'Голос',
   hours: finalHoursFormatter,
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${finalHoursFormatter(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${finalHoursFormatter(hours)} • ${points}/100`;
   }
 };
@@ -1897,7 +1900,7 @@ copy.ai = {
 
 copy.help = {
   ...copy.help,
-  title(plan) {
+  title(plan: any) {
     return `📚 Команды бота • ${plan === 'premium' ? 'Premium — 5$' : 'Free — 0$'}`;
   },
   regularSection: 'Обычные команды',
@@ -1907,12 +1910,12 @@ copy.help = {
   freeSection: 'Доступно сейчас',
   premiumSection: 'В Premium',
   none: 'Нет доступных команд для этого раздела.',
-  line(name, description) {
+  line(name: any, description: any) {
     return `/${name} - ${description}`;
   }
 };
 
-function liveHoursFormatter(value) {
+function liveHoursFormatter(value: any) {
   return `${Number(value || 0).toFixed(1)} ч`;
 }
 
@@ -1953,7 +1956,7 @@ copy.family = {
 copy.profile = {
   ...copy.profile,
   title: 'Профиль участника',
-  description: userId => `Информация о <@${userId}>`,
+  description: (userId: any) => `Информация о <@${userId}>`,
   noRoles: 'Нет семейных ролей',
   fieldRoles: 'Роли семьи',
   fieldAutoRank: 'Авто-ранг'
@@ -1962,9 +1965,9 @@ copy.profile = {
 copy.ranks = {
   ...copy.ranks,
   autoDisabled: 'Авто-ранги выключены.',
-  manualOnly: roleName => `Авто-ранг работает в ручном режиме. Текущий ранг: ${roleName}.`,
-  alreadySynced: (roleName, score) => `Авто-ранг уже синхронизирован с ролью ${roleName}. Очки: ${score}.`,
-  autoStatus: (targetRoleName, score) => `Следующий авто-ранг: ${targetRoleName}. Очки: ${score}.`,
+  manualOnly: (roleName: any) => `Авто-ранг работает в ручном режиме. Текущий ранг: ${roleName}.`,
+  alreadySynced: (roleName: any, score: any) => `Авто-ранг уже синхронизирован с ролью ${roleName}. Очки: ${score}.`,
+  autoStatus: (targetRoleName: any, score: any) => `Следующий авто-ранг: ${targetRoleName}. Очки: ${score}.`,
   autoUnavailable: 'Авто-ранг пока не определён.'
 };
 
@@ -1977,7 +1980,7 @@ copy.help = {
   freeSection: 'Доступно сейчас',
   premiumSection: 'В Premium',
   none: 'Нет доступных команд для этого раздела.',
-  line: (name, description) => `/${name} - ${description}`
+  line: (name: any, description: any) => `/${name} - ${description}`
 };
 
 copy.admin = {
@@ -1995,7 +1998,7 @@ copy.admin = {
   panelSetupPending: 'Не настроен'
 };
 
-copy.admin.panelFeatures = function panelFeatures(plan) {
+copy.admin.panelFeatures = function panelFeatures(plan: any) {
   if (plan === 'premium') {
     return [
       '• всё из Free',
@@ -2031,7 +2034,7 @@ copy.welcome = {
   autorole: 'Автороль',
   messageCleared: 'Текст welcome очищен.',
   testSent: 'Тестовое welcome-сообщение отправлено.',
-  updated: label => `Настройки welcome обновлены: ${label}.`
+  updated: (label: any) => `Настройки welcome обновлены: ${label}.`
 };
 
 copy.reports = {
@@ -2040,9 +2043,9 @@ copy.reports = {
   periodWeekly: 'Weekly',
   periodMonthly: 'Monthly',
   channelMissing: 'Сначала укажи канал отчётов или передай канал в команду.',
-  enabled: (period, channelId) => `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`,
-  disabled: period => `${period} отчёт выключен.`,
-  sent: (period, channelId) => `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`
+  enabled: (period: any, channelId: any) => `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`,
+  disabled: (period: any) => `${period} отчёт выключен.`,
+  sent: (period: any, channelId: any) => `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`
 };
 
 copy.verification = {
@@ -2060,13 +2063,13 @@ copy.verification = {
   rulesButton: 'Правила',
   verifyButton: 'Подтвердить',
   applyButton: 'Подать заявку',
-  status: (enabled, roleId, questionnaireEnabled) => [
+  status: (enabled: any, roleId: any, questionnaireEnabled: any) => [
     `Статус: ${enabled ? 'включено' : 'выключено'}`,
     `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
     `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
   ].join('\n'),
-  updated: label => `Настройки verification обновлены: ${label}.`,
-  success: roleId => `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`
+  updated: (label: any) => `Настройки verification обновлены: ${label}.`,
+  success: (roleId: any) => `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`
 };
 
 copy.roleMenus = {
@@ -2074,12 +2077,12 @@ copy.roleMenus = {
   title: 'Меню ролей',
   empty: 'Role-menu пока не созданы.',
   notFound: 'Такое role-menu не найдено.',
-  created: menuId => `Role-menu \`${menuId}\` создано.`,
-  itemAdded: (menuId, roleId) => `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`,
-  itemRemoved: (menuId, roleId) => `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`,
-  published: (menuId, channelId) => `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`,
-  roleAdded: roleId => `Роль <@&${roleId}> выдана.`,
-  roleRemoved: roleId => `Роль <@&${roleId}> снята.`
+  created: (menuId: any) => `Role-menu \`${menuId}\` создано.`,
+  itemAdded: (menuId: any, roleId: any) => `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`,
+  itemRemoved: (menuId: any, roleId: any) => `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`,
+  published: (menuId: any, channelId: any) => `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`,
+  roleAdded: (roleId: any) => `Роль <@&${roleId}> выдана.`,
+  roleRemoved: (roleId: any) => `Роль <@&${roleId}> снята.`
 };
 
 copy.customCommands = {
@@ -2087,8 +2090,8 @@ copy.customCommands = {
   title: 'Пользовательские команды',
   empty: 'Пользовательские триггеры пока не настроены.',
   notFound: 'Такой триггер не найден.',
-  added: name => `Триггер \`${name}\` сохранён.`,
-  removed: name => `Триггер \`${name}\` удалён.`
+  added: (name: any) => `Триггер \`${name}\` сохранён.`,
+  removed: (name: any) => `Триггер \`${name}\` удалён.`
 };
 
 copy.stats = {
@@ -2102,17 +2105,17 @@ copy.stats = {
   pointsField: 'Очки',
   voiceField: 'Голос',
   hours: liveHoursFormatter,
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${liveHoursFormatter(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${liveHoursFormatter(hours)} • ${points}/100`;
   }
 };
 
 copy.ai = {
   ...copy.ai,
-  advisorTitle: displayName => `AI-советник: ${displayName}`,
+  advisorTitle: (displayName: any) => `AI-советник: ${displayName}`,
   advisorFooter: 'BRHD • Phoenix • AI Advisor',
   advisorUnavailable: 'AI-советник временно недоступен.',
   commandsOverviewTitle: 'Что тебе доступно сейчас',
@@ -2120,7 +2123,7 @@ copy.ai = {
   nicknameMissingTarget: 'Для смены ника укажи пользователя и новый ник.',
   nicknameNoAccess: 'Для смены ника через AI нужны права администратора или Manage Nicknames.',
   nicknameTooLong: 'Новый ник должен быть от 1 до 32 символов.',
-  nicknameDone: (userId, nickname) => `AI изменил ник для <@${userId}> на **${nickname}**.`,
+  nicknameDone: (userId: any, nickname: any) => `AI изменил ник для <@${userId}> на **${nickname}**.`,
   nicknameFailed: 'AI не смог изменить ник. Проверь права бота и иерархию ролей.'
 };
 
@@ -2162,16 +2165,16 @@ copy.moderation = {
   invalidSeconds: 'Укажи значение от 0 до 21600 секунд.',
   invalidConfirmation: 'Для полной очистки канала нужно написать `CLEAR`.',
   notTextChannel: 'Эта команда работает только с текстовыми каналами сервера.',
-  purgeDone(count, channelId) {
+  purgeDone(count: any, channelId: any) {
     return `Удалено сообщений: **${count}** в канале <#${channelId}>.`;
   },
-  purgeUserDone(count, userId, channelId) {
+  purgeUserDone(count: any, userId: any, channelId: any) {
     return `Удалено сообщений участника <@${userId}>: **${count}** в канале <#${channelId}>.`;
   },
-  purgeUserScanDone(count, matched, userId, channelId) {
+  purgeUserScanDone(count: any, matched: any, userId: any, channelId: any) {
     return `Удалено сообщений участника <@${userId}>: **${count}** из **${matched}** найденных в канале <#${channelId}>.`;
   },
-  purgeUserDetailed(count, matched, blocked, system, userId, channelId) {
+  purgeUserDetailed(count: any, matched: any, blocked: any, system: any, userId: any, channelId: any) {
     const details = [
       `Удалено сообщений участника <@${userId}>: **${count}**`,
       `Найдено совпадений: **${matched}**`,
@@ -2181,59 +2184,59 @@ copy.moderation = {
     if (system > 0) details.push(`Системных записей Discord: **${system}**`);
     return details.join(' • ');
   },
-  clearChannelDone(oldChannelId, newChannelId) {
+  clearChannelDone(oldChannelId: any, newChannelId: any) {
     return `Канал <#${oldChannelId}> очищен. Новый канал: <#${newChannelId}>.`;
   },
-  clearChannelPartial(channelId, deleted, skipped) {
+  clearChannelPartial(channelId: any, deleted: any, skipped: any) {
     return `Канал <#${channelId}> очищен частично. Удалено: **${deleted}**. Осталось неудаляемых или системных сообщений: **${skipped}**.`;
   },
-  muteDone(userId, roleId) {
+  muteDone(userId: any, roleId: any) {
     return `Участнику <@${userId}> выдан мут <@&${roleId}>.`;
   },
-  unmuteDone(userId) {
+  unmuteDone(userId: any) {
     return `С участника <@${userId}> снят мут.`;
   },
-  slowmodeDone(channelId, seconds) {
+  slowmodeDone(channelId: any, seconds: any) {
     return seconds > 0
       ? `Slowmode для <#${channelId}> установлен на **${seconds}** сек.`
       : `Slowmode для <#${channelId}> отключён.`;
   },
-  lockDone(channelId) {
+  lockDone(channelId: any) {
     return `Канал <#${channelId}> закрыт для @everyone.`;
   },
-  unlockDone(channelId) {
+  unlockDone(channelId: any) {
     return `Канал <#${channelId}> снова открыт для @everyone.`;
   },
-  warnHistoryTitle(userTag) {
+  warnHistoryTitle(userTag: any) {
     return `История выговоров: ${userTag}`;
   },
   warnHistoryEmpty: 'У участника пока нет сохранённых выговоров.',
-  warnHistoryLine(index, entry) {
+  warnHistoryLine(index: any, entry: any) {
     return `${index + 1}. ${entry.reason} • модератор <@${entry.moderatorId}> • ${entry.createdAt}`;
   },
-  clearWarnsDone(userId, count) {
+  clearWarnsDone(userId: any, count: any) {
     return `Для <@${userId}> очищено выговоров: **${count}**.`;
   },
-  actionFailed(action) {
+  actionFailed(action: any) {
     return `Не удалось выполнить действие: ${action}. Проверь права бота и иерархию ролей.`;
   },
-  kickRolessDone(kicked, failed) {
+  kickRolessDone(kicked: any, failed: any) {
     return `Чистка безрольных завершена: кикнуто **${kicked}**, ошибок **${failed}**.`;
   }
 };
 
 copy.security = copy.security || {};
-copy.security.banListLine = function banListLine(index, ban) {
+copy.security.banListLine = function banListLine(index: any, ban: any) {
   const username = ban?.user?.username || 'unknown';
   const reason = ban?.reason || 'без причины';
   return `${index + 1}. <@${ban.user.id}> • \`${ban.user.id}\` • ${username} • ${reason}`;
 };
-copy.security.blacklistLine = function blacklistLine(index, entry) {
+copy.security.blacklistLine = function blacklistLine(index: any, entry: any) {
   return `${index + 1}. <@${entry.userId}> • \`${entry.userId}\` • ${entry.reason}`;
 };
 
 copy.automod = copy.automod || {};
-copy.automod.ruleLabel = function ruleLabel(rule) {
+copy.automod.ruleLabel = function ruleLabel(rule: any) {
   const labels = {
     invites: 'Инвайты',
     links: 'Ссылки',
@@ -2242,9 +2245,9 @@ copy.automod.ruleLabel = function ruleLabel(rule) {
     spam: 'Флуд',
     badWords: 'Стоп-слова'
   };
-  return labels[rule] || rule;
+  return labels[rule as keyof typeof labels] || rule;
 };
-copy.automod.targetLabel = function targetLabel(target) {
+copy.automod.targetLabel = function targetLabel(target: any) {
   const labels = {
     capsPercent: 'Порог капса',
     capsMinLength: 'Мин. длина капса',
@@ -2252,26 +2255,26 @@ copy.automod.targetLabel = function targetLabel(target) {
     spamCount: 'Лимит флуда',
     spamWindowSeconds: 'Окно флуда'
   };
-  return labels[target] || target;
+  return labels[target as keyof typeof labels] || target;
 };
-copy.automod.notice = function notice(userId, rule, detail = '') {
+copy.automod.notice = function notice(userId: any, rule: any, detail = '') {
   return `<@${userId}>, automod удалил сообщение по правилу **${rule}**${detail ? ` (${detail})` : ''}.`;
 };
-copy.automod.toggleDone = function toggleDone(rule, enabled) {
+copy.automod.toggleDone = function toggleDone(rule: any, enabled: any) {
   return `Правило automod **${rule}** теперь **${enabled ? 'включено' : 'выключено'}**.`;
 };
-copy.automod.limitDone = function limitDone(target, value) {
+copy.automod.limitDone = function limitDone(target: any, value: any) {
   return `Порог automod **${target}** обновлён: **${value}**.`;
 };
-copy.automod.wordAdded = function wordAdded(word) {
+copy.automod.wordAdded = function wordAdded(word: any) {
   return `Слова **${word}** добавлены в стоп-лист automod.`;
 };
-copy.automod.wordRemoved = function wordRemoved(word) {
+copy.automod.wordRemoved = function wordRemoved(word: any) {
   return `Слова **${word}** удалены из стоп-листа automod.`;
 };
 copy.automod.wordsCleared = 'Список стоп-слов automod очищен.';
 copy.automod.wordMissing = 'Укажи слово или список слов через запятую для этой операции.';
-copy.automod.actionUpdated = function actionUpdated(mode) {
+copy.automod.actionUpdated = function actionUpdated(mode: any) {
   return `Режим наказания automod обновлён: ${mode}.`;
 };
 
@@ -2287,7 +2290,7 @@ Object.assign(copy.welcome, {
   messageCleared: 'Текст welcome очищен.',
   testSent: 'Тестовое welcome-сообщение отправлено.'
 });
-copy.welcome.updated = function updated(label) {
+copy.welcome.updated = function updated(label: any) {
   return `Настройки welcome обновлены: ${label}.`;
 };
 
@@ -2298,10 +2301,10 @@ Object.assign(copy.reactionRoles, {
   notFound: 'Такая reaction role не найдена.',
   messageMissing: 'Не удалось найти сообщение для этой reaction role.'
 });
-copy.reactionRoles.added = function added(emoji, roleId, messageId) {
+copy.reactionRoles.added = function added(emoji: any, roleId: any, messageId: any) {
   return `Reaction role добавлена: ${emoji} -> <@&${roleId}> для сообщения \`${messageId}\`.`;
 };
-copy.reactionRoles.removed = function removed(emoji, messageId) {
+copy.reactionRoles.removed = function removed(emoji: any, messageId: any) {
   return `Reaction role удалена: ${emoji} для сообщения \`${messageId}\`.`;
 };
 
@@ -2312,13 +2315,13 @@ Object.assign(copy.reports, {
   periodMonthly: 'Monthly',
   channelMissing: 'Сначала укажи канал отчётов или передай канал в команду.'
 });
-copy.reports.enabled = function enabled(period, channelId) {
+copy.reports.enabled = function enabled(period: any, channelId: any) {
   return `${period} отчёт включён${channelId ? ` в <#${channelId}>` : ''}.`;
 };
-copy.reports.disabled = function disabled(period) {
+copy.reports.disabled = function disabled(period: any) {
   return `${period} отчёт выключен.`;
 };
-copy.reports.sent = function sent(period, channelId) {
+copy.reports.sent = function sent(period: any, channelId: any) {
   return `${period} отчёт отправлен${channelId ? ` в <#${channelId}>` : ''}.`;
 };
 
@@ -2338,17 +2341,17 @@ Object.assign(copy.verification, {
   verifyButton: 'Подтвердить',
   applyButton: 'Подать заявку'
 });
-copy.verification.status = function status(enabled, roleId, questionnaireEnabled) {
+copy.verification.status = function status(enabled: any, roleId: any, questionnaireEnabled: any) {
   return [
     `Статус: ${enabled ? 'включено' : 'выключено'}`,
     `Роль после подтверждения: ${roleId ? `<@&${roleId}>` : 'не задана'}`,
     `Стартовая анкета: ${questionnaireEnabled ? 'включена' : 'выключена'}`
   ].join('\n');
 };
-copy.verification.updated = function updated(label) {
+copy.verification.updated = function updated(label: any) {
   return `Настройки verification обновлены: ${label}.`;
 };
-copy.verification.success = function success(roleId) {
+copy.verification.success = function success(roleId: any) {
   return `Подтверждение пройдено. Роль выдана${roleId ? `: <@&${roleId}>` : '.'}`;
 };
 
@@ -2358,22 +2361,22 @@ Object.assign(copy.roleMenus, {
   empty: 'Role-menu пока не созданы.',
   notFound: 'Такое role-menu не найдено.'
 });
-copy.roleMenus.created = function created(menuId) {
+copy.roleMenus.created = function created(menuId: any) {
   return `Role-menu \`${menuId}\` создано.`;
 };
-copy.roleMenus.itemAdded = function itemAdded(menuId, roleId) {
+copy.roleMenus.itemAdded = function itemAdded(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> добавлена в menu \`${menuId}\`.`;
 };
-copy.roleMenus.itemRemoved = function itemRemoved(menuId, roleId) {
+copy.roleMenus.itemRemoved = function itemRemoved(menuId: any, roleId: any) {
   return `Роль <@&${roleId}> удалена из menu \`${menuId}\`.`;
 };
-copy.roleMenus.published = function published(menuId, channelId) {
+copy.roleMenus.published = function published(menuId: any, channelId: any) {
   return `Role-menu \`${menuId}\` опубликовано в <#${channelId}>.`;
 };
-copy.roleMenus.roleAdded = function roleAdded(roleId) {
+copy.roleMenus.roleAdded = function roleAdded(roleId: any) {
   return `Роль <@&${roleId}> выдана.`;
 };
-copy.roleMenus.roleRemoved = function roleRemoved(roleId) {
+copy.roleMenus.roleRemoved = function roleRemoved(roleId: any) {
   return `Роль <@&${roleId}> снята.`;
 };
 
@@ -2383,10 +2386,10 @@ Object.assign(copy.customCommands, {
   empty: 'Пользовательские триггеры пока не настроены.',
   notFound: 'Такой триггер не найден.'
 });
-copy.customCommands.added = function added(name) {
+copy.customCommands.added = function added(name: any) {
   return `Триггер \`${name}\` сохранён.`;
 };
-copy.customCommands.removed = function removed(name) {
+copy.customCommands.removed = function removed(name: any) {
   return `Триггер \`${name}\` удалён.`;
 };
 
@@ -2400,19 +2403,19 @@ copy.stats = {
   voiceEmpty: 'Пока нет активности в голосовых каналах.',
   pointsField: 'Очки',
   voiceField: 'Голос',
-  hours(value) {
+  hours(value: any) {
     return `${Number(value || 0).toFixed(1)} ч`;
   },
-  leaderboardLine(index, member, roleName, points, voiceHours) {
+  leaderboardLine(index: any, member: any, roleName: any, points: any, voiceHours: any) {
     return `${index + 1}. ${roleName} • <@${member.id}> • ${points}/100 • ${this.hours(voiceHours)}`;
   },
-  voiceLine(index, member, hours, points) {
+  voiceLine(index: any, member: any, hours: any, points: any) {
     return `${index + 1}. <@${member.id}> • ${this.hours(hours)} • ${points}/100`;
   }
 };
 
 copy.ai = copy.ai || {};
-copy.ai.advisorTitle = function advisorTitle(displayName) {
+copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
 copy.ai.advisorFooter = 'BRHD / Phoenix / AI Advisor';
@@ -2422,7 +2425,7 @@ copy.ai.commandsOverviewEmpty = 'Не нашёл доступных команд
 copy.ai.nicknameMissingTarget = 'Для смены ника укажи пользователя и новый ник.';
 copy.ai.nicknameNoAccess = 'Для смены ника через AI нужны права администратора или Manage Nicknames.';
 copy.ai.nicknameTooLong = 'Новый ник должен быть от 1 до 32 символов.';
-copy.ai.nicknameDone = function nicknameDone(userId, nickname) {
+copy.ai.nicknameDone = function nicknameDone(userId: any, nickname: any) {
   return `AI изменил ник для <@${userId}> на **${nickname}**.`;
 };
 copy.ai.nicknameFailed = 'AI не смог изменить ник. Проверь права бота и иерархию ролей.';
@@ -2445,10 +2448,10 @@ Object.assign(copy.admin, {
   panelSetupDone: 'Настроен',
   panelSetupPending: 'Не настроен'
 });
-copy.admin.setupDescription = function setupDescription(guildName) {
+copy.admin.setupDescription = function setupDescription(guildName: any) {
   return `Конфигурация для сервера "${guildName}" сохранена.`;
 };
-copy.admin.panelFeatures = function panelFeatures(plan) {
+copy.admin.panelFeatures = function panelFeatures(plan: any) {
   if (plan === 'premium') {
     return [
       '• всё из Free',
@@ -2472,21 +2475,21 @@ copy.admin.panelFeatures = function panelFeatures(plan) {
     '• базовая админка сервера'
   ].join('\n');
 };
-copy.admin.channelLine = function channelLine(label, value) {
+copy.admin.channelLine = function channelLine(label: any, value: any) {
   return `${label}: ${value || 'не задан'}`;
 };
-copy.admin.roleLine = function roleLine(label, value) {
+copy.admin.roleLine = function roleLine(label: any, value: any) {
   return `${label}: ${value || 'не задана'}`;
 };
-copy.admin.visualLine = function visualLine(label, value) {
+copy.admin.visualLine = function visualLine(label: any, value: any) {
   return `${label}: ${value || 'не задан'}`;
 };
-copy.admin.subscriptionUpdated = function subscriptionUpdated(plan) {
+copy.admin.subscriptionUpdated = function subscriptionUpdated(plan: any) {
   return `Подписка сервера обновлена: ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}.`;
 };
 
 copy.help = copy.help || {};
-copy.help.title = function title(plan) {
+copy.help.title = function title(plan: any) {
   return `📚 Команды бота • ${plan === 'premium' ? 'Premium - 5$' : 'Free - 0$'}`;
 };
 copy.help.regularSection = 'Обычные команды';
@@ -2496,6 +2499,6 @@ copy.help.premiumAdminSection = 'Админ-команды в Premium';
 copy.help.freeSection = 'Доступно сейчас';
 copy.help.premiumSection = 'В Premium';
 copy.help.none = 'Нет доступных команд для этого раздела.';
-copy.help.line = function line(name, description) {
+copy.help.line = function line(name: any, description: any) {
   return `/${name} - ${description}`;
 };

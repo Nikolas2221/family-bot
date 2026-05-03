@@ -7,6 +7,7 @@ async function main() {
   const { main: runDatabaseTests } = require('./database.test');
   const { main: runConfigTests } = require('./config.test');
   const { main: runEmbedsTests } = require('./embeds.test');
+  const { main: runMojibakeTests } = require('./mojibake.test');
   const { main: runReleaseNotesTests } = require('./release-notes.test');
   const { main: runRanksTests } = require('./ranks.test');
   const { main: runRuntimeAccessHelpersTests } = require('./runtime-access-helpers.test');
@@ -28,6 +29,7 @@ async function main() {
   await runDatabaseTests();
   await runConfigTests();
   await runEmbedsTests();
+  await runMojibakeTests();
   await runReleaseNotesTests();
   await runRanksTests();
   await runRuntimeAccessHelpersTests();

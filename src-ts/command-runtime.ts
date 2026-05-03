@@ -454,7 +454,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       const actionModeLabel = mode === 'hard' ? 'жёсткий' : 'мягкий';
       database.updateGuildSettings(guildId, { automod: { actionMode: mode } });
       await interaction.reply(ephemeral({
-        content: copy.automod.actionUpdated(mode === 'hard' ? 'Р¶С‘СЃС‚РєРёР№' : 'РјСЏРіРєРёР№'),
+        content: copy.automod.actionUpdated(mode === 'hard' ? 'жёсткий' : 'мягкий'),
         embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
       }));
       return true;

@@ -6,28 +6,28 @@ import type {
 } from './types';
 
 const POSITIVE_KEYWORDS = [
-  'Р°РєС‚РёРІ',
-  'РѕРЅР»Р°Р№РЅ',
-  'РїРѕРјРѕРі',
-  'РїРѕРјРѕС‰',
-  'РґСЂСѓРі',
-  'РєРѕРјР°РЅРґ',
-  'РѕС‚РІРµС‚СЃС‚РІ',
-  'Р°РґРµРєРІР°С‚',
-  'РѕРїС‹С‚',
+  'актив',
+  'онлайн',
+  'помог',
+  'помощ',
+  'друг',
+  'команд',
+  'ответств',
+  'адекват',
+  'опыт',
   'rp',
-  'СЂРї'
+  'рп'
 ] as const;
 
 const NEGATIVE_KEYWORDS = [
-  'С‚РІРёРЅРє',
-  'РѕР±РјР°РЅ',
-  'С‚РѕРєСЃ',
-  'РѕСЃРєРѕСЂР±',
-  'С‡РёС‚',
-  'СЃР»РёРІ',
-  'СЃРїР°Рј',
-  'РєРѕРЅС„Р»РёРєС‚'
+  'твинк',
+  'обман',
+  'токс',
+  'оскорб',
+  'чит',
+  'слив',
+  'спам',
+  'конфликт'
 ] as const;
 
 function normalizeText(value: unknown): string {
@@ -45,9 +45,9 @@ function scoreApplication(application: ApplicationAnalysisInput) {
 }
 
 function buildRecommendation(score: number): string {
-  if (score >= 6) return 'РџР РРќРЇРўР¬';
-  if (score >= 3) return 'Р РђРЎРЎРњРћРўР Р•РўР¬';
-  return 'РћРўРљР›РћРќРРўР¬';
+  if (score >= 6) return 'ПРИНЯТЬ';
+  if (score >= 3) return 'РАССМОТРЕТЬ';
+  return 'ОТКЛОНИТЬ';
 }
 
 function buildApplicationAnalysis(application: ApplicationAnalysisInput): string {
@@ -57,46 +57,46 @@ function buildApplicationAnalysis(application: ApplicationAnalysisInput): string
   const risks: string[] = [];
 
   if (positiveHits.length) {
-    strengths.push(`Р•СЃС‚СЊ РїРѕР»РµР·РЅС‹Рµ СЃРёРіРЅР°Р»С‹: ${positiveHits.slice(0, 4).join(', ')}.`);
+    strengths.push(`Есть полезные сигналы: ${positiveHits.slice(0, 4).join(', ')}.`);
   }
 
   if (normalizeText(application.text).length >= 180) {
-    strengths.push('Р—Р°СЏРІРєР° РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїРѕРґСЂРѕР±РЅР°СЏ Рё РЅРµ РІС‹РіР»СЏРґРёС‚ РїСѓСЃС‚РѕР№.');
+    strengths.push('Заявка достаточно подробная и не выглядит пустой.');
   } else {
-    weaknesses.push('Р—Р°СЏРІРєР° РєРѕСЂРѕС‚РєР°СЏ, РјРѕС‚РёРІР°С†РёСЏ СЂР°СЃРєСЂС‹С‚Р° СЃР»Р°Р±Рѕ.');
+    weaknesses.push('Заявка короткая, мотивация раскрыта слабо.');
   }
 
   if (!positiveHits.length) {
-    weaknesses.push('РњР°Р»Рѕ РєРѕРЅРєСЂРµС‚РёРєРё РїСЂРѕ РїРѕР»СЊР·Сѓ РґР»СЏ СЃРµРјСЊРё Рё Р°РєС‚РёРІРЅРѕСЃС‚СЊ.');
+    weaknesses.push('Мало конкретики про пользу для семьи и активность.');
   }
 
   if (negativeHits.length) {
-    risks.push(`Р•СЃС‚СЊ СЂРёСЃРє РїРѕ С„РѕСЂРјСѓР»РёСЂРѕРІРєР°Рј: ${negativeHits.slice(0, 4).join(', ')}.`);
+    risks.push(`Есть риск по формулировкам: ${negativeHits.slice(0, 4).join(', ')}.`);
   }
 
   if (!risks.length) {
-    risks.push('РЇРІРЅС‹С… РєСЂР°СЃРЅС‹С… С„Р»Р°РіРѕРІ РїРѕ С‚РµРєСЃС‚Сѓ РЅРµ РІРёРґРЅРѕ, РЅРѕ РЅСѓР¶РЅР° СЂСѓС‡РЅР°СЏ РїСЂРѕРІРµСЂРєР° РїРѕРІРµРґРµРЅРёСЏ РІ РёРіСЂРµ.');
+    risks.push('Явных красных флагов по тексту не видно, но нужна ручная проверка поведения в игре.');
   }
 
   if (!strengths.length) {
-    strengths.push('Р•СЃС‚СЊ Р±Р°Р·РѕРІР°СЏ РјРѕС‚РёРІР°С†РёСЏ РІСЃС‚СѓРїРёС‚СЊ, РЅРѕ Р±РµР· СЃРёР»СЊРЅС‹С… Р°СЂРіСѓРјРµРЅС‚РѕРІ.');
+    strengths.push('Есть базовая мотивация вступить, но без сильных аргументов.');
   }
 
   if (!weaknesses.length) {
-    weaknesses.push('РљСЂРёС‚РёС‡РЅС‹С… СЃР»Р°Р±С‹С… РјРµСЃС‚ РїРѕ С‚РµРєСЃС‚Сѓ РЅРµ РІРёРґРЅРѕ.');
+    weaknesses.push('Критичных слабых мест по тексту не видно.');
   }
 
   return [
-    '1. РЎРёР»СЊРЅС‹Рµ СЃС‚РѕСЂРѕРЅС‹',
+    '1. Сильные стороны',
     `- ${strengths.join('\n- ')}`,
     '',
-    '2. РЎР»Р°Р±С‹Рµ СЃС‚РѕСЂРѕРЅС‹',
+    '2. Слабые стороны',
     `- ${weaknesses.join('\n- ')}`,
     '',
-    '3. Р РёСЃРє',
+    '3. Риск',
     `- ${risks.join('\n- ')}`,
     '',
-    `4. Р РµРєРѕРјРµРЅРґР°С†РёСЏ: ${buildRecommendation(score)}`
+    `4. Рекомендация: ${buildRecommendation(score)}`
   ].join('\n');
 }
 
@@ -108,42 +108,42 @@ function buildOfflineReply(userPrompt: string): string {
     return copy.ai.emptyPrompt;
   }
 
-  if (promptLower.includes('Р·Р°СЏРІ') && promptLower.includes('СЃРµРј')) {
+  if (promptLower.includes('заяв') && promptLower.includes('сем')) {
     return [
-      'РљРѕСЂРѕС‚РєРёР№ С€Р°Р±Р»РѕРЅ Р·Р°СЏРІРєРё:',
-      '1. РљС‚Рѕ С‚С‹ Рё РєР°РєРѕР№ Сѓ С‚РµР±СЏ РЅРёРє.',
-      '2. РЎРєРѕР»СЊРєРѕ С‚РµР±Рµ Р»РµС‚ Рё РєР°РєРѕР№ Сѓ С‚РµР±СЏ РѕРЅР»Р°Р№РЅ.',
-      '3. Р§РµРј Р±СѓРґРµС€СЊ РїРѕР»РµР·РµРЅ СЃРµРјСЊРµ.',
-      '4. РџРѕС‡РµРјСѓ С…РѕС‡РµС€СЊ РёРјРµРЅРЅРѕ Рє РЅР°Рј.',
-      '5. Р§РµРј РѕС‚Р»РёС‡Р°РµС€СЊСЃСЏ РѕС‚ РґСЂСѓРіРёС… РєР°РЅРґРёРґР°С‚РѕРІ.'
+      'Короткий шаблон заявки:',
+      '1. Кто ты и какой у тебя ник.',
+      '2. Сколько тебе лет и какой у тебя онлайн.',
+      '3. Чем будешь полезен семье.',
+      '4. Почему хочешь именно к нам.',
+      '5. Чем отличаешься от других кандидатов.'
     ].join('\n');
   }
 
-  if (promptLower.includes('РїСЂРёРІРµС‚') || promptLower.includes('Р·РґСЂР°РІ')) {
-    return 'РџСЂРёРІРµС‚. РЇ РѕС„С„Р»Р°Р№РЅ-РїРѕРјРѕС‰РЅРёРє СЃРµРјСЊРё: РјРѕРіСѓ РїРѕРґСЃРєР°Р·Р°С‚СЊ С‚РµРєСЃС‚, РёРґРµСЋ РѕР±СЉСЏРІР»РµРЅРёСЏ РёР»Рё РєРѕСЂРѕС‚РєРёР№ СЂР°Р·Р±РѕСЂ СЃРёС‚СѓР°С†РёРё.';
+  if (promptLower.includes('привет') || promptLower.includes('здрав')) {
+    return 'Привет. Я оффлайн-помощник семьи: могу подсказать текст, идею объявления или короткий разбор ситуации.';
   }
 
-  if (promptLower.includes('РѕР±СЉСЏРІ') || promptLower.includes('Р°РЅРѕРЅСЃ')) {
+  if (promptLower.includes('объяв') || promptLower.includes('анонс')) {
     return [
-      'Р§РµСЂРЅРѕРІРёРє РѕР±СЉСЏРІР»РµРЅРёСЏ:',
-      'РЎРµРјСЊСЏ РѕС‚РєСЂС‹РІР°РµС‚ РЅР°Р±РѕСЂ Р°РєС‚РёРІРЅС‹С… РёРіСЂРѕРєРѕРІ. РќСѓР¶РЅС‹ Р°РґРµРєРІР°С‚РЅРѕСЃС‚СЊ, РѕРЅР»Р°Р№РЅ Рё РіРѕС‚РѕРІРЅРѕСЃС‚СЊ СЂР°Р±РѕС‚Р°С‚СЊ РІ РєРѕРјР°РЅРґРµ.',
-      'Р•СЃР»Рё С…РѕС‡РµС€СЊ РІСЃС‚СѓРїРёС‚СЊ, РїРѕРґР°Р№ Р·Р°СЏРІРєСѓ С‡РµСЂРµР· РїР°РЅРµР»СЊ СЃРµРјСЊРё Рё РєРѕСЂРѕС‚РєРѕ СЂР°СЃСЃРєР°Р¶Рё Рѕ СЃРµР±Рµ.'
+      'Черновик объявления:',
+      'Семья открывает набор активных игроков. Нужны адекватность, онлайн и готовность работать в команде.',
+      'Если хочешь вступить, подай заявку через панель семьи и коротко расскажи о себе.'
     ].join('\n');
   }
 
-  if (promptLower.includes('РєРѕРЅС„Р»РёРєС‚') || promptLower.includes('СЃСЃРѕСЂР°')) {
+  if (promptLower.includes('конфликт') || promptLower.includes('ссора')) {
     return [
-      'РЎРїРѕРєРѕР№РЅС‹Р№ РІР°СЂРёР°РЅС‚ РѕС‚РІРµС‚Р°:',
-      'Р”Р°РІР°Р№ Р±РµР· СЌРјРѕС†РёР№. РЎРЅР°С‡Р°Р»Р° С„РёРєСЃРёСЂСѓРµРј, С‡С‚Рѕ РёРјРµРЅРЅРѕ РїСЂРѕРёР·РѕС€Р»Рѕ, РїРѕС‚РѕРј СѓР¶Рµ СЂРµС€Р°РµРј РІРѕРїСЂРѕСЃ РїРѕ С„Р°РєС‚Р°Рј.',
-      'Р•СЃР»Рё РЅСѓР¶РЅРѕ, РїРѕРґРєР»СЋС‡Р°РµРј СЃС‚Р°СЂС€РёС… Рё Р·Р°РєСЂС‹РІР°РµРј СЃРёС‚СѓР°С†РёСЋ Р±РµР· Р»РёС€РЅРµРіРѕ С€СѓРјР°.'
+      'Спокойный вариант ответа:',
+      'Давай без эмоций. Сначала фиксируем, что именно произошло, потом уже решаем вопрос по фактам.',
+      'Если нужно, подключаем старших и закрываем ситуацию без лишнего шума.'
     ].join('\n');
   }
 
   return [
-    'РћС„С„Р»Р°Р№РЅ-РїРѕРјРѕС‰РЅРёРє СЃРѕРІРµС‚СѓРµС‚:',
-    `- РЎС„РѕСЂРјСѓР»РёСЂСѓР№ Р·Р°РїСЂРѕСЃ РєРѕСЂРѕС‡Рµ Рё РїСЂРµРґРјРµС‚РЅРѕ: "${prompt.slice(0, 120)}"`,
-    '- Р•СЃР»Рё РЅСѓР¶РµРЅ С‚РµРєСЃС‚, СЃСЂР°Р·Сѓ СѓРєР°Р¶Рё С„РѕСЂРјР°С‚: СЃРѕРѕР±С‰РµРЅРёРµ, РѕР±СЉСЏРІР»РµРЅРёРµ, Р·Р°СЏРІРєР° РёР»Рё РѕС‚РІРµС‚ РёРіСЂРѕРєСѓ.',
-    '- Р•СЃР»Рё РЅСѓР¶РµРЅ СЂР°Р·Р±РѕСЂ, РґР°Р№ С„Р°РєС‚С‹: РєС‚Рѕ, С‡С‚Рѕ СЃРґРµР»Р°Р», РєР°РєРѕР№ РЅСѓР¶РµРЅ РёС‚РѕРі.'
+    'Оффлайн-помощник советует:',
+    `- Сформулируй запрос короче и предметно: "${prompt.slice(0, 120)}"`,
+    '- Если нужен текст, сразу укажи формат: сообщение, объявление, заявка или ответ игроку.',
+    '- Если нужен разбор, дай факты: кто, что сделал, какой нужен итог.'
   ].join('\n');
 }
 
@@ -165,7 +165,7 @@ function buildMemberRecommendation(profile: MemberRecommendationInput): string {
   const activityScore = Math.max(0, Number(profile.activityScore) || 0);
   const voiceHours = hoursFromMinutes(profile.voiceMinutes);
   const inactiveDays = inactiveDaysSince(profile.lastSeenAt);
-  const currentRoleName = normalizeText(profile.currentRoleName) || 'РќРµС‚ СЂРѕР»Рё';
+  const currentRoleName = normalizeText(profile.currentRoleName) || 'Нет роли';
   const autoTargetRoleName = normalizeText(profile.autoTargetRoleName);
 
   const strengths: string[] = [];
@@ -173,108 +173,108 @@ function buildMemberRecommendation(profile: MemberRecommendationInput): string {
   const risks: string[] = [];
 
   if (activityScore >= 140) {
-    strengths.push(`РѕС‡РµРЅСЊ РІС‹СЃРѕРєР°СЏ РѕР±С‰Р°СЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ (${activityScore} РѕС‡Рє.)`);
+    strengths.push(`очень высокая общая активность (${activityScore} очк.)`);
   } else if (activityScore >= 60) {
-    strengths.push(`СЃС‚Р°Р±РёР»СЊРЅР°СЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ (${activityScore} РѕС‡Рє.)`);
+    strengths.push(`стабильная активность (${activityScore} очк.)`);
   } else {
-    weaknesses.push(`Р°РєС‚РёРІРЅРѕСЃС‚СЊ РїРѕРєР° РЅРёР·РєР°СЏ (${activityScore} РѕС‡Рє.)`);
+    weaknesses.push(`активность пока низкая (${activityScore} очк.)`);
   }
 
   if (messages >= 60) {
-    strengths.push(`РјРЅРѕРіРѕ СЃРѕРѕР±С‰РµРЅРёР№ РІ Discord (${messages})`);
+    strengths.push(`много сообщений в Discord (${messages})`);
   } else if (messages < 10) {
-    weaknesses.push(`РѕС‡РµРЅСЊ РјР°Р»Рѕ СЃРѕРѕР±С‰РµРЅРёР№ (${messages})`);
+    weaknesses.push(`очень мало сообщений (${messages})`);
   }
 
   if (voiceHours >= 5) {
-    strengths.push(`С…РѕСЂРѕС€Р°СЏ РіРѕР»РѕСЃРѕРІР°СЏ РІРѕРІР»РµС‡С‘РЅРЅРѕСЃС‚СЊ (${voiceHours.toFixed(1)} С‡)`);
+    strengths.push(`хорошая голосовая вовлечённость (${voiceHours.toFixed(1)} ч)`);
   } else if (voiceHours < 1) {
-    weaknesses.push(`РїРѕС‡С‚Рё РЅРµС‚ РіРѕР»РѕСЃРѕРІРѕР№ Р°РєС‚РёРІРЅРѕСЃС‚Рё (${voiceHours.toFixed(1)} С‡)`);
+    weaknesses.push(`почти нет голосовой активности (${voiceHours.toFixed(1)} ч)`);
   }
 
   if (points >= 70) {
-    strengths.push(`СЃРёР»СЊРЅР°СЏ СЂРµРїСѓС‚Р°С†РёСЏ (${points}/100)`);
+    strengths.push(`сильная репутация (${points}/100)`);
   } else if (points <= 30) {
-    risks.push(`СЃР»Р°Р±Р°СЏ СЂРµРїСѓС‚Р°С†РёСЏ (${points}/100)`);
+    risks.push(`слабая репутация (${points}/100)`);
   }
 
   if (commends > warns) {
-    strengths.push(`РїРѕС…РІР°Р»С‹ РїРµСЂРµРІРµС€РёРІР°СЋС‚ РїСЂРµРґС‹ (${commends} vs ${warns})`);
+    strengths.push(`похвалы перевешивают преды (${commends} vs ${warns})`);
   }
 
   if (warns >= 3) {
-    risks.push(`РјРЅРѕРіРѕ РґРёСЃС†РёРїР»РёРЅР°СЂРЅС‹С… РѕС‚РјРµС‚РѕРє (${warns})`);
+    risks.push(`много дисциплинарных отметок (${warns})`);
   } else if (warns > 0) {
-    weaknesses.push(`РµСЃС‚СЊ РїСЂРµРґС‹ (${warns})`);
+    weaknesses.push(`есть преды (${warns})`);
   }
 
   if (inactiveDays >= 7) {
-    risks.push(`РґРѕР»РіР°СЏ РЅРµР°РєС‚РёРІРЅРѕСЃС‚СЊ (${inactiveDays.toFixed(1)} РґРЅ.)`);
+    risks.push(`долгая неактивность (${inactiveDays.toFixed(1)} дн.)`);
   } else if (inactiveDays >= 3) {
-    weaknesses.push(`РµСЃС‚СЊ AFK-СЂРёСЃРє (${inactiveDays.toFixed(1)} РґРЅ. Р±РµР· Р°РєС‚РёРІРЅРѕСЃС‚Рё)`);
+    weaknesses.push(`есть AFK-риск (${inactiveDays.toFixed(1)} дн. без активности)`);
   } else {
-    strengths.push(`РЅРµРґР°РІРЅСЏСЏ Р°РєС‚РёРІРЅРѕСЃС‚СЊ (${inactiveDays.toFixed(1)} РґРЅ. РЅР°Р·Р°Рґ)`);
+    strengths.push(`недавняя активность (${inactiveDays.toFixed(1)} дн. назад)`);
   }
 
   if (autoTargetRoleName && autoTargetRoleName !== currentRoleName) {
-    strengths.push(`РїРѕ Р°РІС‚Рѕ-СЂР°РЅРіСѓ СѓР¶Рµ С‚СЏРЅРµС‚ РЅР° ${autoTargetRoleName}`);
+    strengths.push(`по авто-рангу уже тянет на ${autoTargetRoleName}`);
   }
 
   if (!strengths.length) {
-    strengths.push('РєСЂРёС‚РёС‡РЅС‹С… РјРёРЅСѓСЃРѕРІ РїРѕ СЃС‚Р°С‚РёСЃС‚РёРєРµ РЅРµ РЅР°Р№РґРµРЅРѕ');
+    strengths.push('критичных минусов по статистике не найдено');
   }
 
   if (!weaknesses.length) {
-    weaknesses.push('Р·Р°РјРµС‚РЅС‹С… СЃР»Р°Р±С‹С… РјРµСЃС‚ РїРѕ РјРµС‚СЂРёРєР°Рј СЃРµР№С‡Р°СЃ РЅРµС‚');
+    weaknesses.push('заметных слабых мест по метрикам сейчас нет');
   }
 
   if (!risks.length) {
-    risks.push('СЏРІРЅС‹С… РєСЂР°СЃРЅС‹С… С„Р»Р°РіРѕРІ РїРѕ С†РёС„СЂР°Рј РЅРµС‚');
+    risks.push('явных красных флагов по цифрам нет');
   }
 
-  let recommendation = 'РћРЎРўРђР’РРўР¬ Р’ РўР•РљРЈР©Р•Рњ Р РђРќР“Р•';
-  let action = 'РЅР°Р±Р»СЋРґР°С‚СЊ РґР°Р»СЊС€Рµ';
+  let recommendation = 'ОСТАВИТЬ В ТЕКУЩЕМ РАНГЕ';
+  let action = 'наблюдать дальше';
 
   if (inactiveDays >= 7 && messages <= 5 && voiceHours < 1 && points <= 20) {
-    recommendation = 'РљРРљ / Р§РРЎРўРљРђ Р—Рђ AFK';
-    action = 'РїСЂРѕРІРµСЂРёС‚СЊ РїСЂРёС‡РёРЅСѓ РѕС‚СЃСѓС‚СЃС‚РІРёСЏ Рё РєРёРєРЅСѓС‚СЊ, РµСЃР»Рё РёРіСЂРѕРє РЅРµ РІС‹С…РѕРґРёС‚ РЅР° СЃРІСЏР·СЊ';
+    recommendation = 'КИК / ЧИСТКА ЗА AFK';
+    action = 'проверить причину отсутствия и кикнуть, если игрок не выходит на связь';
   } else if (inactiveDays >= 3) {
-    recommendation = 'РџР Р•Р”РЈРџР Р•Р”РРўР¬ РћР‘ AFK';
-    action = 'РѕС‚РїСЂР°РІРёС‚СЊ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ Рё РґР°С‚СЊ РєРѕСЂРѕС‚РєРёР№ СЃСЂРѕРє РЅР° РІРѕР·РІСЂР°С‚ РІ Р°РєС‚РёРІ';
+    recommendation = 'ПРЕДУПРЕДИТЬ ОБ AFK';
+    action = 'отправить предупреждение и дать короткий срок на возврат в актив';
   } else if (warns >= 3 && points <= 40) {
-    recommendation = 'Р”РРЎР¦РРџР›РРќРђР РќРђРЇ РџР РћР’Р•Р РљРђ';
-    action = 'РЅРµ РїРѕРІС‹С€Р°С‚СЊ Рё РѕС‚РґРµР»СЊРЅРѕ СЂР°Р·РѕР±СЂР°С‚СЊ РїРѕРІРµРґРµРЅРёРµ СѓС‡Р°СЃС‚РЅРёРєР°';
+    recommendation = 'ДИСЦИПЛИНАРНАЯ ПРОВЕРКА';
+    action = 'не повышать и отдельно разобрать поведение участника';
   } else if (autoTargetRoleName && autoTargetRoleName !== currentRoleName && activityScore >= 50 && points >= 45) {
-    recommendation = `Р РђРЎРЎРњРћРўР Р•РўР¬ РџРћР’Р«РЁР•РќРР• Р”Рћ ${autoTargetRoleName.toUpperCase()}`;
-    action = `РїСЂРѕРІРµСЂРёС‚СЊ РєР°С‡РµСЃС‚РІРѕ Р°РєС‚РёРІРЅРѕСЃС‚Рё Рё РїСЂРё Р¶РµР»Р°РЅРёРё РїРѕРІС‹СЃРёС‚СЊ СЃ ${currentRoleName} РґРѕ ${autoTargetRoleName}`;
+    recommendation = `РАССМОТРЕТЬ ПОВЫШЕНИЕ ДО ${autoTargetRoleName.toUpperCase()}`;
+    action = `проверить качество активности и при желании повысить с ${currentRoleName} до ${autoTargetRoleName}`;
   } else if (points >= 75 && commends >= warns + 2 && (messages >= 25 || voiceHours >= 3)) {
-    recommendation = 'РџРћРћР©Р РРўР¬ / РћРўРњР•РўРРўР¬';
-    action = 'РјРѕР¶РЅРѕ РІС‹РґР°С‚СЊ РїРѕС…РІР°Р»Сѓ РёР»Рё РѕС‚РјРµС‚РёС‚СЊ СѓС‡Р°СЃС‚РЅРёРєР° РІ СЃРµРјСЊРµ';
+    recommendation = 'ПООЩРИТЬ / ОТМЕТИТЬ';
+    action = 'можно выдать похвалу или отметить участника в семье';
   }
 
   const summary = [
-    `РЈС‡Р°СЃС‚РЅРёРє: ${normalizeText(profile.displayName) || 'Р‘РµР· РёРјРµРЅРё'}`,
-    `РўРµРєСѓС‰РёР№ СЂР°РЅРі: ${currentRoleName}`,
-    `РћС‡РєРё Р°РєС‚РёРІРЅРѕСЃС‚Рё: ${activityScore}`,
-    `Р РµРїСѓС‚Р°С†РёСЏ: ${points}/100`,
-    `РЎРѕРѕР±С‰РµРЅРёСЏ: ${messages}`,
-    `Р“РѕР»РѕСЃ: ${voiceHours.toFixed(1)} С‡`,
-    `РџРѕС…РІР°Р»С‹ / РїСЂРµРґС‹: ${commends} / ${warns}`,
-    `Р¦РµР»СЊ Р°РІС‚Рѕ-СЂР°РЅРіР°: ${autoTargetRoleName || 'СЃРѕРІРїР°РґР°РµС‚ СЃ С‚РµРєСѓС‰РёРј РёР»Рё РЅРµРґРѕСЃС‚СѓРїРЅР°'}`
+    `Участник: ${normalizeText(profile.displayName) || 'Без имени'}`,
+    `Текущий ранг: ${currentRoleName}`,
+    `Очки активности: ${activityScore}`,
+    `Репутация: ${points}/100`,
+    `Сообщения: ${messages}`,
+    `Голос: ${voiceHours.toFixed(1)} ч`,
+    `Похвалы / преды: ${commends} / ${warns}`,
+    `Цель авто-ранга: ${autoTargetRoleName || 'совпадает с текущим или недоступна'}`
   ];
 
   return [
-    '1. РЎРІРѕРґРєР°',
+    '1. Сводка',
     `- ${summary.join('\n- ')}`,
     '',
-    '2. РЎРёР»СЊРЅС‹Рµ СЃС‚РѕСЂРѕРЅС‹',
+    '2. Сильные стороны',
     `- ${strengths.join('\n- ')}`,
     '',
-    '3. РЎР»Р°Р±С‹Рµ РјРµСЃС‚Р° Рё СЂРёСЃРєРё',
+    '3. Слабые места и риски',
     `- ${[...weaknesses, ...risks].join('\n- ')}`,
     '',
-    `4. Р РµРєРѕРјРµРЅРґР°С†РёСЏ: ${recommendation}`,
-    `- РЎР»РµРґСѓСЋС‰РµРµ РґРµР№СЃС‚РІРёРµ: ${action}`
+    `4. Рекомендация: ${recommendation}`,
+    `- Следующее действие: ${action}`
   ].join('\n');
 }
 

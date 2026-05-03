@@ -1644,20 +1644,20 @@ function buildReportScheduleEmbed(schedule = {}, channels = {}) {
 
 function buildWelcomeEmbed(member, familyTitle, imageUrl = '', customMessage = '') {
   return card({
-    title: 'Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ РІ Phoenix',
+    title: 'Добро пожаловать в Phoenix',
     color: THEME.brand,
     description: [
-      `<@${member.id}>, С‚С‹ С‚РѕР»СЊРєРѕ С‡С‚Рѕ Р·Р°С€С‘Р» РЅР° СЃРµСЂРІРµСЂ **${member.guild.name}**.`,
+      `<@${member.id}>, ты только что зашёл на сервер **${member.guild.name}**.`,
       '',
-      `Р•СЃР»Рё С…РѕС‡РµС€СЊ РІСЃС‚СѓРїРёС‚СЊ РІ **${familyTitle}**, РЅР°Р¶РјРё РєРЅРѕРїРєСѓ РЅРёР¶Рµ Рё РѕС‚РїСЂР°РІСЊ Р·Р°СЏРІРєСѓ.`,
-      'РљР°СЂС‚РѕС‡РєР° СЃСЂР°Р·Сѓ СѓР№РґС‘С‚ СЂСѓРєРѕРІРѕРґСЃС‚РІСѓ РЅР° СЂР°СЃСЃРјРѕС‚СЂРµРЅРёРµ.'
+      `Если хочешь вступить в **${familyTitle}**, нажми кнопку ниже и отправь заявку.`,
+      'Карточка сразу уйдёт руководству на рассмотрение.'
     ].join('\n'),
     footer: 'BRHD вЂў Phoenix вЂў Welcome',
     thumbnail: avatarUrl(member.user),
     image: imageUrl
   }).addFields(
-    section('Р§С‚Рѕ РґР°Р»СЊС€Рµ', ['1. РћС‚РєСЂРѕР№ Р°РЅРєРµС‚Сѓ', '2. Р—Р°РїРѕР»РЅРё РґР°РЅРЅС‹Рµ', '3. Р”РѕР¶РґРёСЃСЊ СЂРµС€РµРЅРёСЏ СЂСѓРєРѕРІРѕРґСЃС‚РІР°'].join('\n'), false),
-    ...(customMessage ? [section('РЎРѕРѕР±С‰РµРЅРёРµ СЃРµСЂРІРµСЂР°', customMessage, false)] : [])
+    section('Что дальше', ['1. Открой анкету', '2. Заполни данные', '3. Дождись решения руководства'].join('\n'), false),
+    ...(customMessage ? [section('Сообщение сервера', customMessage, false)] : [])
   );
 }
 
@@ -1687,50 +1687,50 @@ function buildAdminPanelEmbed({ guildName, record }) {
   return card({
     title: copy.admin.panelTitle,
     color: isPremium ? THEME.gold : THEME.brand,
-    description: `РЎРµСЂРІРµСЂ: **${guildName}**`,
+    description: `Сервер: **${guildName}**`,
     footer: 'BRHD вЂў Phoenix вЂў Administration'
   }).addFields(
-    section('РЎС‚Р°С‚СѓСЃ', [`РџР»Р°РЅ: ${planLabel}`, `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`, `Р РµР¶РёРј: ${mode}`].join('\n'), true),
-    section('Р’РѕР·РјРѕР¶РЅРѕСЃС‚Рё', copy.admin.panelFeatures(record.plan), true),
+    section('Статус', [`План: ${planLabel}`, `Setup: ${record.setupCompleted ? copy.admin.panelSetupDone : copy.admin.panelSetupPending}`, `Режим: ${mode}`].join('\n'), true),
+    section('Возможности', copy.admin.panelFeatures(record.plan), true),
     section(
       copy.admin.panelFieldChannels,
       [
-        channelLine('РџР°РЅРµР»СЊ', record.settings.channels.panel),
-        channelLine('РџРѕРґР°С‡Р° Р·Р°СЏРІРєРё', record.settings.channels.applications),
+        channelLine('Панель', record.settings.channels.panel),
+        channelLine('Подача заявки', record.settings.channels.applications),
         channelLine('Welcome', record.settings.channels.welcome),
-        channelLine('Р›РѕРіРё', record.settings.channels.logs),
-        channelLine('Р”РёСЃС†РёРїР»РёРЅР°', record.settings.channels.disciplineLogs),
-        channelLine('РђРїРґРµР№С‚С‹', record.settings.channels.updates),
-        channelLine('РћС‚С‡С‘С‚С‹', record.settings.channels.reports)
+        channelLine('Логи', record.settings.channels.logs),
+        channelLine('Дисциплина', record.settings.channels.disciplineLogs),
+        channelLine('Апдейты', record.settings.channels.updates),
+        channelLine('Отчёты', record.settings.channels.reports)
       ].join('\n'),
       false
     ),
     section(
       copy.admin.panelFieldRoles,
       [
-        roleLine('Р›РёРґРµСЂ', record.settings.roles.leader),
-        roleLine('Р—Р°Рј', record.settings.roles.deputy),
-        roleLine('РЎС‚Р°СЂС€РёР№', record.settings.roles.elder),
-        roleLine('РЈС‡Р°СЃС‚РЅРёРє', record.settings.roles.member),
-        roleLine('РќРѕРІРёС‡РѕРє', record.settings.roles.newbie),
-        roleLine('РњСѓС‚', record.settings.roles.mute),
-        roleLine('РђРІС‚РѕСЂРѕР»СЊ', record.settings.roles.autorole)
+        roleLine('Лидер', record.settings.roles.leader),
+        roleLine('Зам', record.settings.roles.deputy),
+        roleLine('Старший', record.settings.roles.elder),
+        roleLine('Участник', record.settings.roles.member),
+        roleLine('Новичок', record.settings.roles.newbie),
+        roleLine('Мут', record.settings.roles.mute),
+        roleLine('Автороль', record.settings.roles.autorole)
       ].join('\n'),
       false
     ),
-    section('РњРѕРґСѓР»Рё', moduleLines.join('\n'), false),
+    section('Модули', moduleLines.join('\n'), false),
     section(
       'Welcome',
       [
-        `РЎС‚Р°С‚СѓСЃ: ${welcome.enabled ? 'ON' : 'OFF'}`,
-        `Р›РЎ: ${welcome.dmEnabled ? 'ON' : 'OFF'}`,
-        `РўРµРєСЃС‚: ${welcome.message ? 'Р·Р°РґР°РЅ' : 'РЅРµ Р·Р°РґР°РЅ'}`
+        `Статус: ${welcome.enabled ? 'ON' : 'OFF'}`,
+        `ЛС: ${welcome.dmEnabled ? 'ON' : 'OFF'}`,
+        `Текст: ${welcome.message ? 'задан' : 'не задан'}`
       ].join('\n'),
       true
     ),
     section(
       'Reaction Roles',
-      [`РЎРІСЏР·РѕРє: ${reactionRoles.length}`, `Premium: ${isPremium ? 'ON' : 'OFF'}`].join('\n'),
+      [`Связок: ${reactionRoles.length}`, `Premium: ${isPremium ? 'ON' : 'OFF'}`].join('\n'),
       true
     ),
     section(
@@ -1738,27 +1738,27 @@ function buildAdminPanelEmbed({ guildName, record }) {
       [
         `Weekly: ${reportSchedule.weekly?.enabled ? 'ON' : 'OFF'}`,
         `Monthly: ${reportSchedule.monthly?.enabled ? 'ON' : 'OFF'}`,
-        `РљР°РЅР°Р»: ${record.settings.channels.reports ? `<#${record.settings.channels.reports}>` : 'РЅРµ Р·Р°РґР°РЅ'}`
+        `Канал: ${record.settings.channels.reports ? `<#${record.settings.channels.reports}>` : 'не задан'}`
       ].join('\n'),
       false
     ),
     section(
       'Automod',
       [
-        `РРЅРІР°Р№С‚С‹: ${automod.invitesEnabled ? 'ON' : 'OFF'}`,
-        `РЎСЃС‹Р»РєРё: ${automod.linksEnabled ? 'ON' : 'OFF'}`,
-        `РљР°РїСЃ: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+ Р±СѓРєРІ)` : 'OFF'}`,
-        `РЈРїРѕРјРёРЅР°РЅРёСЏ: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`,
-        `Р¤Р»СѓРґ: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}СЃ)` : 'OFF'}`,
-        `РЎС‚РѕРї-СЃР»РѕРІР°: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`
+        `Инвайты: ${automod.invitesEnabled ? 'ON' : 'OFF'}`,
+        `Ссылки: ${automod.linksEnabled ? 'ON' : 'OFF'}`,
+        `Капс: ${automod.capsEnabled ? `ON (${automod.capsPercent || 75}% / ${automod.capsMinLength || 12}+ букв)` : 'OFF'}`,
+        `Упоминания: ${automod.mentionsEnabled ? `ON (${automod.mentionLimit || 5})` : 'OFF'}`,
+        `Флуд: ${automod.spamEnabled ? `ON (${automod.spamCount || 6} / ${automod.spamWindowSeconds || 8}с)` : 'OFF'}`,
+        `Стоп-слова: ${automod.badWordsEnabled ? `ON (${(automod.badWords || []).length})` : 'OFF'}`
       ].join('\n'),
       false
     ),
     section(
       copy.admin.panelFieldVisuals,
       [
-        copy.admin.visualLine('РџР°РЅРµР»СЊ СЃРµРјСЊРё', record.settings.visuals?.familyBanner),
-        copy.admin.visualLine('РџРѕРґР°С‡Р° Р·Р°СЏРІРєРё', record.settings.visuals?.applicationsBanner)
+        copy.admin.visualLine('Панель семьи', record.settings.visuals?.familyBanner),
+        copy.admin.visualLine('Подача заявки', record.settings.visuals?.applicationsBanner)
       ].join('\n'),
       false
     )
@@ -4266,10 +4266,10 @@ function getStatusEmoji(member) {
 
 function getStatusLabel(member) {
   const status = member?.presence?.status || 'offline';
-  if (status === 'online') return repairText('РћРЅР»Р°Р№РЅ');
-  if (status === 'idle') return repairText('РћС‚РѕС€С‘Р»');
-  if (status === 'dnd') return repairText('РќРµ Р±РµСЃРїРѕРєРѕРёС‚СЊ');
-  return repairText('РћС„С„Р»Р°Р№РЅ');
+  if (status === 'online') return repairText('Онлайн');
+  if (status === 'idle') return repairText('Отошёл');
+  if (status === 'dnd') return repairText('Не беспокоить');
+  return repairText('Оффлайн');
 }
 
 function trimValue(value, limit = 1024, fallback = 'вЂ”') {
@@ -4306,11 +4306,11 @@ function section(name, value, inline = false) {
 }
 
 function roleLine(label, roleId) {
-  return `${repairText(label)}: ${roleId ? `<@&${roleId}>` : repairText('РЅРµ Р·Р°РґР°РЅРѕ')}`;
+  return `${repairText(label)}: ${roleId ? `<@&${roleId}>` : repairText('не задано')}`;
 }
 
 function channelLine(label, channelId) {
-  return `${repairText(label)}: ${channelId ? `<#${channelId}>` : repairText('РЅРµ Р·Р°РґР°РЅ')}`;
+  return `${repairText(label)}: ${channelId ? `<#${channelId}>` : repairText('не задан')}`;
 }
 
 function repairText(value) {

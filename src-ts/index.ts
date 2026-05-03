@@ -1,5 +1,4 @@
-﻿// @ts-nocheck
-import 'dotenv/config';
+﻿import 'dotenv/config';
 
 const path = require('path');
 const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, Partials, PermissionFlagsBits } = require('discord.js');
@@ -118,7 +117,7 @@ const client = new Client({
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
-const ROLE_TEMPLATES = ROLES.map(role => ({ ...role }));
+const ROLE_TEMPLATES = ROLES.map((role: any) => ({ ...role }));
 const automodState = new Map();
 const voiceSessions = new Map();
 const guildRuntime = createGuildRuntimeApi({
@@ -155,35 +154,35 @@ function ephemeral(payload = {}) {
   return makeEphemeral(payload);
 }
 
-function scheduleDeleteReply(interaction, delayMs = 5000) {
+function scheduleDeleteReply(interaction: any, delayMs = 5000) {
   return scheduleDeleteReplyHelper(interaction, delayMs);
 }
 
-async function replyAndAutoDelete(interaction, payload, delayMs = 5000) {
+async function replyAndAutoDelete(interaction: any, payload: any, delayMs = 5000) {
   return replyAndAutoDeleteHelper(interaction, payload, delayMs);
 }
 
-async function editReplyAndAutoDelete(interaction, payload, delayMs = 5000) {
+async function editReplyAndAutoDelete(interaction: any, payload: any, delayMs = 5000) {
   return editReplyAndAutoDeleteHelper(interaction, payload, delayMs);
 }
 
-function memberSessionKey(guildId, memberId) {
+function memberSessionKey(guildId: any, memberId: any) {
   return buildMemberSessionKey(guildId, memberId);
 }
 
-function resolveGuildSettings(guildId) {
+function resolveGuildSettings(guildId: any) {
   return guildRuntime.resolveGuildSettings(guildId);
 }
 
-function getRoleIds(guildId) {
+function getRoleIds(guildId: any) {
   return guildRuntime.getRoleIds(guildId);
 }
 
-function getGuildStorage(guildId) {
+function getGuildStorage(guildId: any) {
   return guildRuntime.getGuildStorage(guildId);
 }
 
-function getRankService(guildId) {
+function getRankService(guildId: any) {
   return createRankService({
     roles: resolveGuildSettings(guildId).roles,
     storage: getGuildStorage(guildId),
@@ -191,27 +190,27 @@ function getRankService(guildId) {
   });
 }
 
-function hasPermission(member, permission) {
+function hasPermission(member: any, permission: any) {
   return accessApi.hasPermission(member, permission);
 }
 
-function hasAnyRole(member, roleIds) {
+function hasAnyRole(member: any, roleIds: any) {
   return accessApi.hasAnyRole(member, roleIds);
 }
 
-function isOwner(userId) {
+function isOwner(userId: any) {
   return accessApi.isOwner(userId);
 }
 
-function getGuildPlan(guildId) {
+function getGuildPlan(guildId: any) {
   return guildRuntime.getGuildPlan(guildId);
 }
 
-function isPremiumGuild(guildId) {
+function isPremiumGuild(guildId: any) {
   return guildRuntime.isPremiumGuild(guildId);
 }
 
-function buildGuildSettingsSnapshot(guild) {
+function buildGuildSettingsSnapshot(guild: any) {
   return guildRuntime.buildGuildSettingsSnapshot(guild);
 }
 
@@ -298,7 +297,7 @@ const {
   getWeeklyReportKey,
   getMonthlyReportKey,
   isScheduledReportDue,
-  fetchGuild: async (guildId) =>
+  fetchGuild: async (guildId: any) =>
     client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null),
   evaluateAutomodMessage,
   evaluateSpamActivity,
@@ -334,21 +333,21 @@ const {
   sendRankDm
 });
 
-function formatPeriodLabel(period) {
+function formatPeriodLabel(period: any) {
   return period === 'monthly' ? 'Ежемесячный статистический отчёт' : 'Еженедельный статистический отчёт';
 }
 
-function formatPeriodRangeLabel(analytics) {
+function formatPeriodRangeLabel(analytics: any) {
   return analytics.dayCount >= 30
     ? `Отчёт за период с ${analytics.fromDayKey}`
     : `Отчёт за период: ${analytics.fromDayKey} - ${analytics.toDayKey}`;
 }
 
-function medal(index) {
+function medal(index: any) {
   return `${index + 1}.`;
 }
 
-function formatMinutesLong(totalMinutes) {
+function formatMinutesLong(totalMinutes: any) {
   const safe = Math.max(0, Math.floor(Number(totalMinutes) || 0));
   const hours = Math.floor(safe / 60);
   const minutes = safe % 60;
@@ -367,19 +366,19 @@ function normalizeReactionEmoji(emojiValue = '') {
   return raw;
 }
 
-function getReactionEmojiKey(emoji) {
+function getReactionEmojiKey(emoji: any) {
   if (!emoji) return '';
   return String(emoji.id || emoji.name || '').trim();
 }
 
-function getReactionRoleEntries(guildId) {
+function getReactionRoleEntries(guildId: any) {
   return resolveGuildSettings(guildId).reactionRoles || [];
 }
 
-function findReactionRoleEntry(guildId, messageId, emojiKey) {
+function findReactionRoleEntry(guildId: any, messageId: any, emojiKey: any) {
   const normalizedEmoji = normalizeReactionEmoji(emojiKey);
   return getReactionRoleEntries(guildId).find(
-    entry => entry.messageId === String(messageId) && normalizeReactionEmoji(entry.emoji) === normalizedEmoji
+    (entry: any) => entry.messageId === String(messageId) && normalizeReactionEmoji(entry.emoji) === normalizedEmoji
   ) || null;
 }
 
@@ -400,7 +399,7 @@ function getMonthlyReportKey(date = new Date()) {
   return `${year}-${month}`;
 }
 
-function isScheduledReportDue(period, now = new Date()) {
+function isScheduledReportDue(period: any, now = new Date()) {
   if (now.getHours() !== 2) return false;
 
   if (period === 'monthly') {
@@ -410,7 +409,7 @@ function isScheduledReportDue(period, now = new Date()) {
   return (now.getDay() || 7) === 1;
 }
 
-function getMemberLabel(guild, memberId) {
+function getMemberLabel(guild: any, memberId: any) {
   const member = guild.members.cache.get(memberId);
   if (member) {
     return `<@${memberId}> | ${member.displayName}`;
@@ -419,27 +418,27 @@ function getMemberLabel(guild, memberId) {
   return `<@${memberId}>`;
 }
 
-function getChannelLabel(guild, channelId) {
+function getChannelLabel(guild: any, channelId: any) {
   const channel = guild.channels.cache.get(channelId);
   return channel ? `<#${channelId}>` : `#${channelId}`;
 }
 
-function buildRankedLines(entries, formatter, limit = 5) {
-  return entries.slice(0, limit).map((entry, index) => `${medal(index)} ${formatter(entry)}`);
+function buildRankedLines(entries: any, formatter: any, limit = 5) {
+  return entries.slice(0, limit).map((entry: any, index: any) => `${medal(index)} ${formatter(entry)}`);
 }
 
-function buildServerStatsReportEmbed(guild, period = 'weekly') {
+function buildServerStatsReportEmbed(guild: any, period = 'weekly') {
   const guildStorage = getGuildStorage(guild.id);
   const settings = resolveGuildSettings(guild.id);
   const analytics = guildStorage.getPeriodAnalytics(period === 'monthly' ? 30 : 7);
-  const memberEntries = Object.entries(analytics.members || {});
+  const memberEntries = Object.entries(analytics.members || {}) as Array<[string, any]>;
 
   const topMessages = buildRankedLines(
     memberEntries
       .map(([memberId, stats]) => ({ memberId, value: stats.messages || 0 }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getMemberLabel(guild, item.memberId)} - ${item.value} сообщений`
+    (item: any) => `${getMemberLabel(guild, item.memberId)} - ${item.value} сообщений`
   );
 
   const topVoice = buildRankedLines(
@@ -447,7 +446,7 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
       .map(([memberId, stats]) => ({ memberId, value: stats.voiceMinutes || 0 }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getMemberLabel(guild, item.memberId)} - ${formatMinutesLong(item.value)}`
+    (item: any) => `${getMemberLabel(guild, item.memberId)} - ${formatMinutesLong(item.value)}`
   );
 
   const topReactions = buildRankedLines(
@@ -455,23 +454,23 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
       .map(([memberId, stats]) => ({ memberId, value: stats.reactions || 0 }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getMemberLabel(guild, item.memberId)} - ${item.value} реакций`
+    (item: any) => `${getMemberLabel(guild, item.memberId)} - ${item.value} реакций`
   );
 
   const topChannels = buildRankedLines(
-    Object.entries(analytics.channels || {})
+    (Object.entries(analytics.channels || {}) as Array<[string, any]>)
       .map(([channelId, value]) => ({ channelId, value }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getChannelLabel(guild, item.channelId)} - ${item.value} сообщений`
+    (item: any) => `${getChannelLabel(guild, item.channelId)} - ${item.value} сообщений`
   );
 
   const topVoiceChannels = buildRankedLines(
-    Object.entries(analytics.voiceChannels || {})
+    (Object.entries(analytics.voiceChannels || {}) as Array<[string, any]>)
       .map(([channelId, value]) => ({ channelId, value }))
       .filter(item => item.value > 0)
       .sort((left, right) => right.value - left.value),
-    item => `${getChannelLabel(guild, item.channelId)} - ${formatMinutesLong(item.value)}`
+    (item: any) => `${getChannelLabel(guild, item.channelId)} - ${formatMinutesLong(item.value)}`
   );
 
   return new EmbedBuilder()
@@ -520,11 +519,11 @@ function buildServerStatsReportEmbed(guild, period = 'weekly') {
     .setTimestamp();
 }
 
-function normalizeMemberQuery(value) {
+function normalizeMemberQuery(value: any) {
   return String(value || '').trim().toLowerCase();
 }
 
-async function resolveMemberQuery(guild, query, fallbackUserId = '') {
+async function resolveMemberQuery(guild: any, query: any, fallbackUserId = '') {
   const rawQuery = String(query || '').trim();
   if (!rawQuery) {
     return fallbackUserId ? fetchMemberFast(guild, fallbackUserId) : null;
@@ -537,23 +536,23 @@ async function resolveMemberQuery(guild, query, fallbackUserId = '') {
   }
 
   const lookup = normalizeMemberQuery(rawQuery);
-  const findIn = members =>
-    members.find(member => normalizeMemberQuery(member.displayName) === lookup) ||
-    members.find(member => normalizeMemberQuery(member.user.username) === lookup) ||
-    members.find(member => normalizeMemberQuery(member.displayName).includes(lookup)) ||
-    members.find(member => normalizeMemberQuery(member.user.username).includes(lookup)) ||
+  const findIn = (members: any) =>
+    members.find((member: any) => normalizeMemberQuery(member.displayName) === lookup) ||
+    members.find((member: any) => normalizeMemberQuery(member.user.username) === lookup) ||
+    members.find((member: any) => normalizeMemberQuery(member.displayName).includes(lookup)) ||
+    members.find((member: any) => normalizeMemberQuery(member.user.username).includes(lookup)) ||
     null;
 
-  const cachedMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot);
+  const cachedMembers = Array.from(guild.members.cache.values()).filter((member: any) => !member.user?.bot);
   const cachedMatch = findIn(cachedMembers);
   if (cachedMatch) return cachedMatch;
 
   await guild.members.fetch().catch(() => {});
-  const fetchedMembers = Array.from(guild.members.cache.values()).filter(member => !member.user?.bot);
+  const fetchedMembers = Array.from(guild.members.cache.values()).filter((member: any) => !member.user?.bot);
   return findIn(fetchedMembers);
 }
 
-async function buildAiAdvisorEmbed(guild, member) {
+async function buildAiAdvisorEmbed(guild: any, member: any) {
   const guildStorage = getGuildStorage(guild.id);
   const memberData = guildStorage.ensureMemberRecord(member.id);
   const rankInfo = getRankService(guild.id).describeMember(member);
@@ -578,18 +577,18 @@ async function buildAiAdvisorEmbed(guild, member) {
     .setTimestamp();
 }
 
-function getGuildRecord(guild) {
+function getGuildRecord(guild: any) {
   return database.ensureGuild(guild.id, {
     guildName: guild.name,
     ownerId: guild.ownerId || ''
   });
 }
 
-function getRoleLimit(guildId) {
+function getRoleLimit(guildId: any) {
   return isPremiumGuild(guildId) ? Number.MAX_SAFE_INTEGER : 6;
 }
 
-function getCommandModule(commandName) {
+function getCommandModule(commandName: any) {
   switch (commandName) {
     case 'family':
     case 'profile':
@@ -642,11 +641,11 @@ function getCommandModule(commandName) {
   }
 }
 
-function isModuleEnabled(guildId, moduleName) {
+function isModuleEnabled(guildId: any, moduleName: any) {
   return guildRuntime.isModuleEnabled(guildId, moduleName);
 }
 
-function getHelpCatalog(interaction) {
+function getHelpCatalog(interaction: any) {
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
   const regularFree = [
@@ -727,7 +726,7 @@ function getHelpCatalog(interaction) {
   };
 }
 
-function canUseCommandInContext(commandName, interaction) {
+function canUseCommandInContext(commandName: any, interaction: any) {
   if (!isModuleEnabled(interaction.guild.id, getCommandModule(commandName))) {
     return false;
   }
@@ -784,7 +783,7 @@ function canUseCommandInContext(commandName, interaction) {
   }
 }
 
-function buildAiCommandsOverview(interaction) {
+function buildAiCommandsOverview(interaction: any) {
   return buildAiCommandsOverviewHelper({
     catalog: getHelpCatalog(interaction),
     isPremium: isPremiumGuild(interaction.guild.id),
@@ -793,74 +792,74 @@ function buildAiCommandsOverview(interaction) {
   });
 }
 
-function canBypassAutomod(member) {
+function canBypassAutomod(member: any) {
   return Boolean(member?.user?.bot);
 }
 
-function canApplications(member) {
+function canApplications(member: any) {
   return canApplicationsHelper(accessApi, member);
 }
 
-function canDiscipline(member) {
+function canDiscipline(member: any) {
   return canDisciplineHelper(accessApi, member);
 }
 
-function canManageRanks(member) {
+function canManageRanks(member: any) {
   return canManageRanksHelper(accessApi, member);
 }
 
-function canModerate(member) {
+function canModerate(member: any) {
   return canModerateHelper(accessApi, member);
 }
 
-function canManageNicknames(member) {
+function canManageNicknames(member: any) {
   return canManageNicknamesHelper(accessApi, member);
 }
 
-function canDebugConfig(interaction) {
+function canDebugConfig(interaction: any) {
   return canDebugConfigHelper(interaction);
 }
 
-function canUseSecurity(member) {
+function canUseSecurity(member: any) {
   return canUseSecurityHelper(accessApi, member);
 }
 
-function canBypassLeakGuard(member) {
+function canBypassLeakGuard(member: any) {
   return canBypassLeakGuardHelper(accessApi, member);
 }
 
-function canBypassChannelGuard(member) {
+function canBypassChannelGuard(member: any) {
   return canBypassChannelGuardHelper(accessApi, member);
 }
 
-async function fetchTextChannel(guild, id) {
+async function fetchTextChannel(guild: any, id: any) {
   return fetchTextChannelHelper(guild, id);
 }
 
-function resolveTargetTextChannel(interaction) {
+function resolveTargetTextChannel(interaction: any) {
   return resolveTargetTextChannelHelper(interaction, copy.commands.channelOptionName);
 }
 
-function canManageTargetChannel(member, channel) {
+function canManageTargetChannel(member: any, channel: any) {
   return canManageTargetChannelHelper(accessApi, member, channel);
 }
 
-function formatModerationTimestamp(timestamp) {
+function formatModerationTimestamp(timestamp: any) {
   return formatModerationTimestampHelper(timestamp);
 }
 
-async function deleteMessagesFast(messages) {
+async function deleteMessagesFast(messages: any) {
   if (!messages.length) return 0;
 
   const now = Date.now();
-  const fresh = messages.filter(message => now - message.createdTimestamp < 14 * 24 * 60 * 60 * 1000);
-  const stale = messages.filter(message => now - message.createdTimestamp >= 14 * 24 * 60 * 60 * 1000);
+  const fresh = messages.filter((message: any) => now - message.createdTimestamp < 14 * 24 * 60 * 60 * 1000);
+  const stale = messages.filter((message: any) => now - message.createdTimestamp >= 14 * 24 * 60 * 60 * 1000);
   let deleted = 0;
 
   for (let index = 0; index < fresh.length; index += 100) {
     const batch = fresh.slice(index, index + 100);
     if (!batch.length) continue;
-    const result = await batch[0].channel.bulkDelete(batch.map(message => message.id), true).catch(() => null);
+    const result = await batch[0].channel.bulkDelete(batch.map((message: any) => message.id), true).catch(() => null);
     if (result?.size) {
       deleted += result.size;
       continue;
@@ -884,12 +883,12 @@ async function deleteMessagesFast(messages) {
   return deleted;
 }
 
-async function fetchRecentDeletableMessages(channel, count) {
+async function fetchRecentDeletableMessages(channel: any, count: any) {
   const collected = [];
   let before;
 
   while (collected.length < count) {
-    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    const batch: any = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!batch || !batch.size) break;
 
     for (const message of batch.values()) {
@@ -907,14 +906,14 @@ async function fetchRecentDeletableMessages(channel, count) {
   return collected;
 }
 
-async function fetchAllDeletableMessages(channel, { includePinned = true } = {}) {
+async function fetchAllDeletableMessages(channel: any, { includePinned = true } = {}) {
   const collected = [];
   let skippedSystem = 0;
   let skippedBlocked = 0;
   let before;
 
   while (true) {
-    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    const batch: any = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!batch || !batch.size) break;
 
     for (const message of batch.values()) {
@@ -936,7 +935,7 @@ async function fetchAllDeletableMessages(channel, { includePinned = true } = {})
   return { messages: collected, skippedSystem, skippedBlocked };
 }
 
-function messageBelongsToUser(message, userId) {
+function messageBelongsToUser(message: any, userId: any) {
   if (message.author?.id === userId) {
     return true;
   }
@@ -956,7 +955,7 @@ function messageBelongsToUser(message, userId) {
   return false;
 }
 
-async function fetchMessagesForUser(channel, userId, count) {
+async function fetchMessagesForUser(channel: any, userId: any, count: any) {
   const collected = [];
   let matched = 0;
   let blocked = 0;
@@ -964,7 +963,7 @@ async function fetchMessagesForUser(channel, userId, count) {
   let before;
 
   while (collected.length < count) {
-    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    const batch: any = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
     if (!batch || !batch.size) break;
 
     for (const message of batch.values()) {
@@ -995,7 +994,7 @@ async function fetchMessagesForUser(channel, userId, count) {
   return { messages: collected, matched, blocked, system };
 }
 
-async function clearChannelByMessages(channel) {
+async function clearChannelByMessages(channel: any) {
   const { messages, skippedSystem, skippedBlocked } = await fetchAllDeletableMessages(channel);
   const deleted = await deleteMessagesFast(messages);
 
@@ -1007,9 +1006,9 @@ async function clearChannelByMessages(channel) {
   };
 }
 
-function remapConfiguredChannelIds(guildId, oldChannelId, newChannelId) {
+function remapConfiguredChannelIds(guildId: any, oldChannelId: any, newChannelId: any) {
   const settings = resolveGuildSettings(guildId);
-  const channelPatch = {};
+  const channelPatch: Record<string, any> = {};
 
   for (const [key, value] of Object.entries(settings.channels || {})) {
     if (value === oldChannelId) {
@@ -1024,11 +1023,11 @@ function remapConfiguredChannelIds(guildId, oldChannelId, newChannelId) {
   return channelPatch;
 }
 
-async function fetchMemberFast(guild, userId) {
+async function fetchMemberFast(guild: any, userId: any) {
   return guild.members.cache.get(userId) || guild.members.fetch(userId).catch(() => null);
 }
 
-function getApplicationsService(guildId) {
+function getApplicationsService(guildId: any) {
   const settings = resolveGuildSettings(guildId);
 
   return createApplicationsService({
@@ -1047,12 +1046,12 @@ function getApplicationsService(guildId) {
   });
 }
 
-async function refreshMember(member) {
+async function refreshMember(member: any) {
   if (typeof member.fetch !== 'function') return member;
   return member.fetch().catch(() => member);
 }
 
-function buildProfilePayload(member, allowRankButtons, content = '') {
+function buildProfilePayload(member: any, allowRankButtons: any, content = '') {
   const guildStorage = getGuildStorage(member.guild.id);
   const rankService = getRankService(member.guild.id);
   const memberData = { ...guildStorage.ensureMemberRecord(member.id), voiceMinutes: getLiveVoiceMinutes(member) };
@@ -1060,7 +1059,7 @@ function buildProfilePayload(member, allowRankButtons, content = '') {
     ...rankService.describeMember(member),
     autoEnabled: isPremiumGuild(member.guild.id) && AUTO_RANKS.enabled
   };
-  const payload = {
+  const payload: any = {
     embeds: [
       embeds.buildProfileEmbed(member, {
         activityScore: guildStorage.getActivityScore,
@@ -1086,7 +1085,7 @@ function buildProfilePayload(member, allowRankButtons, content = '') {
   return payload;
 }
 
-function formatRankResult(userId, result) {
+function formatRankResult(userId: any, result: any) {
   switch (result.code) {
     case 'promoted':
       return copy.ranks.promoted(userId, result.fromRole.name, result.toRole.name);
@@ -1116,7 +1115,7 @@ function formatRankResult(userId, result) {
   }
 }
 
-async function enforceBlacklist(member) {
+async function enforceBlacklist(member: any) {
   const guildStorage = getGuildStorage(member.guild.id);
   const entry = guildStorage.getBlacklistEntry(member.id);
   if (!entry) return false;
@@ -1136,7 +1135,7 @@ async function enforceBlacklist(member) {
   return kicked;
 }
 
-function buildMaintenanceEmbed({ title, description, color, fieldName, lines }) {
+function buildMaintenanceEmbed({ title, description, color, fieldName, lines }: any) {
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(title)
@@ -1154,7 +1153,7 @@ function buildMaintenanceEmbed({ title, description, color, fieldName, lines }) 
   return embed;
 }
 
-async function runRolelessCleanup(guildId, reason = 'interval') {
+async function runRolelessCleanup(guildId: any, reason = 'interval') {
   if (!isPremiumGuild(guildId)) return;
 
   const guild = client.guilds.cache.get(guildId);
@@ -1176,7 +1175,7 @@ async function runRolelessCleanup(guildId, reason = 'interval') {
     if (member.id === guild.ownerId) continue;
     if (hasPermission(member, PermissionFlagsBits.Administrator)) continue;
 
-    const nonEveryoneRoles = member.roles.cache.filter(role => role.id !== guild.id);
+    const nonEveryoneRoles = member.roles.cache.filter((role: any) => role.id !== guild.id);
     if (nonEveryoneRoles.size > 0) continue;
 
     const ok = await member.kick('Еженедельная очистка участников без ролей').then(() => true).catch(() => false);
@@ -1208,7 +1207,7 @@ async function runRolelessCleanup(guildId, reason = 'interval') {
   return { skipped: false, kicked, failed };
 }
 
-async function runRolelessCleanupDetailed(guildId, reason = 'interval', options = {}) {
+async function runRolelessCleanupDetailed(guildId: any, reason = 'interval', options: any = {}) {
   const { force = false, notify = true } = options;
   if (!isPremiumGuild(guildId)) return;
 
@@ -1232,7 +1231,7 @@ async function runRolelessCleanupDetailed(guildId, reason = 'interval', options 
     if (member.id === guild.ownerId) continue;
     if (hasPermission(member, PermissionFlagsBits.Administrator)) continue;
 
-    const nonEveryoneRoles = member.roles.cache.filter(role => role.id !== guild.id);
+    const nonEveryoneRoles = member.roles.cache.filter((role: any) => role.id !== guild.id);
     if (nonEveryoneRoles.size > 0) continue;
 
     const blockedReason = explainKickFailure(member, botMember);
@@ -1244,7 +1243,7 @@ async function runRolelessCleanupDetailed(guildId, reason = 'interval', options 
     try {
       await member.kick('Еженедельная очистка участников без ролей');
       kicked.push(member.user.username);
-    } catch (error) {
+    } catch (error: any) {
       const fallbackReason = error?.code === 50013
         ? 'у бота не хватает прав Discord для кика'
         : (error?.message || 'неизвестная ошибка кика');
@@ -1271,7 +1270,7 @@ async function runRolelessCleanupDetailed(guildId, reason = 'interval', options 
   }).catch(() => {});
 }
 
-async function runAfkWarnings(guildId) {
+async function runAfkWarnings(guildId: any) {
   if (!isPremiumGuild(guildId)) return;
 
   const guild = client.guilds.cache.get(guildId);
@@ -1396,7 +1395,7 @@ process.on('uncaughtException', error => {
 
 registerInteractionRuntime({
   client,
-  handleCommand: interaction => {
+  handleCommand: (interaction: any) => {
     const guildId = interaction.guild?.id || interaction.guildId || GUILD_ID;
     const guildStorage = getGuildStorage(guildId);
     const applicationsService = getApplicationsService(guildId);
@@ -1450,7 +1449,7 @@ registerInteractionRuntime({
     formatVoiceHours,
     getHelpCatalog,
     getGuildPlan,
-    getGuildRecord: guild => database.getGuild(guild.id),
+    getGuildRecord: (guild: any) => database.getGuild(guild.id),
     getRoleIds,
     guildStorage,
     guildRuntime,
@@ -1484,7 +1483,7 @@ registerInteractionRuntime({
     storage,
     summarizeConfig,
     syncAutoRanks,
-    updateAutomodConfig: (guildId, patch) => updateAutomodConfig(guildId, patch),
+    updateAutomodConfig: (guildId: any, patch: any) => database.updateGuildSettings(guildId, { automod: patch }),
     validateConfig,
     getAutomodTargetLimits,
     buildAutomodRulePatch,

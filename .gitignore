@@ -2,4 +2,11 @@
 node_modules/
 dist-ts/
 npm-debug.log*
+
+# Local runtime state (kept per-machine, not in repo)
+database.local.json
+storage.local.json
+*.bak
+
+# Claude Code worktrees and per-machine settings
 .claude/

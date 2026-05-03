@@ -1,6 +1,7 @@
 import type { CopyCatalog } from './types';
+import copySource from './copy-source';
 
-const copyJs = require('./copy-source') as CopyCatalog;
+const copyJs = copySource as CopyCatalog;
 
 const mojibakeMarkers = [
   'Р ',

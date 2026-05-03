@@ -35,9 +35,7 @@ async function main() {
     .sort();
 
   const allowedDebt = [
-    'src-ts/copy-source.ts',
-    'src-ts/embeds-source.ts',
-    'src-ts/index.ts'
+    'src-ts/embeds-source.ts'
   ];
 
   assert.deepEqual(
