@@ -34,9 +34,7 @@ async function main() {
     .map((fullPath) => path.relative(root, fullPath).replace(/\\/g, '/'))
     .sort();
 
-  const allowedDebt = [
-    'src-ts/embeds-source.ts'
-  ];
+  const allowedDebt = [];
 
   assert.deepEqual(
     noCheckFiles,

@@ -1,6 +1,22 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.22': {
+    added: [
+      'чистый TypeScript embed-source без @ts-nocheck и без каскада module.exports override-слоёв',
+      'тест embeds public api stays complete фиксирует полный публичный API embed-builder функций'
+    ],
+    updated: [
+      'src-ts/embeds-source.ts пересобран как единый typed source of truth для family panel, заявок, help, welcome, automod, role menu и changelog',
+      'tests/ts-debt.test.js теперь требует нулевой остаточный TypeScript-долг в src-ts',
+      'embed-кнопки и служебные карточки используют чистые русские строки для ЧС, Голос, статусов, рангов и update-card'
+    ],
+    fixed: [
+      'последний разрешённый @ts-nocheck удалён из проекта',
+      'риск возврата битых слов из старых release106/release107/live override-слоёв',
+      'риск потери embed-функций при будущей чистке теперь ловится тестом'
+    ]
+  },
   '1.0.21': {
     added: [
       'утилита scripts/annotate-implicit-any.js — массовая расстановка : any по выводу tsc для снятия @ts-nocheck',

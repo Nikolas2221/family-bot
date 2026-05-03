@@ -11,6 +11,7 @@ const {
   buildWelcomeEmbed,
   panelButtons
 } = require('../embeds');
+const embeds = require('../embeds');
 
 async function runTest(name, fn) {
   try {
@@ -236,6 +237,55 @@ async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
   assert.match(fixedField.value, /синхронизация команд/);
 }
 
+async function testEmbedsPublicApiStaysComplete() {
+  const expectedFunctions = [
+    'buildAcceptLogEmbed',
+    'buildAcceptModal',
+    'buildAdminPanelEmbed',
+    'buildAiAdvisorModal',
+    'buildApplicationButtons',
+    'buildApplicationEmbed',
+    'buildApplicationsListEmbed',
+    'buildApplicationsPanelButtons',
+    'buildApplicationsPanelEmbed',
+    'buildApplyModal',
+    'buildAutomodActionEmbed',
+    'buildAutomodStatusEmbed',
+    'buildAutoroleStatusEmbed',
+    'buildBanListEmbed',
+    'buildBlacklistEmbed',
+    'buildCommendLogEmbed',
+    'buildCustomCommandsEmbed',
+    'buildDebugConfigEmbed',
+    'buildFamilyEmbeds',
+    'buildFamilyMenuEmbed',
+    'buildHelpEmbed',
+    'buildHelpPaginationButtons',
+    'buildLeaderboardEmbed',
+    'buildProfileEmbed',
+    'buildRankButtons',
+    'buildReactionRoleStatusEmbed',
+    'buildRejectLogEmbed',
+    'buildReportScheduleEmbed',
+    'buildRoleMenuComponents',
+    'buildRoleMenuEmbed',
+    'buildRoleMenuStatusEmbed',
+    'buildUpdateAnnouncementEmbed',
+    'buildVerificationModal',
+    'buildVerificationStatusEmbed',
+    'buildVoiceActivityEmbed',
+    'buildWarnLogEmbed',
+    'buildWelcomeButtons',
+    'buildWelcomeEmbed',
+    'buildWelcomeStatusEmbed',
+    'panelButtons'
+  ];
+
+  for (const name of expectedFunctions) {
+    assert.equal(typeof embeds[name], 'function', `${name} must stay exported`);
+  }
+}
+
 async function main() {
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
@@ -244,6 +294,7 @@ async function main() {
   await runTest('family menu summary and buttons render', testFamilyMenuSummaryAndButtons);
   await runTest('family panel does not duplicate member across roles', testFamilyPanelDoesNotDuplicateMemberAcrossRoles);
   await runTest('update announcement embed shows structured changes', testUpdateAnnouncementEmbedShowsStructuredChanges);
+  await runTest('embeds public api stays complete', testEmbedsPublicApiStaysComplete);
   console.log('ALL EMBEDS TESTS PASSED');
 }
 
