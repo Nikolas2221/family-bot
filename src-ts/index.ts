@@ -125,6 +125,7 @@ const guildRuntime = createGuildRuntimeApi({
   storage,
   roleTemplates: ROLE_TEMPLATES,
   defaults: {
+    guildId: GUILD_ID,
     channelId: CHANNEL_ID,
     applicationsChannelId: APPLICATIONS_CHANNEL_ID,
     logChannelId: LOG_CHANNEL_ID,

@@ -19,6 +19,7 @@ interface GuildLikeForSnapshot {
 }
 
 interface GuildRuntimeDefaults {
+  guildId: string;
   channelId: string;
   applicationsChannelId: string;
   logChannelId: string;
@@ -168,23 +169,24 @@ export function createGuildRuntimeApi(options: {
     const settings = guild.settings || ({} as Partial<GuildSettings>);
     const mode = settings.mode || 'hybrid';
     const defaultModules = defaultModulesForMode(mode);
+    const allowEnvDefaults = Boolean(defaults.guildId && guildId === defaults.guildId);
     const roles = roleTemplates.map(role => ({
       ...role,
-      id: settings.roles?.[role.key] || role.id || ''
+      id: settings.roles?.[role.key] || (allowEnvDefaults ? role.id || '' : '')
     }));
-    const panel = settings.channels?.panel || defaults.channelId;
-    const logs = settings.channels?.logs || defaults.logChannelId;
+    const panel = settings.channels?.panel || (allowEnvDefaults ? defaults.channelId : '');
+    const logs = settings.channels?.logs || (allowEnvDefaults ? defaults.logChannelId : '');
 
     return {
       mode,
       familyTitle: settings.familyTitle || defaults.familyTitle,
       channels: {
         panel,
-        applications: settings.channels?.applications || defaults.applicationsChannelId || panel,
-        welcome: settings.channels?.welcome || settings.channels?.applications || defaults.applicationsChannelId || panel,
+        applications: settings.channels?.applications || (allowEnvDefaults ? defaults.applicationsChannelId || panel : ''),
+        welcome: settings.channels?.welcome || settings.channels?.applications || (allowEnvDefaults ? defaults.applicationsChannelId || panel : ''),
         rules: settings.channels?.rules || '',
         logs,
-        disciplineLogs: settings.channels?.disciplineLogs || defaults.disciplineLogChannelId || logs || '',
+        disciplineLogs: settings.channels?.disciplineLogs || (allowEnvDefaults ? defaults.disciplineLogChannelId || logs : ''),
         updates: settings.channels?.updates || '',
         reports: settings.channels?.reports || logs || '',
         automod: settings.channels?.automod || logs || ''
@@ -239,7 +241,7 @@ export function createGuildRuntimeApi(options: {
         customCommands: settings.modules?.customCommands ?? defaultModules.customCommands,
         music: settings.modules?.music ?? defaultModules.music
       },
-      applicationDefaultRole: settings.roles?.newbie || defaults.applicationDefaultRole
+      applicationDefaultRole: settings.roles?.newbie || (allowEnvDefaults ? defaults.applicationDefaultRole : '')
     };
   }
 
