@@ -46,8 +46,9 @@ interface ClientLike {
       values(): IterableIterator<GuildLike>;
     };
   };
-  removeAllListeners(event: 'clientReady'): unknown;
+  removeAllListeners(event: 'clientReady' | 'guildCreate'): unknown;
   on(event: 'clientReady', listener: () => Promise<void> | void): unknown;
+  on(event: 'guildCreate', listener: (guild: GuildLike) => Promise<void> | void): unknown;
 }
 
 interface ClientReadyRuntimeOptions {
@@ -68,26 +69,29 @@ interface ClientReadyRuntimeOptions {
   startVoiceSession(member: MemberLike): void;
 }
 
-async function syncGuildCommandsOnReady(options: Pick<ClientReadyRuntimeOptions, 'client' | 'database'>): Promise<void> {
-  const { client, database } = options;
+async function syncGuildCommands(guild: GuildLike, options: Pick<ClientReadyRuntimeOptions, 'database'>): Promise<void> {
   const commandsPayload = buildCommands();
   const commandsSignature = getCommandsSignature(commandsPayload);
-  const guilds = await client.guilds.fetch();
+  const guildRecord = options.database.ensureGuild(guild.id, {
+    guildName: guild.name,
+    ownerId: guild.ownerId || ''
+  });
+
+  if (guildRecord.maintenance?.lastCommandSignature !== commandsSignature) {
+    await registerCommands(guild, commandsPayload);
+    options.database.updateGuildMaintenance(guild.id, {
+      lastCommandSignature: commandsSignature
+    });
+  }
+}
+
+async function syncGuildCommandsOnReady(options: Pick<ClientReadyRuntimeOptions, 'client' | 'database'>): Promise<void> {
+  const guilds = await options.client.guilds.fetch();
 
   for (const guildData of guilds.values()) {
     try {
       const guild = await guildData.fetch();
-      const guildRecord = database.ensureGuild(guild.id, {
-        guildName: guild.name,
-        ownerId: guild.ownerId || ''
-      });
-
-      if (guildRecord.maintenance?.lastCommandSignature !== commandsSignature) {
-        await registerCommands(guild, commandsPayload);
-        database.updateGuildMaintenance(guild.id, {
-          lastCommandSignature: commandsSignature
-        });
-      }
+      await syncGuildCommands(guild, options);
     } catch (error) {
       console.error(`Ошибка инициализации guild ${guildData.id}:`, error);
     }
@@ -186,6 +190,17 @@ export function registerClientReadyRuntime(options: ClientReadyRuntimeOptions): 
   const { client, database } = options;
 
   client.removeAllListeners('clientReady');
+  client.removeAllListeners('guildCreate');
+
+  client.on('guildCreate', async guild => {
+    try {
+      await syncGuildCommands(guild, { database });
+      await warmGuildState(guild, options);
+    } catch (error) {
+      console.error(`Ошибка подключения нового guild ${guild.id}:`, error);
+    }
+  });
+
   client.on('clientReady', async () => {
     try {
       if (client.user?.tag) {
