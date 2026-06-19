@@ -1,6 +1,23 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.23': {
+    added: [
+      'бот регистрирует slash-команды сразу при добавлении на новый Discord-сервер',
+      'тест client-ready runtime проверяет регистрацию команд через событие guildCreate',
+      'тест guild-runtime фиксирует, что новые серверы не наследуют старые env-настройки'
+    ],
+    updated: [
+      'env-дефолты CHANNEL_ID, ROLE_* и лог-каналов теперь применяются только к основному GUILD_ID',
+      'новые серверы стартуют с пустыми каналами и ролями до отдельной настройки через /setup, /setchannel и /setrole',
+      'runtime готовит новый guild сразу после подключения: регистрирует команды и прогревает состояние сервера'
+    ],
+    fixed: [
+      'новый сервер больше не показывает каналы и роли старого сервера в /adminpanel',
+      'команды больше не пропадают до рестарта, если бот был добавлен на сервер во время работы',
+      'release notes текущей версии теперь описывают мульти-серверный фикс, а не предыдущую embed-чистку'
+    ]
+  },
   '1.0.22': {
     added: [
       'чистый TypeScript embed-source без @ts-nocheck и без каскада module.exports override-слоёв',
