@@ -12,6 +12,7 @@ async function main() {
   const store = { applications: [], announcements: [] };
   const discordMessages = [];
   const telegramMessages = [];
+  let nextDiscordMessageId = 1;
   const service = createAnnouncementService({
     storage: {
       getStore: () => store,
@@ -23,7 +24,7 @@ async function main() {
           ? {
               async send(payload) {
                 discordMessages.push(payload);
-                return { id: 'discord-message-1' };
+                return { id: `discord-message-${nextDiscordMessageId++}` };
               }
             }
           : null
@@ -55,8 +56,11 @@ async function main() {
     authorId: 'discord-1',
     authorName: 'Moderator'
   }), { ok: true });
+  assert.equal(discordMessages.length, 2);
+  assert.match(discordMessages[1].content, /Источник: Discord/);
   assert.equal(telegramMessages.length, 1);
   assert.equal(store.announcements[0].source, 'discord');
+  assert.equal(store.announcements[0].discordMessageId, 'discord-message-2');
   assert.equal(store.announcements[0].telegramMessageId, 'telegram-message-1');
   assert.equal(store.announcements.length, 2);
 }

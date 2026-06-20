@@ -1,6 +1,7 @@
+import { PermissionFlagsBits } from 'discord.js';
+
 import type { AnnouncementRecord, StorageApi } from '../types';
 import type { TelegramNotificationService } from '../telegram';
-import { PermissionFlagsBits } from 'discord.js';
 
 interface DiscordMessageLike {
   id?: string;
@@ -16,19 +17,18 @@ interface DiscordClientLike {
   };
 }
 
+type AnnouncementInput = {
+  type: 'announcement' | 'event';
+  text: string;
+  authorId: string;
+  authorName: string;
+};
+
+type AnnouncementResult = { ok: boolean; code?: 'channel_missing' | 'send_failed' };
+
 export interface AnnouncementService {
-  sendDiscordFromTelegram(input: {
-    type: 'announcement' | 'event';
-    text: string;
-    authorId: string;
-    authorName: string;
-  }): Promise<{ ok: boolean; code?: 'channel_missing' | 'send_failed' }>;
-  sendTelegramFromDiscord(input: {
-    type: 'announcement' | 'event';
-    text: string;
-    authorId: string;
-    authorName: string;
-  }): Promise<{ ok: boolean; code?: 'send_failed' }>;
+  sendDiscordFromTelegram(input: AnnouncementInput): Promise<AnnouncementResult>;
+  sendTelegramFromDiscord(input: AnnouncementInput): Promise<AnnouncementResult>;
 }
 
 export function canSendDiscordAnnouncement(member: any, memberPermissions: any, roleIds: string[]): boolean {
@@ -67,12 +67,8 @@ export function createAnnouncementService(options: {
     storage.save();
   }
 
-  function baseRecord(input: {
+  function baseRecord(input: AnnouncementInput & {
     source: 'telegram' | 'discord';
-    type: 'announcement' | 'event';
-    text: string;
-    authorId: string;
-    authorName: string;
     targetPlatform: 'telegram' | 'discord';
   }): AnnouncementRecord {
     const createdAt = now().toISOString();
@@ -90,46 +86,53 @@ export function createAnnouncementService(options: {
     };
   }
 
-  async function sendDiscordFromTelegram(input: {
-    type: 'announcement' | 'event';
-    text: string;
-    authorId: string;
-    authorName: string;
-  }) {
-    const channel = discordChannelId
-      ? await client.channels.fetch(discordChannelId).catch(() => null)
+  async function fetchDiscordChannel(): Promise<DiscordChannelLike | null> {
+    return discordChannelId
+      ? client.channels.fetch(discordChannelId).catch(() => null)
       : null;
-    if (!channel) return { ok: false, code: 'channel_missing' as const };
+  }
 
+  async function publishDiscord(channel: DiscordChannelLike, input: AnnouncementInput, source: 'Telegram' | 'Discord', createdAt: string): Promise<string> {
+    const message = await channel.send({
+      content: [
+        title(input.type),
+        '',
+        safeText(input.text),
+        '',
+        `Источник: ${source}`,
+        `Автор: ${safeText(input.authorName, 100)}`,
+        `Дата: ${new Date(createdAt).toLocaleString('ru-RU')}`
+      ].join('\n')
+    });
+    return String(message?.id || '');
+  }
+
+  async function sendDiscordFromTelegram(input: AnnouncementInput): Promise<AnnouncementResult> {
+    const channel = await fetchDiscordChannel();
+    if (!channel) return { ok: false, code: 'channel_missing' };
     const record = baseRecord({ ...input, source: 'telegram', targetPlatform: 'discord' });
     try {
-      const message = await channel.send({
-        content: [
-          title(input.type),
-          '',
-          safeText(input.text),
-          '',
-          'Источник: Telegram',
-          `Автор: ${safeText(input.authorName, 100)}`,
-          `Дата: ${new Date(record.createdAt).toLocaleString('ru-RU')}`
-        ].join('\n')
-      });
-      record.discordMessageId = String(message?.id || '');
+      record.discordMessageId = await publishDiscord(channel, input, 'Telegram', record.createdAt);
       saveAnnouncement(record);
       return { ok: true };
     } catch (error) {
       console.error('Failed to send Telegram announcement to Discord:', error);
-      return { ok: false, code: 'send_failed' as const };
+      return { ok: false, code: 'send_failed' };
     }
   }
 
-  async function sendTelegramFromDiscord(input: {
-    type: 'announcement' | 'event';
-    text: string;
-    authorId: string;
-    authorName: string;
-  }) {
+  async function sendTelegramFromDiscord(input: AnnouncementInput): Promise<AnnouncementResult> {
+    const channel = await fetchDiscordChannel();
+    if (!channel) return { ok: false, code: 'channel_missing' };
     const record = baseRecord({ ...input, source: 'discord', targetPlatform: 'telegram' });
+
+    try {
+      record.discordMessageId = await publishDiscord(channel, input, 'Discord', record.createdAt);
+    } catch (error) {
+      console.error('Failed to persist Discord announcement:', error);
+      return { ok: false, code: 'send_failed' };
+    }
+
     const telegramResult: any = await telegramNotifications.sendAnnouncement({
       type: input.type,
       text: input.text,
@@ -137,7 +140,11 @@ export function createAnnouncementService(options: {
       createdAt: new Date(record.createdAt)
     });
     const sent = typeof telegramResult === 'boolean' ? telegramResult : Boolean(telegramResult?.ok);
-    if (!sent) return { ok: false, code: 'send_failed' as const };
+    if (!sent) {
+      saveAnnouncement(record);
+      return { ok: false, code: 'send_failed' };
+    }
+
     record.telegramMessageId = String(telegramResult?.messageId || '');
     saveAnnouncement(record);
     return { ok: true };

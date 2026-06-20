@@ -1,6 +1,19 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.26': {
+    added: [
+      'постоянная Discord-копия для объявлений и событий, созданных slash-командами /announce и /event'
+    ],
+    updated: [
+      'Discord-origin объявление теперь сначала публикуется в DISCORD_ANNOUNCEMENTS_CHANNEL_ID, затем дублируется в Telegram',
+      'одна announcement-запись сохраняет одновременно discordMessageId и telegramMessageId'
+    ],
+    fixed: [
+      'в Discord больше не остаётся только временное ephemeral-подтверждение без самого объявления',
+      'шаблоны Discord-объявлений очищены от битой кириллицы'
+    ]
+  },
   '1.0.25': {
     added: [
       'двусторонний Telegram ↔ Discord bridge для объявлений и семейных событий',
