@@ -50,6 +50,9 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     token: trim(env.TOKEN),
     telegramBotToken: trim(env.TELEGRAM_BOT_TOKEN),
     telegramAdminChatId: trim(env.TELEGRAM_ADMIN_CHAT_ID),
+    telegramAnnouncementsChatId: trim(env.TELEGRAM_ANNOUNCEMENTS_CHAT_ID) || trim(env.TELEGRAM_ADMIN_CHAT_ID),
+    discordAnnouncementsChannelId: trim(env.DISCORD_ANNOUNCEMENTS_CHANNEL_ID),
+    discordAnnouncerRoleIds: parseCsv(env.DISCORD_ANNOUNCER_ROLE_IDS),
     guildId: trim(env.GUILD_ID),
     channelId,
     hasApplicationsChannelId: Boolean(trim(env.APPLICATIONS_CHANNEL_ID)),
@@ -126,6 +129,7 @@ export function validateConfig(config: AppConfig): ValidationResult {
   validateDiscordId('DISCIPLINE_LOG_CHANNEL_ID', config.disciplineLogChannelId, errors, warnings);
   validateDiscordId('MESSAGE_ID', config.messageId, errors, warnings);
   validateDiscordId('APPLICATION_DEFAULT_ROLE', config.applicationDefaultRole, errors, warnings);
+  validateDiscordId('DISCORD_ANNOUNCEMENTS_CHANNEL_ID', config.discordAnnouncementsChannelId, errors, warnings);
 
   for (const role of config.roles) {
     validateDiscordId(role.key, role.value, errors, warnings);
@@ -225,6 +229,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- rank managers: ${rankManagers}`,
     `- bot owners: ${ownersSummary}`,
     `- Telegram notifications: ${config.telegramBotToken && config.telegramAdminChatId ? 'enabled' : 'disabled'}`,
+    `- announcements bridge: ${config.telegramAnnouncementsChatId && config.discordAnnouncementsChannelId ? 'enabled' : 'disabled'}`,
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,

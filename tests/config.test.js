@@ -93,11 +93,15 @@ async function testTelegramConfigIsSafeAndRequiresBothValues() {
     GUILD_ID: '123456789012345678',
     CHANNEL_ID: '123456789012345679',
     TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
-    TELEGRAM_ADMIN_CHAT_ID: '-1001234567890'
+    TELEGRAM_ADMIN_CHAT_ID: '-1001234567890',
+    DISCORD_ANNOUNCEMENTS_CHANNEL_ID: '123456789012345680',
+    DISCORD_ANNOUNCER_ROLE_IDS: '123456789012345681,123456789012345682'
   });
   const summary = summarizeConfig(complete).join('\n');
 
   assert.equal(complete.telegramAdminChatId, '-1001234567890');
+  assert.equal(complete.telegramAnnouncementsChatId, '-1001234567890');
+  assert.deepEqual(complete.discordAnnouncerRoleIds, ['123456789012345681', '123456789012345682']);
   assert.match(summary, /Telegram notifications: enabled/);
   assert.doesNotMatch(summary, /telegram-secret-token/);
 }

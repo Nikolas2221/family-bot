@@ -1,6 +1,27 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.25': {
+    added: [
+      'двусторонний Telegram ↔ Discord bridge для объявлений и семейных событий',
+      'Telegram-команды /reply, /announce, /event и кнопка «Взять в работу» под новой заявкой',
+      'Discord slash-команды /announce, /event и /close с проверкой ролей или Administrator',
+      'ticket service с persistent состояниями open, in_progress, approved, rejected и closed',
+      'уведомления о сообщениях Discord ticket с 60-секундным антиспамом и digest-счётчиком'
+    ],
+    updated: [
+      'Telegram runtime запускает Telegraf polling и корректно останавливается при SIGINT/SIGTERM',
+      'новая заявка получает кнопки открытия ticket и принятия в работу, а ticket metadata сохраняется в storage',
+      'объявления сохраняют source, target platform и Discord/Telegram message IDs для защиты от дублей',
+      'README и .env.example описывают announcement chats, Discord channel и CSV-список разрешённых ролей'
+    ],
+    fixed: [
+      'ошибки Telegram по-прежнему не блокируют Discord application flow',
+      'сообщения ботов, пустые сообщения, закрытые тикеты и посторонние серверные каналы не мостятся',
+      'fallback applications channel хранится отдельно от thread ID и не может быть случайно удалён cleanup-логикой',
+      'Telegram admin-команды отклоняются вне TELEGRAM_ADMIN_CHAT_ID'
+    ]
+  },
   '1.0.24': {
     added: [
       'Telegram Bot API integration через telegraf для уведомлений администратора',

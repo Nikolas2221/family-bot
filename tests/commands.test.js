@@ -67,6 +67,9 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   const autorole = commands.find(command => command.name === 'autorole');
   const reactionRole = commands.find(command => command.name === 'reactionrole');
   const reportSchedule = commands.find(command => command.name === 'reportschedule');
+  const announce = commands.find(command => command.name === 'announce');
+  const event = commands.find(command => command.name === 'event');
+  const close = commands.find(command => command.name === 'close');
 
   assert.ok(automod);
   assert.ok(serverReport);
@@ -76,6 +79,11 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.ok(autorole);
   assert.ok(reactionRole);
   assert.ok(reportSchedule);
+  assert.ok(announce);
+  assert.ok(event);
+  assert.ok(close);
+  assert.equal(announce.options[0].name, 'text');
+  assert.equal(event.options[0].name, 'text');
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'updates'), true);
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'welcome'), true);
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'reports'), true);

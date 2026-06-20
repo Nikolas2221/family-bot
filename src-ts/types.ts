@@ -34,6 +34,9 @@ export interface AppConfig {
   token: string;
   telegramBotToken: string;
   telegramAdminChatId: string;
+  telegramAnnouncementsChatId: string;
+  discordAnnouncementsChannelId: string;
+  discordAnnouncerRoleIds: string[];
   guildId: string;
   channelId: string;
   hasApplicationsChannelId: boolean;
@@ -176,7 +179,7 @@ export interface EmbedsApi {
 
 export interface ApplicationsService {
   accept(interaction: unknown, applicationId: string, userId: string, details?: Record<string, unknown>): Promise<unknown>;
-  closeTicket(interaction: unknown, applicationId: string): Promise<unknown>;
+  closeTicket(interaction: unknown, applicationId: string, details?: { reason?: string }): Promise<unknown>;
   getCooldownSecondsLeft(userId: string, cooldownMs: number): number;
   moveToReview(interaction: unknown, applicationId: string, userId: string): Promise<unknown>;
   reject(interaction: unknown, applicationId: string, userId: string): Promise<unknown>;
@@ -464,10 +467,33 @@ export interface ApplicationRecord {
   ticketThreadId: string;
   ticketMessageId: string;
   ticketStarterMessageId: string;
+  ticketChannelId?: string;
+  ticketChannelName?: string;
+  ticketStatus?: 'open' | 'in_progress' | 'approved' | 'rejected' | 'closed';
+  handledBy?: string;
+  closedAt?: string;
+  closeReason?: string;
+  lastTelegramMessageAt?: number;
+  pendingMessageCount?: number;
+  telegramNotificationMessageId?: string;
+  discordUsername?: string;
   status: ApplicationStatus | string;
   createdAt: string;
   reviewedBy?: string;
   reviewedAt?: string;
+}
+
+export interface AnnouncementRecord {
+  announcementId: string;
+  source: 'telegram' | 'discord' | 'system';
+  type: 'announcement' | 'event';
+  text: string;
+  authorId: string;
+  authorName: string;
+  targetPlatform: 'telegram' | 'discord';
+  createdAt: string;
+  discordMessageId: string;
+  telegramMessageId: string;
 }
 
 export interface WarnEntry {
@@ -536,6 +562,7 @@ export interface StoreState {
     reports: Record<string, string>;
   };
   applications: ApplicationRecord[];
+  announcements: AnnouncementRecord[];
   cooldowns: Record<string, number>;
   warns: WarnEntry[];
   commends: CommendEntry[];
@@ -596,7 +623,7 @@ export interface StorageApi {
   setGuildReportMarker(guildId: string, markerKey: string, value: string): void;
   getGuildCooldown(guildId: string, userId: string): number;
   setGuildCooldown(guildId: string, userId: string, value?: number): void;
-  createGuildApplication(payload: { guildId: string; userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string }): string;
+  createGuildApplication(payload: { guildId: string; userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string; discordUsername?: string }): string;
   findGuildApplication(guildId: string, applicationId: string): ApplicationRecord | null;
   setApplicationTicketInfo(app: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>): ApplicationRecord | null;
   listGuildRecentApplications(guildId: string, limit?: number): ApplicationRecord[];
@@ -625,7 +652,7 @@ export interface GuildStorageContext {
   addCommend(payload: { userId: string; moderatorId: string; reason: string }): void;
   getCooldown(userId: string): number;
   setCooldown(userId: string, value?: number): void;
-  createApplication(payload: { userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string }): string;
+  createApplication(payload: { userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string; discordUsername?: string }): string;
   findApplication(applicationId: string): ApplicationRecord | null;
   setApplicationTicketInfo(app: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>): ApplicationRecord | null;
   listRecentApplications(limit?: number): ApplicationRecord[];

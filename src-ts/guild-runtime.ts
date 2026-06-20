@@ -99,6 +99,7 @@ export function createGuildStorageContext(guildId: string, storage: StorageApi):
       about?: string;
       age?: string;
       text?: string;
+      discordUsername?: string;
     }) {
       return storage.createGuildApplication({ guildId, ...payload });
     },

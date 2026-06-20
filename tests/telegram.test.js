@@ -31,14 +31,17 @@ async function main() {
   assert.equal(ok, true);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].chatId, '-1001234567890');
-  assert.match(sent[0].text, /<@123456789012345678> \| candidate \| ID: 123456789012345678/);
+  assert.match(sent[0].text, /Кандидат: <@123456789012345678> \/ candidate/);
+  assert.match(sent[0].text, /Discord ID: 123456789012345678/);
   assert.match(sent[0].text, /Ник в игре: Phoenix_Player/);
-  assert.match(sent[0].text, /Level: 25/);
+  assert.match(sent[0].text, /Лвл: 25/);
   assert.match(sent[0].text, /Кто дал инвайт: Leader/);
   assert.match(sent[0].text, /Откуда узнал: Discord/);
   assert.match(sent[0].text, /ID анкеты: application-1/);
   assert.match(sent[0].text, /О себе: Хочу вступить в семью\./);
   assert.match(sent[0].text, /https:\/\/discord\.com\/channels\/987654321098765432\/111111111111111111/);
+  assert.equal(sent[0].options.reply_markup.inline_keyboard[0][0].text, 'Открыть тикет');
+  assert.equal(sent[0].options.reply_markup.inline_keyboard[1][0].callback_data, 'ticket_take:application-1');
 
   const warnings = [];
   const unavailable = createTelegramNotificationService({

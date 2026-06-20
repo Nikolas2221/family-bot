@@ -14,6 +14,18 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('adminpanel').setDescription(copy.commands.adminPanelDescription),
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
     new SlashCommandBuilder()
+      .setName('announce')
+      .setDescription('Отправить семейное объявление в Telegram')
+      .addStringOption(option => option.setName('text').setDescription('Текст объявления').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('event')
+      .setDescription('Отправить семейное событие в Telegram')
+      .addStringOption(option => option.setName('text').setDescription('Текст события').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('close')
+      .setDescription('Закрыть текущий ticket')
+      .addStringOption(option => option.setName('reason').setDescription('Причина закрытия').setRequired(false)),
+    new SlashCommandBuilder()
       .setName('setrole')
       .setDescription(copy.commands.setRoleDescription)
       .addStringOption(option =>

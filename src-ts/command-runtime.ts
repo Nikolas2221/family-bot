@@ -1,4 +1,5 @@
 import { createGuildStorageContext } from './guild-runtime';
+import { canSendDiscordAnnouncement } from './services/announcements';
 
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
@@ -64,6 +65,9 @@ interface CommandRuntimeOptions {
   isAiCommandOverviewQuery(query: string): boolean;
   buildAiCommandsOverview(interaction: any): string;
   canManageNicknames(member: any): boolean;
+  announcementService: any;
+  discordAnnouncerRoleIds: string[];
+  ticketService: any;
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -142,7 +146,10 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     aiService,
     isAiCommandOverviewQuery: rawIsAiCommandOverviewQuery,
     buildAiCommandsOverview: rawBuildAiCommandsOverview,
-    canManageNicknames
+    canManageNicknames,
+    announcementService,
+    discordAnnouncerRoleIds,
+    ticketService
   } = options;
 
   const ephemeral = typeof rawEphemeral === 'function' ? rawEphemeral : ((payload: Record<string, unknown> = {}) => payload);
@@ -228,6 +235,47 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
         ? embeds.buildHelpPaginationButtons(catalog, 0)
         : []
     }));
+    return true;
+  }
+
+  if (interaction.commandName === 'announce' || interaction.commandName === 'event') {
+    const allowed = canSendDiscordAnnouncement(
+      interaction.member,
+      interaction.memberPermissions,
+      discordAnnouncerRoleIds
+    );
+    if (!allowed) {
+      await interaction.reply(ephemeral({ content: '❌ Недостаточно прав для отправки объявлений.' }));
+      return true;
+    }
+
+    const text = interaction.options.getString('text', true).trim().slice(0, 3000);
+    const result = await announcementService.sendTelegramFromDiscord({
+      type: interaction.commandName === 'event' ? 'event' : 'announcement',
+      text,
+      authorId: interaction.user.id,
+      authorName: interaction.user.globalName || interaction.user.username || interaction.user.tag || interaction.user.id
+    });
+    await interaction.reply(ephemeral({
+      content: result.ok
+        ? '✅ Отправлено в Telegram.'
+        : '❌ Не удалось отправить объявление в Telegram.'
+    }));
+    return true;
+  }
+
+  if (interaction.commandName === 'close') {
+    if (!canApplications(interaction.member)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+    const application = ticketService.findTicketByChannel(interaction.channel?.id || '');
+    if (!application) {
+      await interaction.reply(ephemeral({ content: '❌ Текущий канал не является активным тикетом.' }));
+      return true;
+    }
+    const reason = interaction.options.getString('reason') || 'Закрыто через /close';
+    await applicationsService.closeTicket(interaction, application.id, { reason });
     return true;
   }
 

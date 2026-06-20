@@ -27,9 +27,12 @@ Family Bot for Discord
    `STORAGE_FILE=/data/storage.json`
 8. Если нужен AI-анализ заявок, задай:
    `ACCESS_APPLICATIONS`
-9. Запусти проверки:
+9. Для Telegram-моста укажи:
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID`
+   Опционально: `TELEGRAM_ANNOUNCEMENTS_CHAT_ID`, `DISCORD_ANNOUNCEMENTS_CHANNEL_ID`, `DISCORD_ANNOUNCER_ROLE_IDS`
+10. Запусти проверки:
    `npm run check`
-10. Запусти бота:
+11. Запусти бота:
    `npm start`
 
 Что проверяется на старте:
@@ -47,6 +50,14 @@ Family Bot for Discord
 - `/subscription` - owner-команда для смены `free/premium`
 - `/help` - показать доступные команды по тарифу сервера
 - `/debugconfig` - безопасная сводка конфигурации для админов без секретов
+- `/announce text:...` - отправить семейное объявление из Discord в Telegram
+- `/event text:...` - отправить семейное событие из Discord в Telegram
+- `/close reason:...` - закрыть текущий ticket
+
+Telegram-команды:
+- `/reply <ticketId> <text>` - ответить из Telegram в Discord ticket
+- `/announce <text>` - отправить объявление из Telegram в Discord
+- `/event <text>` - отправить событие из Telegram в Discord
 
 Как это работает:
 - Бот использует `storage.json` для текущей игровой активности и `database.json` для мульти-серверных setup/подписок.

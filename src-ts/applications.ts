@@ -3,6 +3,7 @@ import { MessageFlags } from 'discord.js';
 import copy from './copy';
 import type { ApplicationsService, EmbedsApi, RoleDefinition } from './types';
 import type { TelegramNotificationService } from './telegram';
+import type { TicketService } from './services/tickets';
 
 function ephemeral(payload: Record<string, any> = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -39,6 +40,7 @@ interface ApplicationsOptions {
   sendAcceptLog: (...args: any[]) => Promise<unknown>;
   sendAcceptanceDm?: (...args: any[]) => Promise<unknown>;
   telegramNotifications?: TelegramNotificationService;
+  ticketService?: Pick<TicketService, 'registerTicket' | 'markDecision' | 'markClosed'>;
 }
 
 export function createApplicationsService({
@@ -54,7 +56,8 @@ export function createApplicationsService({
   embeds,
   sendAcceptLog,
   sendAcceptanceDm = async () => {},
-  telegramNotifications
+  telegramNotifications,
+  ticketService
 }: ApplicationsOptions): ApplicationsService {
   async function notifyTelegram(task?: Promise<boolean>): Promise<void> {
     if (!task) return;
@@ -258,6 +261,7 @@ export function createApplicationsService({
     storage.setCooldown(interaction.user.id);
     const applicationId = storage.createApplication({
       userId: interaction.user.id,
+      discordUsername: interaction.user.globalName || interaction.user.username || interaction.user.tag || '',
       nickname,
       level,
       inviter,
@@ -272,12 +276,18 @@ export function createApplicationsService({
     }
 
     const ticket = await createApplicationTicket(channel, application, interaction.user);
+    const ticketChannel = ticket.thread || channel;
+    ticketService?.registerTicket(application, {
+      channelId: ticketChannel.id,
+      channelName: ticketChannel.name || '',
+      discordUsername: interaction.user.globalName || interaction.user.username || interaction.user.tag || ''
+    });
 
     await notifyTelegram(telegramNotifications?.notifyApplicationCreated({
       application,
       guild: interaction.guild,
       candidate: interaction.user,
-      ticketChannel: ticket.thread || channel
+      ticketChannel
     }));
 
     return interaction.reply(ephemeral({ content: copy.applications.sent }));
@@ -320,6 +330,7 @@ export function createApplicationsService({
     }
 
     storage.setApplicationStatus(application, 'accepted', interaction.user.id);
+    ticketService?.markDecision(application, 'approved', interaction.user.username || interaction.user.id);
 
     const accepted = embeds.buildApplicationEmbed({
       user: { id: userId },
@@ -363,7 +374,9 @@ export function createApplicationsService({
       guild: interaction.guild,
       candidate: member.user || { id: userId, username: member.displayName },
       moderator: interaction.user,
-      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null)
+      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null),
+      reason,
+      status: 'approved'
     }));
     await cleanupAcceptedTicket(interaction.guild, application, interaction.channel);
     return true;
@@ -417,6 +430,7 @@ export function createApplicationsService({
     }
 
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);
+    ticketService?.markDecision(application, 'rejected', interaction.user.username || interaction.user.id);
 
     const rejected = embeds.buildApplicationEmbed({
       user: { id: userId },
@@ -460,12 +474,14 @@ export function createApplicationsService({
       guild: interaction.guild,
       candidate: user || { id: userId },
       moderator: interaction.user,
-      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null)
+      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null),
+      reason: copy.applications.rejectReason,
+      status: 'rejected'
     }));
     return true;
   }
 
-  async function closeTicket(interaction: any, applicationId: string) {
+  async function closeTicket(interaction: any, applicationId: string, details: { reason?: string } = {}) {
     const application = storage.findApplication(applicationId);
     if (!application) {
       return interaction.reply(ephemeral({ content: copy.applications.notFound }));
@@ -478,12 +494,19 @@ export function createApplicationsService({
     await interaction.reply(ephemeral({ content: copy.applications.ticketClosedReply }));
     await interaction.channel.setArchived(true, copy.applications.ticketReason(application.discordId || 'user')).catch(() => {});
     await interaction.channel.setLocked(true).catch(() => {});
+    const closeReason = String(details.reason || '').trim() || copy.applications.ticketReason(application.discordId || 'user');
+    ticketService?.markClosed(application, {
+      handledBy: interaction.user.username || interaction.user.id,
+      reason: closeReason
+    });
     await notifyTelegram(telegramNotifications?.notifyTicketClosed({
       application,
       guild: interaction.guild,
       candidate: { id: application.discordId },
       moderator: interaction.user,
-      ticketChannel: interaction.channel
+      ticketChannel: interaction.channel,
+      reason: closeReason,
+      status: application.ticketStatus || 'closed'
     }));
     return true;
   }

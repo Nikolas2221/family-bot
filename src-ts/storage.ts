@@ -22,6 +22,7 @@ function defaultStore(): StoreState {
       reports: {}
     },
     applications: [],
+    announcements: [],
     cooldowns: {},
     warns: [],
     commends: [],
@@ -564,6 +565,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     about?: string;
     age?: string;
     text?: string;
+    discordUsername?: string;
   }): string {
     const {
       guildId,
@@ -574,7 +576,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       discovery = '',
       about = '',
       age = '',
-      text = ''
+      text = '',
+      discordUsername = ''
     } = payload;
 
     const applicationId = `${Date.now()}_${userId}`;
@@ -592,6 +595,16 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       ticketThreadId: '',
       ticketMessageId: '',
       ticketStarterMessageId: '',
+      ticketChannelId: '',
+      ticketChannelName: '',
+      ticketStatus: 'open',
+      handledBy: '',
+      closedAt: '',
+      closeReason: '',
+      lastTelegramMessageAt: 0,
+      pendingMessageCount: 0,
+      telegramNotificationMessageId: '',
+      discordUsername,
       status: 'pending',
       createdAt: new Date().toISOString()
     });

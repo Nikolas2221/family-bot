@@ -1,6 +1,8 @@
 interface UserLike {
   id: string;
   bot?: boolean;
+  username?: string;
+  globalName?: string | null;
 }
 
 interface RoleLike {
@@ -41,6 +43,8 @@ interface GuildLike {
 
 interface ChannelLike {
   id: string;
+  name?: string;
+  archived?: boolean;
   send?(payload: Record<string, unknown>): Promise<NoticeLike | null>;
 }
 
@@ -152,6 +156,7 @@ interface EventRuntimeOptions {
   fetchDeletedChannelExecutor(guild: GuildLike, channelId: string): Promise<{ id: string } | null>;
   restoreDeletedChannel(channel: ChannelDeleteLike, reason: string): Promise<unknown>;
   doPanelUpdate(guildId: string, force: boolean): Promise<unknown>;
+  handleDiscordTicketMessage(message: MessageLike): Promise<boolean>;
 }
 
 async function hydrateReaction(reaction: ReactionLike | null | undefined): Promise<ReactionLike | null> {
@@ -229,7 +234,8 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     canBypassChannelGuard,
     fetchDeletedChannelExecutor,
     restoreDeletedChannel,
-    doPanelUpdate
+    doPanelUpdate,
+    handleDiscordTicketMessage
   } = options;
 
   const managedEvents = [
@@ -267,6 +273,10 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     if (await handleAutomodMessage(message)) {
       return;
     }
+
+    await handleDiscordTicketMessage(message).catch(error => {
+      console.warn('Telegram ticket message bridge failed:', error);
+    });
 
     guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
     await handleCustomTriggerMessage(message).catch(() => null);

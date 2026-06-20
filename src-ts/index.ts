@@ -16,6 +16,10 @@ const ROLES = require('./roles').default || require('./roles');
 const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
 const { createTelegramNotificationService } = require('./telegram');
+const { createTelegramBot, startTelegramBot, stopTelegramBot } = require('./telegram/bot');
+const { registerTelegramHandlers } = require('./telegram/handlers');
+const { createTicketService } = require('./services/tickets');
+const { canSendDiscordAnnouncement, createAnnouncementService } = require('./services/announcements');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -118,9 +122,23 @@ const client = new Client({
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
+const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
-  token: config.telegramBotToken,
-  adminChatId: config.telegramAdminChatId
+  adminChatId: config.telegramAdminChatId,
+  announcementsChatId: config.telegramAnnouncementsChatId,
+  sender: telegramBot?.telegram || null
+});
+const ticketService = createTicketService({ storage, client, telegramNotifications });
+const announcementService = createAnnouncementService({
+  storage,
+  client,
+  telegramNotifications,
+  discordChannelId: config.discordAnnouncementsChannelId
+});
+registerTelegramHandlers(telegramBot, {
+  adminChatId: config.telegramAdminChatId,
+  tickets: ticketService,
+  announcements: announcementService
 });
 const ROLE_TEMPLATES = ROLES.map((role: any) => ({ ...role }));
 const automodState = new Map();
@@ -602,6 +620,7 @@ function getCommandModule(commandName: any) {
     case 'apply':
     case 'applypanel':
     case 'applications':
+    case 'close':
       return 'applications';
     case 'warn':
     case 'commend':
@@ -674,6 +693,9 @@ function getHelpCatalog(interaction: any) {
     { name: 'setart', description: copy.commands.setArtDescription },
     { name: 'setup', description: copy.commands.setupDescription },
     { name: 'adminpanel', description: copy.commands.adminPanelDescription },
+    { name: 'announce', description: 'Отправить семейное объявление в Telegram' },
+    { name: 'event', description: 'Отправить семейное событие в Telegram' },
+    { name: 'close', description: 'Закрыть текущий ticket' },
     { name: 'warn', description: copy.commands.warnDescription },
     { name: 'commend', description: copy.commands.commendDescription },
     { name: 'purge', description: copy.commands.purgeDescription },
@@ -756,6 +778,15 @@ function canUseCommandInContext(commandName: any, interaction: any) {
     case 'testaccept':
     case 'automod':
       return canDebugConfig(interaction);
+    case 'announce':
+    case 'event':
+      return canSendDiscordAnnouncement(
+        interaction.member,
+        interaction.memberPermissions,
+        config.discordAnnouncerRoleIds
+      );
+    case 'close':
+      return canApplications(interaction.member);
     case 'warn':
     case 'commend':
       return canDiscipline(interaction.member);
@@ -1049,7 +1080,8 @@ function getApplicationsService(guildId: any) {
     embeds,
     sendAcceptLog,
     sendAcceptanceDm,
-    telegramNotifications
+    telegramNotifications,
+    ticketService
   });
 }
 
@@ -1369,10 +1401,13 @@ registerEventRuntime({
   canBypassChannelGuard,
   fetchDeletedChannelExecutor,
   restoreDeletedChannel,
-  doPanelUpdate
+  doPanelUpdate,
+  handleDiscordTicketMessage: ticketService.handleDiscordTicketMessage
 });
 
 process.on('SIGINT', () => {
+  stopTelegramBot(telegramBot, 'SIGINT');
+  ticketService.stop();
   flushVoiceSessions();
   database.flush();
   storage.flush();
@@ -1380,6 +1415,8 @@ process.on('SIGINT', () => {
 });
 
 process.on('SIGTERM', () => {
+  stopTelegramBot(telegramBot, 'SIGTERM');
+  ticketService.stop();
   flushVoiceSessions();
   database.flush();
   storage.flush();
@@ -1496,7 +1533,10 @@ registerInteractionRuntime({
     buildAutomodRulePatch,
     buildAiCommandsOverview,
     buildFamilyDashboardStats,
-    buildProfilePayload
+    buildProfilePayload,
+    announcementService,
+    discordAnnouncerRoleIds: config.discordAnnouncerRoleIds,
+    ticketService
   });
   },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,
@@ -1545,7 +1585,9 @@ registerInteractionRuntime({
   sendScheduledReport
 });
 
-client.login(config.token);
+client.login(config.token).then(() => startTelegramBot(telegramBot)).catch((error: unknown) => {
+  console.error('Discord login failed:', error);
+});
 
 
 

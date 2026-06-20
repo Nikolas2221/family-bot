@@ -21,6 +21,9 @@ async function main() {
   const { main: runSecurityTests } = require('./security.test');
   const { main: runStorageTests } = require('./storage.test');
   const { main: runTelegramTests } = require('./telegram.test');
+  const { main: runTelegramHandlersTests } = require('./telegram-handlers.test');
+  const { main: runTicketBridgeTests } = require('./ticket-bridge.test');
+  const { main: runAnnouncementsTests } = require('./announcements.test');
   const { main: runTsDebtTests } = require('./ts-debt.test');
   const { main: runTsMigrationTests } = require('./ts-migration.test');
 
@@ -46,6 +49,9 @@ async function main() {
   await runSecurityTests();
   await runStorageTests();
   await runTelegramTests();
+  await runTelegramHandlersTests();
+  await runTicketBridgeTests();
+  await runAnnouncementsTests();
   await runTsDebtTests();
   await runTsMigrationTests();
   console.log('ALL TEST SUITES PASSED');
