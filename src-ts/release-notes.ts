@@ -1,6 +1,23 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.24': {
+    added: [
+      'Telegram Bot API integration через telegraf для уведомлений администратора',
+      'переменные окружения TELEGRAM_BOT_TOKEN и TELEGRAM_ADMIN_CHAT_ID',
+      'Telegram-уведомления при создании, одобрении, отклонении заявки и закрытии Discord ticket'
+    ],
+    updated: [
+      'уведомление о новой заявке содержит Discord-кандидата, игровой ник, level, инвайтера, источник, ID анкеты, текст о себе и ссылку на ticket',
+      'startup diagnostics показывает только статус Telegram integration без вывода токена',
+      'application tests покрывают все четыре Telegram-события и конфигурацию интеграции'
+    ],
+    fixed: [
+      'ошибка Telegram API больше не блокирует создание Discord application ticket',
+      'Telegram sender изолирован от Discord application lifecycle безопасной обработкой ошибок',
+      'неполная Telegram-конфигурация определяется на старте и отключает уведомления с предупреждением'
+    ]
+  },
   '1.0.23': {
     added: [
       'бот регистрирует slash-команды сразу при добавлении на новый Discord-сервер',

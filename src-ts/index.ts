@@ -15,6 +15,7 @@ const { getReleaseNotes } = require('./release-notes');
 const ROLES = require('./roles').default || require('./roles');
 const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
+const { createTelegramNotificationService } = require('./telegram');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -117,6 +118,10 @@ const client = new Client({
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
+const telegramNotifications = createTelegramNotificationService({
+  token: config.telegramBotToken,
+  adminChatId: config.telegramAdminChatId
+});
 const ROLE_TEMPLATES = ROLES.map((role: any) => ({ ...role }));
 const automodState = new Map();
 const voiceSessions = new Map();
@@ -1043,7 +1048,8 @@ function getApplicationsService(guildId: any) {
     client,
     embeds,
     sendAcceptLog,
-    sendAcceptanceDm
+    sendAcceptanceDm,
+    telegramNotifications
   });
 }
 

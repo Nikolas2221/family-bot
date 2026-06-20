@@ -239,6 +239,68 @@ async function testSubmitApplicationCreatesThreadTicket() {
   assert.match(starterEdited.content, /тикет/i);
 }
 
+async function testSubmitApplicationSurvivesTelegramFailure() {
+  const storage = createTempStorage();
+  const guildId = 'guild-telegram-failure';
+  const channel = {
+    sent: [],
+    async send(payload) {
+      this.sent.push(payload);
+      return { id: `message-${this.sent.length}`, ...payload };
+    }
+  };
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+
+  try {
+    const service = createApplicationsService({
+      storage: createGuildScopedStorage(storage, guildId),
+      fetchTextChannel: async () => channel,
+      applicationsChannelId: 'applications',
+      applicationDefaultRole: '',
+      logChannelId: '',
+      familyRoles: buildFamilyRoles(),
+      client: {},
+      embeds: createEmbedsStub(),
+      sendAcceptLog: async () => {},
+      telegramNotifications: {
+        notifyApplicationCreated: async () => {
+          throw new Error('Telegram unavailable');
+        }
+      }
+    });
+
+    const replies = [];
+    await service.submitApplication({
+      guild: { id: guildId, name: 'Failure Test Guild' },
+      user: { id: 'user-telegram', username: 'telegram-user' },
+      fields: {
+        getTextInputValue(field) {
+          return {
+            nickname: 'TelegramTester',
+            level: '12',
+            inviter: 'Member',
+            discovery: 'Discord',
+            about: 'Проверка отказоустойчивости Telegram-уведомлений.'
+          }[field];
+        }
+      },
+      async reply(payload) {
+        replies.push(payload);
+        return payload;
+      }
+    });
+
+    assert.equal(storage.listGuildRecentApplications(guildId, 1).length, 1);
+    assert.equal(channel.sent.length, 2);
+    assert.equal(replies.length, 1);
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = originalWarn;
+  }
+}
+
 async function testAcceptApplication() {
   const storage = createTempStorage();
   const guildId = 'guild-accept';
@@ -254,6 +316,7 @@ async function testAcceptApplication() {
 
   const edits = [];
   let acceptLogPayload = null;
+  let telegramAccepted = null;
   let addedRoleId = null;
   let removedRoleIds = null;
   const member = {
@@ -283,6 +346,12 @@ async function testAcceptApplication() {
     embeds: createEmbedsStub(),
     sendAcceptLog: async (_guild, _member, _moderatorUser, reason, rankName) => {
       acceptLogPayload = { reason, rankName };
+    },
+    telegramNotifications: {
+      notifyApplicationAccepted: async payload => {
+        telegramAccepted = payload;
+        return true;
+      }
     }
   });
 
@@ -328,6 +397,8 @@ async function testAcceptApplication() {
     reason: 'Прошел собеседование',
     rankName: '1 ранг'
   });
+  assert.equal(telegramAccepted.application.id, applicationId);
+  assert.equal(telegramAccepted.moderator.id, 'moderator-1');
   assert.match(replies[0].content, /принят в семью/i);
 }
 
@@ -545,6 +616,7 @@ async function testRejectApplication() {
       return payload;
     }
   };
+  let telegramRejected = null;
 
   const service = createApplicationsService({
     storage: createGuildScopedStorage(storage, guildId),
@@ -561,7 +633,13 @@ async function testRejectApplication() {
       }
     },
     embeds: createEmbedsStub(),
-    sendAcceptLog: async () => {}
+    sendAcceptLog: async () => {},
+    telegramNotifications: {
+      notifyApplicationRejected: async payload => {
+        telegramRejected = payload;
+        return true;
+      }
+    }
   });
 
   const replies = [];
@@ -581,16 +659,77 @@ async function testRejectApplication() {
 
   assert.equal(storage.findGuildApplication(guildId, applicationId).status, 'rejected');
   assert.equal(logChannel.sent.length, 1);
+  assert.equal(telegramRejected.application.id, applicationId);
+  assert.equal(telegramRejected.candidate.id, 'user-3');
   assert.match(replies[0].content, /отклон/i);
+}
+
+async function testCloseTicketNotifiesTelegram() {
+  const storage = createTempStorage();
+  const guildId = 'guild-close';
+  const applicationId = storage.createGuildApplication({
+    guildId,
+    userId: 'user-close',
+    nickname: 'Closer',
+    level: '10',
+    inviter: 'Member',
+    discovery: 'Discord',
+    about: 'Ticket close notification test.'
+  });
+  let archived = false;
+  let locked = false;
+  let telegramClosed = null;
+
+  const service = createApplicationsService({
+    storage: createGuildScopedStorage(storage, guildId),
+    fetchTextChannel: async () => null,
+    applicationsChannelId: 'applications',
+    applicationDefaultRole: '',
+    logChannelId: '',
+    client: {},
+    embeds: createEmbedsStub(),
+    sendAcceptLog: async () => {},
+    telegramNotifications: {
+      notifyTicketClosed: async payload => {
+        telegramClosed = payload;
+        return true;
+      }
+    }
+  });
+
+  const channel = {
+    id: 'thread-close',
+    isThread: () => true,
+    async setArchived() {
+      archived = true;
+    },
+    async setLocked() {
+      locked = true;
+    }
+  };
+
+  await service.closeTicket({
+    guild: { id: guildId, name: 'Close Guild' },
+    user: { id: 'moderator-close', username: 'CloserMod' },
+    channel,
+    async reply() {}
+  }, applicationId);
+
+  assert.equal(archived, true);
+  assert.equal(locked, true);
+  assert.equal(telegramClosed.application.id, applicationId);
+  assert.equal(telegramClosed.ticketChannel.id, 'thread-close');
 }
 
 async function main() {
   await runTest('submitApplication stores data and sends application message', testSubmitApplication);
   await runTest('submitApplication creates thread ticket when threads are available', testSubmitApplicationCreatesThreadTicket);
+  await runTest('submitApplication survives Telegram notification failure', testSubmitApplicationSurvivesTelegramFailure);
   await runTest('accept updates status and logs admission', testAcceptApplication);
   await runTest('accept assigns resolved family role', testAcceptApplicationAssignsResolvedFamilyRole);
   await runTest('accept deletes ticket after approval', testAcceptApplicationDeletesTicketAfterApproval);
   await runTest('reject updates status and sends reject log', testRejectApplication);
+  await runTest('close ticket sends Telegram notification', testCloseTicketNotifiesTelegram);
   console.log('ALL TESTS PASSED');
 }
 

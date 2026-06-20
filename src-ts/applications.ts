@@ -2,6 +2,7 @@ import { MessageFlags } from 'discord.js';
 
 import copy from './copy';
 import type { ApplicationsService, EmbedsApi, RoleDefinition } from './types';
+import type { TelegramNotificationService } from './telegram';
 
 function ephemeral(payload: Record<string, any> = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -37,6 +38,7 @@ interface ApplicationsOptions {
   embeds: EmbedsApi;
   sendAcceptLog: (...args: any[]) => Promise<unknown>;
   sendAcceptanceDm?: (...args: any[]) => Promise<unknown>;
+  telegramNotifications?: TelegramNotificationService;
 }
 
 export function createApplicationsService({
@@ -51,8 +53,16 @@ export function createApplicationsService({
   client,
   embeds,
   sendAcceptLog,
-  sendAcceptanceDm = async () => {}
+  sendAcceptanceDm = async () => {},
+  telegramNotifications
 }: ApplicationsOptions): ApplicationsService {
+  async function notifyTelegram(task?: Promise<boolean>): Promise<void> {
+    if (!task) return;
+    await task.catch(error => {
+      console.warn('Telegram application notification failed:', error);
+    });
+  }
+
   function formatStatus(status: string) {
     return copy.applications.statusLabel(status);
   }
@@ -261,7 +271,14 @@ export function createApplicationsService({
       return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
     }
 
-    await createApplicationTicket(channel, application, interaction.user);
+    const ticket = await createApplicationTicket(channel, application, interaction.user);
+
+    await notifyTelegram(telegramNotifications?.notifyApplicationCreated({
+      application,
+      guild: interaction.guild,
+      candidate: interaction.user,
+      ticketChannel: ticket.thread || channel
+    }));
 
     return interaction.reply(ephemeral({ content: copy.applications.sent }));
   }
@@ -341,6 +358,13 @@ export function createApplicationsService({
       rankName
     });
     await interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
+    await notifyTelegram(telegramNotifications?.notifyApplicationAccepted({
+      application,
+      guild: interaction.guild,
+      candidate: member.user || { id: userId, username: member.displayName },
+      moderator: interaction.user,
+      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null)
+    }));
     await cleanupAcceptedTicket(interaction.guild, application, interaction.channel);
     return true;
   }
@@ -430,7 +454,15 @@ export function createApplicationsService({
       }
     }
 
-    return interaction.reply(ephemeral({ content: copy.applications.rejectedReply(userId) }));
+    await interaction.reply(ephemeral({ content: copy.applications.rejectedReply(userId) }));
+    await notifyTelegram(telegramNotifications?.notifyApplicationRejected({
+      application,
+      guild: interaction.guild,
+      candidate: user || { id: userId },
+      moderator: interaction.user,
+      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null)
+    }));
+    return true;
   }
 
   async function closeTicket(interaction: any, applicationId: string) {
@@ -446,6 +478,13 @@ export function createApplicationsService({
     await interaction.reply(ephemeral({ content: copy.applications.ticketClosedReply }));
     await interaction.channel.setArchived(true, copy.applications.ticketReason(application.discordId || 'user')).catch(() => {});
     await interaction.channel.setLocked(true).catch(() => {});
+    await notifyTelegram(telegramNotifications?.notifyTicketClosed({
+      application,
+      guild: interaction.guild,
+      candidate: { id: application.discordId },
+      moderator: interaction.user,
+      ticketChannel: interaction.channel
+    }));
     return true;
   }
 

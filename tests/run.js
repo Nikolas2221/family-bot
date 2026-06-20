@@ -20,6 +20,7 @@ async function main() {
   const { main: runRuntimeNotificationHelpersTests } = require('./runtime-notification-helpers.test');
   const { main: runSecurityTests } = require('./security.test');
   const { main: runStorageTests } = require('./storage.test');
+  const { main: runTelegramTests } = require('./telegram.test');
   const { main: runTsDebtTests } = require('./ts-debt.test');
   const { main: runTsMigrationTests } = require('./ts-migration.test');
 
@@ -44,6 +45,7 @@ async function main() {
   await runRuntimeNotificationHelpersTests();
   await runSecurityTests();
   await runStorageTests();
+  await runTelegramTests();
   await runTsDebtTests();
   await runTsMigrationTests();
   console.log('ALL TEST SUITES PASSED');

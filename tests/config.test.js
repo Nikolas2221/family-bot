@@ -79,12 +79,36 @@ async function testAutoRanksThresholdValidation() {
   assert.match(validation.errors.join('\n'), /AUTO_RANK_ELDER_MIN_SCORE/);
 }
 
+async function testTelegramConfigIsSafeAndRequiresBothValues() {
+  const incomplete = createConfig({
+    TOKEN: 'token',
+    GUILD_ID: '123456789012345678',
+    CHANNEL_ID: '123456789012345679',
+    TELEGRAM_BOT_TOKEN: 'telegram-secret-token'
+  });
+  assert.match(validateConfig(incomplete).warnings.join('\n'), /TELEGRAM_ADMIN_CHAT_ID/);
+
+  const complete = createConfig({
+    TOKEN: 'token',
+    GUILD_ID: '123456789012345678',
+    CHANNEL_ID: '123456789012345679',
+    TELEGRAM_BOT_TOKEN: 'telegram-secret-token',
+    TELEGRAM_ADMIN_CHAT_ID: '-1001234567890'
+  });
+  const summary = summarizeConfig(complete).join('\n');
+
+  assert.equal(complete.telegramAdminChatId, '-1001234567890');
+  assert.match(summary, /Telegram notifications: enabled/);
+  assert.doesNotMatch(summary, /telegram-secret-token/);
+}
+
 async function main() {
   await runTest('config validation fails when required env is missing', testMissingRequiredEnv);
   await runTest('config validation allows offline AI without API key', testAiEnabledWorksInOfflineModeWithoutKey);
   await runTest('config summary stays safe and readable', testSummaryContainsSafeHumanReadableFields);
   await runTest('config reads storage file path from env', testStorageFileEnvIsReadFromConfig);
   await runTest('config validation catches invalid auto rank thresholds', testAutoRanksThresholdValidation);
+  await runTest('Telegram config is paired and token stays secret', testTelegramConfigIsSafeAndRequiresBothValues);
   console.log('ALL CONFIG TESTS PASSED');
 }
 

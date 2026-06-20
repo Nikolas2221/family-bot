@@ -48,6 +48,8 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     databaseFile: trim(env.DATABASE_FILE),
     storageFile: trim(env.STORAGE_FILE),
     token: trim(env.TOKEN),
+    telegramBotToken: trim(env.TELEGRAM_BOT_TOKEN),
+    telegramAdminChatId: trim(env.TELEGRAM_ADMIN_CHAT_ID),
     guildId: trim(env.GUILD_ID),
     channelId,
     hasApplicationsChannelId: Boolean(trim(env.APPLICATIONS_CHANNEL_ID)),
@@ -111,6 +113,10 @@ export function validateConfig(config: AppConfig): ValidationResult {
 
   if (!config.token) {
     errors.push('Не задана обязательная переменная TOKEN.');
+  }
+
+  if (Boolean(config.telegramBotToken) !== Boolean(config.telegramAdminChatId)) {
+    warnings.push('Telegram-уведомления отключены: TELEGRAM_BOT_TOKEN и TELEGRAM_ADMIN_CHAT_ID должны быть заданы вместе.');
   }
 
   validateDiscordId('GUILD_ID', config.guildId, errors, warnings, { required: true });
@@ -218,6 +224,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- family roles configured: ${configuredRoles}/${config.roles.length}`,
     `- rank managers: ${rankManagers}`,
     `- bot owners: ${ownersSummary}`,
+    `- Telegram notifications: ${config.telegramBotToken && config.telegramAdminChatId ? 'enabled' : 'disabled'}`,
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,

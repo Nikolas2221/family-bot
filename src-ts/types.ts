@@ -32,6 +32,8 @@ export interface AppConfig {
   databaseFile: string;
   storageFile: string;
   token: string;
+  telegramBotToken: string;
+  telegramAdminChatId: string;
   guildId: string;
   channelId: string;
   hasApplicationsChannelId: boolean;
