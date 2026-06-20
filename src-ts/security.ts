@@ -5,10 +5,21 @@ import type {
   SecurityMemberLike
 } from './types';
 
-const DISCORD_INVITE_PATTERN = /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[A-Za-z0-9-]+/i;
+const DISCORD_INVITE_PATTERN = /(?:https?:\/\/)?(?:www\.)?d[iі1][sѕ][cс][oо0]rd(?:app)?\.(?:gg|com\/invite)\/[a-z0-9-]+/i;
+
+export function normalizeInviteText(text = ''): string {
+  return String(text || '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/gu, '')
+    .replace(/\b(?:dot|точка)\b/giu, '.')
+    .replace(/[。｡]/gu, '.')
+    .replace(/\\/gu, '/')
+    .replace(/[\s\[\](){}<>]+/gu, '')
+    .toLowerCase();
+}
 
 export function containsDiscordInvite(text = ''): boolean {
-  return DISCORD_INVITE_PATTERN.test(String(text || ''));
+  return DISCORD_INVITE_PATTERN.test(normalizeInviteText(text));
 }
 
 export function explainKickFailure(member: SecurityMemberLike, actorMember?: SecurityMemberLike | null): string {

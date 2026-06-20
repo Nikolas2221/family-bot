@@ -67,8 +67,77 @@ interface MessageLike {
   channel: ChannelLike;
   mentions?: MentionsLike | null;
   partial?: boolean;
+  webhookId?: string | null;
+  embeds?: Array<{
+    title?: string | null;
+    description?: string | null;
+    url?: string | null;
+    fields?: Array<{ name?: string; value?: string }>;
+  }>;
+  attachments?: {
+    values(): IterableIterator<{ name?: string | null; description?: string | null; url?: string | null }>;
+  } | null;
   delete(): Promise<unknown>;
-  fetch?(): Promise<unknown>;
+  fetch?(): Promise<MessageLike>;
+}
+
+export function buildLeakScanText(message: MessageLike): string {
+  const embedText = (message.embeds || []).flatMap(embed => [
+    embed.title,
+    embed.description,
+    embed.url,
+    ...(embed.fields || []).flatMap(field => [field.name, field.value])
+  ]);
+  const attachmentText = message.attachments
+    ? Array.from(message.attachments.values()).flatMap(attachment => [attachment.name, attachment.description, attachment.url])
+    : [];
+  return [message.content, ...embedText, ...attachmentText].filter(Boolean).join('\n');
+}
+
+function safeLogExcerpt(value: string): string {
+  return String(value || '').replace(/[`\r\n]+/gu, ' ').trim().slice(0, 300) || 'без текста';
+}
+
+async function enforceLeakGuard(
+  message: MessageLike,
+  options: Pick<EventRuntimeOptions, 'leakGuard' | 'isPremiumGuild' | 'containsDiscordInvite' | 'canBypassLeakGuard' | 'sendSecurityLog' | 'copySecurity'>
+): Promise<boolean> {
+  if (!message.guild || !options.isPremiumGuild(message.guild.id) || !options.leakGuard.enabled) return false;
+  const scanText = buildLeakScanText(message);
+  if (!options.containsDiscordInvite(scanText) || options.canBypassLeakGuard(message.member)) return false;
+
+  let deletionError: unknown = null;
+  const deleted = await message.delete().then(() => true).catch(error => {
+    deletionError = error;
+    return false;
+  });
+  const authorLabel = message.author?.id ? `<@${message.author.id}> (\`${message.author.id}\`)` : 'неизвестен';
+  const channelLabel = message.channel?.id ? `<#${message.channel.id}> (\`${message.channel.id}\`)` : 'неизвестен';
+  const result = deleted ? 'удалено' : 'НЕ УДАЛЕНО — проверь право Manage Messages';
+  const logMessage = [
+    '🚨 Anti-leak: обнаружена Discord invite-ссылка',
+    `Автор: ${authorLabel}`,
+    `Канал: ${channelLabel}`,
+    `Результат: ${result}`,
+    `Фрагмент: \`${safeLogExcerpt(scanText)}\``
+  ].join('\n');
+
+  if (!deleted) {
+    console.error(`Anti-leak failed to delete message ${message.id} in channel ${message.channel?.id}:`, deletionError);
+  }
+  await options.sendSecurityLog(message.guild, logMessage).catch(() => null);
+
+  const notice = await message.channel.send?.({
+    content: deleted
+      ? options.copySecurity.inviteGuardNotice(message.author.id)
+      : `⚠️ <@${message.author.id}>, invite-ссылка обнаружена, но боту не удалось удалить сообщение.`
+  }).catch(() => null);
+  if (notice) {
+    setTimeout(() => {
+      void notice.delete().catch(() => null);
+    }, 10000);
+  }
+  return true;
 }
 
 interface PresenceLike {
@@ -240,6 +309,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
   const managedEvents = [
     'messageCreate',
+    'messageUpdate',
     'presenceUpdate',
     'voiceStateUpdate',
     'guildMemberAdd',
@@ -255,20 +325,17 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   }
 
   client.on('messageCreate', async (message: MessageLike) => {
-    if (!message.guild || message.author.bot || !message.member) return;
+    if (!message.guild || (message.author.bot && !message.webhookId)) return;
+    if (await enforceLeakGuard(message, {
+      leakGuard,
+      isPremiumGuild,
+      containsDiscordInvite,
+      canBypassLeakGuard,
+      sendSecurityLog,
+      copySecurity
+    })) return;
+    if (!message.member) return;
     const guildStorage = getGuildStorage(message.guild.id);
-
-    if (isPremiumGuild(message.guild.id) && leakGuard.enabled && containsDiscordInvite(message.content) && !canBypassLeakGuard(message.member)) {
-      await message.delete().catch(() => null);
-      const notice = await message.channel.send?.({ content: copySecurity.inviteGuardNotice(message.author.id) }).catch(() => null);
-      if (notice) {
-        setTimeout(() => {
-          void notice.delete().catch(() => null);
-        }, 10000);
-      }
-      await sendSecurityLog(message.guild, copySecurity.inviteBlocked).catch(() => null);
-      return;
-    }
 
     if (await handleAutomodMessage(message)) {
       return;
@@ -283,6 +350,22 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
     if (!hasFamilyRole(message.member)) return;
     guildStorage.recordMessage(message.member.id);
+  });
+
+  client.on('messageUpdate', async (_oldMessage: MessageLike, nextMessage: MessageLike) => {
+    let message = nextMessage;
+    if (message.partial && typeof message.fetch === 'function') {
+      message = await message.fetch().catch(() => message);
+    }
+    if (!message.guild || (message.author.bot && !message.webhookId)) return;
+    await enforceLeakGuard(message, {
+      leakGuard,
+      isPremiumGuild,
+      containsDiscordInvite,
+      canBypassLeakGuard,
+      sendSecurityLog,
+      copySecurity
+    });
   });
 
   client.on('presenceUpdate', (_oldPresence: PresenceLike | null, presence: PresenceLike | null) => {

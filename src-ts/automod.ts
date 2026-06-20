@@ -4,6 +4,7 @@ import type {
   AutomodMessageMatch,
   AutomodSpamEvaluation
 } from './types';
+import { containsDiscordInvite } from './security';
 
 export function defaultAutomodConfig(): AutomodConfig {
   return {
@@ -62,7 +63,7 @@ export function normalizeAutomodConfig(raw: Partial<AutomodConfig> = {}): Automo
 }
 
 export function containsInvite(text = ''): boolean {
-  return /(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-z0-9-]+/i.test(String(text || ''));
+  return containsDiscordInvite(text);
 }
 
 export function containsUrl(text = ''): boolean {

@@ -1,6 +1,24 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.27': {
+    added: [
+      'anti-leak проверка отредактированных сообщений через messageUpdate',
+      'security-тесты для Unicode, zero-width, spaced invite, edit bypass и ошибки удаления',
+      'сканирование текста embed-полей и attachment metadata на Discord invite-ссылки'
+    ],
+    updated: [
+      'invite detector нормализует Unicode, пробелы, скобки, обратные слеши и варианты dot/точка',
+      'LEAK_GUARD_ALLOWED_ROLES стал строгим allowlist: Manage Messages и Manage Server больше не дают автоматический bypass',
+      'обход anti-leak разрешён владельцу сервера и явно настроенным ролям'
+    ],
+    fixed: [
+      'бот больше не сообщает об успешном удалении, если Discord отклонил message.delete',
+      'security log содержит автора, канал, результат удаления и безопасный короткий фрагмент',
+      'invite-ссылка больше не проходит через редактирование безопасного сообщения',
+      'premium-проверка сохранена без изменений'
+    ]
+  },
   '1.0.26': {
     added: [
       'постоянная Discord-копия для объявлений и событий, созданных slash-командами /announce и /event'

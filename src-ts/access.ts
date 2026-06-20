@@ -14,8 +14,10 @@ interface RoleCacheLike {
 }
 
 interface MemberLike {
+  id?: string;
   guild?: {
     id: string;
+    ownerId?: string;
   };
   permissions?: MemberPermissionsLike | null;
   roles?: {
@@ -114,15 +116,8 @@ export function createAccessApi(options: CreateAccessApiOptions) {
   function canBypassLeakGuard(member: MemberLike | null | undefined): boolean {
     if (!leakGuard.enabled) return true;
     if (!member) return false;
-    if (!leakGuard.allowedRoles.length) {
-      return hasPermission(member, PermissionFlagsBits.ManageGuild) || hasPermission(member, PermissionFlagsBits.ManageMessages);
-    }
-
-    return (
-      hasAnyRole(member, leakGuard.allowedRoles) ||
-      hasPermission(member, PermissionFlagsBits.ManageGuild) ||
-      hasPermission(member, PermissionFlagsBits.ManageMessages)
-    );
+    if (member.id && member.guild?.ownerId === member.id) return true;
+    return leakGuard.allowedRoles.length > 0 && hasAnyRole(member, leakGuard.allowedRoles);
   }
 
   function canBypassChannelGuard(member: MemberLike | null | undefined): boolean {
