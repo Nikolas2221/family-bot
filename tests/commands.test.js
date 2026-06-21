@@ -70,6 +70,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   const announce = commands.find(command => command.name === 'announce');
   const event = commands.find(command => command.name === 'event');
   const close = commands.find(command => command.name === 'close');
+  const law = commands.find(command => command.name === 'law');
 
   assert.ok(automod);
   assert.ok(serverReport);
@@ -82,6 +83,8 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.ok(announce);
   assert.ok(event);
   assert.ok(close);
+  assert.ok(law);
+  assert.equal(law.options[0].name, 'question');
   assert.equal(announce.options[0].name, 'text');
   assert.equal(event.options[0].name, 'text');
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'updates'), true);

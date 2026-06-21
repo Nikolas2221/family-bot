@@ -20,6 +20,7 @@ const { createTelegramBot, startTelegramBot, stopTelegramBot } = require('./tele
 const { registerTelegramHandlers } = require('./telegram/handlers');
 const { createTicketService } = require('./services/tickets');
 const { canSendDiscordAnnouncement, createAnnouncementService } = require('./services/announcements');
+const { createLawService } = require('./services/law');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -122,6 +123,7 @@ const client = new Client({
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
+const lawService = createLawService();
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
@@ -650,6 +652,7 @@ function getCommandModule(commandName: any) {
       return 'analytics';
     case 'ai':
     case 'aiadvisor':
+    case 'law':
       return 'ai';
     case 'welcome':
     case 'autorole':
@@ -678,6 +681,7 @@ function getHelpCatalog(interaction: any) {
     { name: 'apply', description: copy.commands.applyDescription },
     { name: 'applications', description: copy.commands.applicationsDescription },
     { name: 'profile', description: copy.commands.profileDescription },
+    { name: 'law', description: 'Разобрать ситуацию по законодательной базе Majestic RP' },
     { name: 'help', description: copy.commands.helpDescription }
   ];
 
@@ -1536,7 +1540,8 @@ registerInteractionRuntime({
     buildProfilePayload,
     announcementService,
     discordAnnouncerRoleIds: config.discordAnnouncerRoleIds,
-    ticketService
+    ticketService,
+    lawService
   });
   },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,

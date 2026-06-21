@@ -14,6 +14,12 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('adminpanel').setDescription(copy.commands.adminPanelDescription),
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
     new SlashCommandBuilder()
+      .setName('law')
+      .setDescription('Разобрать ситуацию по законодательной базе Majestic RP')
+      .addStringOption(option =>
+        option.setName('question').setDescription('Опиши ситуацию обычными словами').setRequired(true)
+      ),
+    new SlashCommandBuilder()
       .setName('announce')
       .setDescription('Отправить семейное объявление в Telegram')
       .addStringOption(option => option.setName('text').setDescription('Текст объявления').setRequired(true)),

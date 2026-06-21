@@ -68,6 +68,7 @@ interface CommandRuntimeOptions {
   announcementService: any;
   discordAnnouncerRoleIds: string[];
   ticketService: any;
+  lawService: any;
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -149,7 +150,8 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     canManageNicknames,
     announcementService,
     discordAnnouncerRoleIds,
-    ticketService
+    ticketService,
+    lawService
   } = options;
 
   const ephemeral = typeof rawEphemeral === 'function' ? rawEphemeral : ((payload: Record<string, unknown> = {}) => payload);
@@ -235,6 +237,20 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
         ? embeds.buildHelpPaginationButtons(catalog, 0)
         : []
     }));
+    return true;
+  }
+
+  if (interaction.commandName === 'law') {
+    const question = interaction.options.getString('question', true).trim();
+    await interaction.deferReply();
+    const answer = lawService.answer(question);
+    const embed = new EmbedBuilderCtor()
+      .setColor(answer.found ? 0x94a39a : 0xf59e0b)
+      .setTitle(answer.title)
+      .setDescription(answer.description)
+      .setFooter({ text: `Majestic RP • ${lawService.stats().documents} документов в базе` })
+      .setTimestamp();
+    await interaction.editReply({ embeds: [embed] });
     return true;
   }
 
