@@ -41,6 +41,16 @@ async function main() {
     () => failed.answerLawQuestion('Вопрос', [{ excerpt: 'Норма' }]),
     /DeepSeek HTTP 401/
   );
+
+  const hanging = createDeepSeekService({
+    apiKey: 'secret-key',
+    timeoutMs: 10,
+    fetchImpl: async () => new Promise(() => {})
+  });
+  await assert.rejects(
+    () => hanging.answerLawQuestion('Вопрос', [{ excerpt: 'Норма' }]),
+    /DeepSeek timeout after 10ms/
+  );
   console.log('ALL DEEPSEEK TESTS PASSED');
 }
 

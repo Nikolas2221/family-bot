@@ -1,6 +1,17 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.30': {
+    added: [
+      'жёсткий 10-секундный таймаут DeepSeek с автоматическим локальным ответом'
+    ],
+    updated: [
+      'максимальная длина генерации DeepSeek уменьшена для более быстрого ответа в Discord'
+    ],
+    fixed: [
+      'команда /law больше не остаётся надолго в состоянии «бот думает», если DeepSeek завис или отвечает медленно'
+    ]
+  },
   '1.0.29': {
     added: [
       'DeepSeek API integration для развёрнутых ответов команды /law по найденным нормам',

@@ -24,16 +24,16 @@ export function createDeepSeekService(options: DeepSeekOptions) {
   const apiKey = String(options.apiKey || '').trim();
   const baseUrl = cleanBaseUrl(options.baseUrl || 'https://api.deepseek.com');
   const model = options.model || 'deepseek-chat';
-  const timeoutMs = options.timeoutMs || 20_000;
+  const timeoutMs = options.timeoutMs || 10_000;
   const fetchImpl = options.fetchImpl || fetch;
 
   async function answerLawQuestion(question: string, sources: LawSearchResult[]): Promise<string | null> {
     if (!apiKey || !sources.length) return null;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      const response = await fetchImpl(`${baseUrl}/chat/completions`, {
+      const request = fetchImpl(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -42,7 +42,7 @@ export function createDeepSeekService(options: DeepSeekOptions) {
         body: JSON.stringify({
           model,
           temperature: 0.15,
-          max_tokens: 1000,
+          max_tokens: 800,
           messages: [
             {
               role: 'system',
@@ -61,6 +61,13 @@ export function createDeepSeekService(options: DeepSeekOptions) {
         }),
         signal: controller.signal
       });
+      const hardTimeout = new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`DeepSeek timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+      });
+      const response = await Promise.race([request, hardTimeout]);
 
       if (!response.ok) {
         throw new Error(`DeepSeek HTTP ${response.status}`);
@@ -70,7 +77,7 @@ export function createDeepSeekService(options: DeepSeekOptions) {
       const content = String(payload?.choices?.[0]?.message?.content || '').trim();
       return content || null;
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
     }
   }
 
