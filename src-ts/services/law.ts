@@ -164,6 +164,35 @@ export function getLawIndexStats() {
   return { documents: lawIndex.documentCount, chunks: lawIndex.chunkCount, generatedAt: lawIndex.generatedAt };
 }
 
-export function createLawService() {
-  return { search: searchLaw, answer: buildLawAnswer, stats: getLawIndexStats };
+interface LawAiService {
+  answerLawQuestion(question: string, sources: LawSearchResult[]): Promise<string | null>;
+}
+
+export function createLawService(ai?: LawAiService | null) {
+  async function answer(question: string) {
+    const local = buildLawAnswer(question);
+    if (!local.found || !ai) return local;
+
+    try {
+      const generated = await ai.answerLawQuestion(question, local.sources);
+      if (!generated) return local;
+      const sourceLinks = local.sources.map((source, index) =>
+        source.url
+          ? `[${index + 1}] [${source.document}, ${source.heading}](${source.url})`
+          : `[${index + 1}] ${source.document}, ${source.heading}`
+      ).join('\n');
+      const suffix = `\n\n**Источники**\n${sourceLinks}\n\n*Ответ сформирован по сохранённой базе Majestic RP.*`;
+      const maxGeneratedLength = Math.max(500, 4000 - suffix.length);
+      return {
+        ...local,
+        title: 'Ответ ассистента DeepSeek',
+        description: `${generated.slice(0, maxGeneratedLength)}${suffix}`
+      };
+    } catch (error: any) {
+      console.error(`[deepseek] Law answer failed: ${error?.message || 'unknown error'}`);
+      return local;
+    }
+  }
+
+  return { search: searchLaw, answer, stats: getLawIndexStats };
 }

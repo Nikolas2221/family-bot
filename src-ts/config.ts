@@ -70,8 +70,11 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     accessRanks: parseCsv(env.ACCESS_RANKS),
     ownerIds: parseCsv(env.BOT_OWNER_IDS),
     aiEnabled: parseBoolean(env.AI_ENABLED),
-    aiModel: 'offline',
+    aiModel: trim(env.DEEPSEEK_API_KEY) ? (trim(env.DEEPSEEK_MODEL) || 'deepseek-chat') : 'offline',
     openAiApiKey: '',
+    deepSeekApiKey: trim(env.DEEPSEEK_API_KEY),
+    deepSeekBaseUrl: trim(env.DEEPSEEK_BASE_URL) || 'https://api.deepseek.com',
+    deepSeekModel: trim(env.DEEPSEEK_MODEL) || 'deepseek-chat',
     autoRanks: {
       enabled: parseBoolean(env.AUTO_RANKS_ENABLED),
       intervalMs: parseNumber(env.AUTO_RANKS_INTERVAL_MS, 300000, { min: 60000 }),
@@ -184,6 +187,8 @@ export function validateConfig(config: AppConfig): ValidationResult {
 
   if (!config.aiEnabled) {
     notes.push('AI отключён через AI_ENABLED=false.');
+  } else if (config.deepSeekApiKey) {
+    notes.push(`AI использует DeepSeek (${config.deepSeekModel}).`);
   } else {
     notes.push('AI работает локально в оффлайн-режиме без внешнего API.');
   }
@@ -233,7 +238,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,
-    `- AI: ${config.aiEnabled ? 'offline helper enabled' : 'disabled'}`,
+    `- AI: ${config.aiEnabled ? (config.deepSeekApiKey ? `DeepSeek enabled (${config.deepSeekModel})` : 'offline helper enabled') : 'disabled'}`,
     `- auto ranks: ${autoRanksSummary}`,
     `- leak guard: ${leakGuardSummary}`,
     `- channel guard: ${channelGuardSummary}`

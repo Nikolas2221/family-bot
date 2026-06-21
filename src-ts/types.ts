@@ -56,6 +56,9 @@ export interface AppConfig {
   aiEnabled: boolean;
   aiModel: string;
   openAiApiKey: string;
+  deepSeekApiKey: string;
+  deepSeekBaseUrl: string;
+  deepSeekModel: string;
   autoRanks: AutoRanksConfig;
   leakGuard: GuardConfig;
   channelGuard: GuardConfig;

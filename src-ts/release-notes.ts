@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.29': {
+    added: [
+      'DeepSeek API integration для развёрнутых ответов команды /law по найденным нормам',
+      'переменные DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL и DEEPSEEK_MODEL без вывода ключа в логи'
+    ],
+    updated: [
+      'DeepSeek получает только вопрос и три релевантные выдержки из локальной базы законодательства',
+      'ответ содержит проверяемый список источников со ссылками на темы Majestic RP',
+      'discord.js, undici, ws и lodash обновлены до последних совместимых версий без перехода на несовместимый Discord API'
+    ],
+    fixed: [
+      'при таймауте или ошибке DeepSeek команда /law автоматически возвращает локальный ответ и не падает'
+    ]
+  },
   '1.0.28': {
     added: [
       'локальная база из 27 документов законодательства Majestic RP с 1353 поисковыми фрагментами',

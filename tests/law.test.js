@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { buildLawAnswer, getLawIndexStats, searchLaw } = require('../dist-ts/services/law');
+const { buildLawAnswer, createLawService, getLawIndexStats, searchLaw } = require('../dist-ts/services/law');
 
 async function main() {
   const stats = getLawIndexStats();
@@ -16,6 +16,27 @@ async function main() {
 
   const unknown = buildLawAnswer('квантовая телепортация на марсе');
   assert.equal(unknown.found, false);
+
+  const ai = createLawService({
+    async answerLawQuestion(_question, sources) {
+      assert.ok(sources.length > 0);
+      return `Подробный ответ со ссылкой [1]. ${'текст '.repeat(900)}`;
+    }
+  });
+  const aiAnswer = await ai.answer('что предъявить госнику с пулеметом мк 2');
+  assert.equal(aiAnswer.title, 'Ответ ассистента DeepSeek');
+  assert.match(aiAnswer.description, /Подробный ответ/);
+  assert.match(aiAnswer.description, /\*\*Источники\*\*/);
+  assert.match(aiAnswer.description, /forum\.majestic-rp\.ru/);
+  assert.ok(aiAnswer.description.length <= 4000);
+
+  const fallback = createLawService({
+    async answerLawQuestion() {
+      throw new Error('temporary failure');
+    }
+  });
+  const fallbackAnswer = await fallback.answer('виды территорий');
+  assert.equal(fallbackAnswer.title, 'Ответ ассистента');
   console.log('ALL LAW TESTS PASSED');
 }
 

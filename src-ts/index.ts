@@ -21,6 +21,7 @@ const { registerTelegramHandlers } = require('./telegram/handlers');
 const { createTicketService } = require('./services/tickets');
 const { canSendDiscordAnnouncement, createAnnouncementService } = require('./services/announcements');
 const { createLawService } = require('./services/law');
+const { createDeepSeekService } = require('./services/deepseek');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -123,7 +124,12 @@ const client = new Client({
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
 const aiService = createAIService({ enabled: AI_ENABLED });
-const lawService = createLawService();
+const deepSeekService = createDeepSeekService({
+  apiKey: AI_ENABLED ? config.deepSeekApiKey : '',
+  baseUrl: config.deepSeekBaseUrl,
+  model: config.deepSeekModel
+});
+const lawService = createLawService(deepSeekService.enabled ? deepSeekService : null);
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,

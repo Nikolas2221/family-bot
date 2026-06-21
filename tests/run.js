@@ -6,6 +6,7 @@ async function main() {
   const { main: runClientReadyRuntimeTests } = require('./client-ready-runtime.test');
   const { main: runCopyRuntimeTests } = require('./copy-runtime.test');
   const { main: runDatabaseTests } = require('./database.test');
+  const { main: runDeepSeekTests } = require('./deepseek.test');
   const { main: runConfigTests } = require('./config.test');
   const { main: runEmbedsTests } = require('./embeds.test');
   const { main: runGuildRuntimeTests } = require('./guild-runtime.test');
@@ -36,6 +37,7 @@ async function main() {
   await runClientReadyRuntimeTests();
   await runCopyRuntimeTests();
   await runDatabaseTests();
+  await runDeepSeekTests();
   await runConfigTests();
   await runEmbedsTests();
   await runGuildRuntimeTests();

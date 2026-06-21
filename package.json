@@ -1,6 +1,7 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "1.0.28",
+  "version": "1.0.29",
+  "engines": { "node": ">=18" },
   "main": "dist-ts/index.js",
   "scripts": {
     "start": "npm run build:ts && node dist-ts/index.js",
