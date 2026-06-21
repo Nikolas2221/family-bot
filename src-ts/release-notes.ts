@@ -1,6 +1,18 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.31': {
+    added: [
+      'строгий TypeScript-контракт для асинхронного сервиса ответов /law'
+    ],
+    updated: [
+      'локальный ответ по законодательству используется после любой ошибки DeepSeek, включая HTTP 402'
+    ],
+    fixed: [
+      'обработчик /law теперь ожидает завершения lawService.answer и не передаёт undefined в EmbedBuilder.setTitle',
+      'Discord больше не остаётся без ответа при отсутствии баланса DeepSeek'
+    ]
+  },
   '1.0.30': {
     added: [
       'жёсткий 10-секундный таймаут DeepSeek с автоматическим локальным ответом'

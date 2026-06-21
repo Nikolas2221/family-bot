@@ -68,7 +68,10 @@ interface CommandRuntimeOptions {
   announcementService: any;
   discordAnnouncerRoleIds: string[];
   ticketService: any;
-  lawService: any;
+  lawService: {
+    answer(question: string): Promise<{ found: boolean; title: string; description: string }>;
+    stats(): { documents: number };
+  };
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -243,7 +246,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   if (interaction.commandName === 'law') {
     const question = interaction.options.getString('question', true).trim();
     await interaction.deferReply();
-    const answer = lawService.answer(question);
+    const answer = await lawService.answer(question);
     const embed = new EmbedBuilderCtor()
       .setColor(answer.found ? 0x94a39a : 0xf59e0b)
       .setTitle(answer.title)
