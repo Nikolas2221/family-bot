@@ -35,6 +35,7 @@ async function main() {
 
   const listeners = new Map();
   const securityLogs = [];
+  const telegramJoins = [];
   const client = {
     removeAllListeners(name) {
       listeners.delete(name);
@@ -65,13 +66,20 @@ async function main() {
     handleCustomTriggerMessage: async () => {},
     sendSecurityLog: async (_guild, content) => securityLogs.push(content),
     startVoiceSession() {}, stopVoiceSession() {}, enforceBlacklist: async () => false,
-    sendWelcomeInvite: async () => {}, applyAutorole: async () => false,
+    sendWelcomeInvite: async () => {}, notifyTelegramMemberJoined: async member => telegramJoins.push(member.id), applyAutorole: async () => false,
     resolveGuildSettings: () => ({ verification: { enabled: false } }),
     findReactionRoleEntry: () => null, getReactionEmojiKey: () => '',
     canBypassChannelGuard: () => false, fetchDeletedChannelExecutor: async () => null,
     restoreDeletedChannel: async () => null, doPanelUpdate: async () => {},
     handleDiscordTicketMessage: async () => false
   });
+
+  await listeners.get('guildMemberAdd')({
+    id: 'new-user',
+    user: { id: 'new-user', bot: false },
+    guild: { id: 'guild-1' }
+  });
+  assert.deepEqual(telegramJoins, ['new-user']);
 
   const baseMessage = {
     id: 'message-1',

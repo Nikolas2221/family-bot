@@ -23,6 +23,11 @@ export interface TicketActivityNotificationInput {
   count: number;
 }
 
+export interface MemberJoinedNotificationInput {
+  guild: { id: string; name?: string; memberCount?: number };
+  member: { id: string; username?: string; globalName?: string | null; tag?: string; createdAt?: Date };
+}
+
 export interface TelegramNotificationService {
   enabled: boolean;
   notifyApplicationCreated(input: ApplicationNotificationInput): Promise<boolean>;
@@ -30,6 +35,7 @@ export interface TelegramNotificationService {
   notifyApplicationRejected(input: ApplicationNotificationInput): Promise<boolean>;
   notifyTicketClosed(input: ApplicationNotificationInput): Promise<boolean>;
   notifyTicketActivity(input: TicketActivityNotificationInput): Promise<boolean>;
+  notifyMemberJoined(input: MemberJoinedNotificationInput): Promise<boolean>;
   sendAnnouncement(input: { type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string }>;
 }
 
@@ -159,6 +165,28 @@ export function createTelegramNotificationService(options: {
             `Ссылка на тикет: ${url}`
           ].join('\n');
       return send(adminChatId, text);
+    },
+    notifyMemberJoined(input) {
+      const memberName = clean(input.member.globalName || input.member.username || input.member.tag, 'имя неизвестно', 100);
+      const createdAt = input.member.createdAt instanceof Date
+        ? input.member.createdAt.toLocaleString('ru-RU')
+        : 'неизвестно';
+      return send(adminChatId, [
+        '👋 Новый участник на Discord-сервере',
+        '',
+        `Сервер: ${clean(input.guild.name, input.guild.id, 100)}`,
+        input.guild.memberCount ? `Участников на сервере: ${input.guild.memberCount}` : '',
+        `Пользователь: ${memberName}`,
+        `Discord ID: ${input.member.id}`,
+        `Аккаунт создан: ${createdAt}`
+      ].filter(Boolean).join('\n'), {
+        reply_markup: {
+          inline_keyboard: [[{
+            text: '✅ Подтвердить и выдать роль',
+            callback_data: `welcome_verify:${input.guild.id}:${input.member.id}`
+          }]]
+        }
+      });
     },
     sendAnnouncement(input) {
       const title = input.type === 'event' ? '📅 Семейное событие' : '📢 Семейное объявление';

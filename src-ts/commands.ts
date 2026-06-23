@@ -290,6 +290,18 @@ export function buildCommands(): CommandJson[] {
       )
       .addSubcommand(subcommand =>
         subcommand
+          .setName('rules')
+          .setDescription('Назначить канал с правилами')
+          .addChannelOption(option =>
+            option
+              .setName('channel')
+              .setDescription('Канал, который откроет кнопка «Правила»')
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
           .setName(copy.commands.welcomeDmSubcommand)
           .setDescription(copy.commands.welcomeDmDescription)
           .addStringOption(option =>
@@ -485,21 +497,6 @@ export function buildCommands(): CommandJson[] {
           .setDescription('Указать роль после подтверждения')
           .addRoleOption(option =>
             option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true)
-          )
-      )
-      .addSubcommand(subcommand =>
-        subcommand
-          .setName(copy.commands.verificationQuestionnaireSubcommand)
-          .setDescription('Включить или выключить стартовую анкету')
-          .addStringOption(option =>
-            option
-              .setName(copy.commands.stateOptionName)
-              .setDescription(copy.commands.stateOptionDescription)
-              .setRequired(true)
-              .addChoices(
-                { name: copy.commands.stateOn, value: 'on' },
-                { name: copy.commands.stateOff, value: 'off' }
-              )
           )
       ),
     new SlashCommandBuilder()

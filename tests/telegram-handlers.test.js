@@ -4,19 +4,20 @@ const { registerTelegramHandlers } = require('../dist-ts/telegram/handlers');
 
 async function main() {
   const commands = new Map();
-  let takeHandler = null;
+  const actions = [];
   const bot = {
     command(name, handler) {
       commands.set(name, handler);
     },
-    action(_pattern, handler) {
-      takeHandler = handler;
+    action(pattern, handler) {
+      actions.push({ pattern, handler });
     }
   };
   const replies = [];
   const ticketReplies = [];
   const announcements = [];
   const callbackAnswers = [];
+  const verified = [];
   registerTelegramHandlers(bot, {
     adminChatId: '-1001',
     tickets: {
@@ -31,6 +32,10 @@ async function main() {
         announcements.push(payload);
         return { ok: true };
       }
+    },
+    verifyWelcomeMember: async (guildId, userId, actor) => {
+      verified.push({ guildId, userId, actor });
+      return 'ok';
     }
   });
 
@@ -57,6 +62,8 @@ async function main() {
     reply: async text => replies.push(text)
   });
   assert.match(replies.at(-1), /только в административном чате/);
+  const takeHandler = actions[0].handler;
+  const welcomeVerifyHandler = actions[1].handler;
   assert.equal(typeof takeHandler, 'function');
 
   await takeHandler({
@@ -68,6 +75,21 @@ async function main() {
   });
   assert.match(callbackAnswers[0], /взята в работу/);
   assert.match(replies.at(-1), /ticket-1/);
+
+  let markupRemoved = false;
+  await welcomeVerifyHandler({
+    chat: { id: -1001 },
+    from: { id: 7, username: 'admin' },
+    match: ['welcome_verify:987654321098765432:222222222222222222', '987654321098765432', '222222222222222222'],
+    answerCbQuery: async text => callbackAnswers.push(text),
+    editMessageReplyMarkup: async () => { markupRemoved = true; },
+    reply: async text => replies.push(text)
+  });
+  assert.deepEqual(verified[0], {
+    guildId: '987654321098765432', userId: '222222222222222222', actor: '@admin'
+  });
+  assert.equal(markupRemoved, true);
+  assert.match(replies.at(-1), /подтверждён через Telegram/u);
 }
 
 if (require.main === module) {

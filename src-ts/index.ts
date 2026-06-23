@@ -146,8 +146,41 @@ const announcementService = createAnnouncementService({
 registerTelegramHandlers(telegramBot, {
   adminChatId: config.telegramAdminChatId,
   tickets: ticketService,
-  announcements: announcementService
+  announcements: announcementService,
+  verifyWelcomeMember: verifyWelcomeMemberFromTelegram
 });
+
+async function notifyTelegramMemberJoined(member: any) {
+  return telegramNotifications.notifyMemberJoined({
+    guild: { id: member.guild.id, name: member.guild.name, memberCount: member.guild.memberCount },
+    member: {
+      id: member.id,
+      username: member.user?.username,
+      globalName: member.user?.globalName,
+      tag: member.user?.tag,
+      createdAt: member.user?.createdAt
+    }
+  });
+}
+
+async function verifyWelcomeMemberFromTelegram(guildId: string, userId: string, actorName: string) {
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  if (!guild) return 'not_found' as const;
+  const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+  if (!member) return 'not_found' as const;
+  const roleId = getVerificationRoleId(guildId);
+  if (!roleId) return 'role_missing' as const;
+  if (member.roles.cache.has(roleId)) return 'already' as const;
+  const result = await applyVerificationRole(member);
+  if (!result.ok) return 'failed' as const;
+
+  const settings = resolveGuildSettings(guildId);
+  const logChannel = await fetchTextChannel(guild, settings.channels.logs).catch(() => null);
+  await logChannel?.send({
+    content: `✅ <@${userId}> подтверждён через Telegram администратором ${actorName}. Выдана роль <@&${result.roleId}>.`
+  }).catch(() => null);
+  return 'ok' as const;
+}
 const ROLE_TEMPLATES = ROLES.map((role: any) => ({ ...role }));
 const automodState = new Map();
 const voiceSessions = new Map();
@@ -1404,6 +1437,7 @@ registerEventRuntime({
   stopVoiceSession,
   enforceBlacklist,
   sendWelcomeInvite,
+  notifyTelegramMemberJoined,
   applyAutorole,
   resolveGuildSettings,
   findReactionRoleEntry,

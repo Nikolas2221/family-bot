@@ -91,6 +91,9 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'welcome'), true);
   assert.equal((setChannel.options[0].choices || []).some(choice => choice.value === 'reports'), true);
   assert.equal((setRole.options[0].choices || []).some(choice => choice.value === 'autorole'), true);
+  assert.equal(welcome.options.some(option => option.name === 'rules'), true);
+  const verification = commands.find(command => command.name === 'verification');
+  assert.equal(verification.options.some(option => option.name === 'questionnaire'), false);
 }
 
 async function testCommandSignatureIsStable() {

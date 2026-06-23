@@ -1,3 +1,5 @@
+import { PermissionFlagsBits } from 'discord.js';
+
 interface InteractionRuntimeOptions {
   client: {
     removeAllListeners(event: string): unknown;
@@ -104,6 +106,15 @@ async function handleWelcomeCommands(interaction: any, options: InteractionRunti
         message: next.welcome.message,
         autoroleRoleId: next.autoroleRoleId
       })]
+    }));
+    return true;
+  }
+
+  if (subcommand === 'rules') {
+    const channel = interaction.options.getChannel('channel', true);
+    options.database.updateGuildSettings(guildId, { channels: { rules: channel.id } });
+    await interaction.reply(options.ephemeral({
+      content: `Канал правил назначен: <#${channel.id}>`
     }));
     return true;
   }
@@ -380,17 +391,23 @@ async function handleVerificationCommands(interaction: any, options: Interaction
     return true;
   }
 
-  if (subcommand === options.copy.commands.verificationQuestionnaireSubcommand) {
-    const questionnaireEnabled = interaction.options.getString(options.copy.commands.stateOptionName, true) === 'on';
-    options.database.updateGuildSettings(guildId, { verification: { questionnaireEnabled } });
-    await interaction.reply(options.ephemeral({
-      content: options.copy.verification.updated(questionnaireEnabled ? 'questionnaire: on' : 'questionnaire: off'),
-      embeds: [options.embeds.buildVerificationStatusEmbed(options.resolveGuildSettings(guildId).verification)]
-    }));
-    return true;
-  }
-
   return false;
+}
+
+export function canConfirmWelcome(interaction: any, targetRole: any): boolean {
+  const member = interaction.member;
+  if (!member || !targetRole) return false;
+  if (interaction.guild?.ownerId === member.id) return true;
+  const permissions = interaction.memberPermissions || member.permissions;
+  return Boolean(permissions?.has?.(PermissionFlagsBits.Administrator));
+}
+
+function getWelcomeTargetUserId(interaction: any): string {
+  const explicitId = String(interaction.customId || '').split(':')[1] || '';
+  if (/^\d{16,20}$/u.test(explicitId)) return explicitId;
+  const mentionedId = interaction.message?.mentions?.users?.first?.()?.id;
+  if (mentionedId) return mentionedId;
+  return String(interaction.message?.content || '').match(/<@!?(\d{16,20})>/u)?.[1] || '';
 }
 
 async function handleRoleMenuCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
@@ -906,15 +923,9 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
       return true;
     }
 
-    if (interaction.customId === 'welcome_verify') {
+    if (interaction.customId === 'welcome_verify' || interaction.customId.startsWith('welcome_verify:')) {
       if (!settings.verification.enabled) {
         await interaction.reply(options.ephemeral({ content: options.copy.verification.disabled }));
-        return true;
-      }
-
-      const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-      if (!member) {
-        await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
         return true;
       }
 
@@ -924,19 +935,36 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
         return true;
       }
 
+      const targetRole = interaction.guild.roles.cache.get(targetRoleId)
+        || await interaction.guild.roles.fetch(targetRoleId).catch(() => null);
+      if (!canConfirmWelcome(interaction, targetRole)) {
+        await interaction.reply(options.ephemeral({
+          content: 'Подтверждать новичков могут только пользователи с разрешением Administrator.'
+        }));
+        return true;
+      }
+
+      const targetUserId = getWelcomeTargetUserId(interaction);
+      if (!targetUserId) {
+        await interaction.reply(options.ephemeral({ content: 'Не удалось определить новичка. Отправь welcome-сообщение заново.' }));
+        return true;
+      }
+      const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+      if (!member) {
+        await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
+        return true;
+      }
+
       if (member.roles.cache.has(targetRoleId)) {
         await interaction.reply(options.ephemeral({ content: options.copy.verification.alreadyVerified }));
         return true;
       }
 
-      if (settings.verification.questionnaireEnabled) {
-        await interaction.showModal(options.embeds.buildVerificationModal());
-        return true;
-      }
-
       const result = await options.applyVerificationRole(member);
       await interaction.reply(options.ephemeral({
-        content: result.ok ? options.copy.verification.success(result.roleId) : options.copy.verification.noPermission
+        content: result.ok
+          ? `Участник <@${member.id}> подтверждён. Выдана стартовая роль <@&${result.roleId}>.`
+          : options.copy.verification.noPermission
       }));
       return true;
     }
@@ -973,38 +1001,6 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
   }
 
   if (interaction.isModalSubmit() && !interaction.replied && !interaction.deferred) {
-    if (interaction.customId === 'welcome_verification_modal') {
-      const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-      if (!member) {
-        await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
-        return true;
-      }
-
-      const result = await options.applyVerificationRole(member);
-      const logsChannel = await options.fetchTextChannel(interaction.guild, settings.channels.logs).catch(() => null);
-      if (logsChannel) {
-        await logsChannel.send({
-          embeds: [
-            new options.EmbedBuilderCtor()
-              .setColor(0x10b981)
-              .setTitle('Новый участник прошёл verification')
-              .setDescription([
-                `Пользователь: <@${interaction.user.id}>`,
-                `Ник: ${interaction.fields.getTextInputValue('verify_nick')}`,
-                `Причина: ${interaction.fields.getTextInputValue('verify_reason')}`,
-                `Правила: ${interaction.fields.getTextInputValue('verify_rules')}`
-              ].join('\n'))
-              .setFooter({ text: 'BRHD • Phoenix • Verification' })
-              .setTimestamp()
-          ]
-        }).catch(() => null);
-      }
-
-      await interaction.reply(options.ephemeral({
-        content: result.ok ? options.copy.verification.success(result.roleId) : options.copy.verification.noPermission
-      }));
-      return true;
-    }
   }
 
   return false;

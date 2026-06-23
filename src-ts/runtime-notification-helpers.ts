@@ -330,16 +330,17 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
         rulesChannelId: settings.channels.rules,
         panelChannelId: settings.channels.panel,
         applicationsChannelId: settings.channels.applications,
-        verificationEnabled: settings.verification.enabled
+        verificationEnabled: settings.verification.enabled,
+        memberCount: member.guild.memberCount
       }
     );
 
     if (channel) {
       await channel
         .send({
-          content: [`<@${member.id}>`, settings.welcome.message || ''].filter(Boolean).join('\n'),
+          content: `<@${member.id}>`,
           embeds: [embed],
-          components: embeds.buildWelcomeButtons()
+          components: embeds.buildWelcomeButtons(member.id)
         })
         .catch(() => {});
     }

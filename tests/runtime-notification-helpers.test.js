@@ -115,6 +115,11 @@ async function main() {
   await helpers.announceBuildUpdate(member.guild);
   assert.equal(maintenanceUpdates.length, 1);
   assert.equal(sentPayloads.length >= 2, true);
+
+  await helpers.sendWelcomeInvite(member);
+  const welcomePayload = sentPayloads.find(payload => payload.embeds?.[0]?.type === 'welcome' && payload.components);
+  assert.equal(welcomePayload.content, '<@user-1>');
+  assert.doesNotMatch(welcomePayload.content, /Добро пожаловать/u);
 }
 
 if (require.main === module) {

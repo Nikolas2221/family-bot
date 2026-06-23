@@ -305,12 +305,11 @@ export function buildVerificationModal(): ModalBuilder {
     );
 }
 
-export function buildWelcomeButtons(): ButtonRow[] {
+export function buildWelcomeButtons(userId = ''): ButtonRow[] {
   return [
     buttonRow(
-      new ButtonBuilder().setCustomId('welcome_verify').setLabel(text(copy.verification?.verifyButton, 'Подтвердить')).setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('welcome_rules').setLabel(text(copy.verification?.rulesButton, 'Правила')).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('family_apply').setLabel(text(copy.verification?.applyButton, 'Подать заявку')).setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(userId ? `welcome_verify:${userId}` : 'welcome_verify').setLabel(text(copy.verification?.verifyButton, 'Подтвердить')).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('welcome_rules').setLabel(text(copy.verification?.rulesButton, 'Правила')).setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -560,18 +559,21 @@ export function buildWelcomeEmbed(
       customMessage
         ? text(customMessage)
         : `Рады видеть тебя в семье **${text(familyTitle || 'Phoenix')}** на сервере **${text(member.guild?.name || 'Phoenix')}**.`,
+      extras.memberCount ? `**Ты — наш ${Number(extras.memberCount)}-й участник!**` : '',
       '',
       extras.rulesChannelId ? `Правила: <#${extras.rulesChannelId}>` : '',
       extras.applicationsChannelId ? `Подача заявки: <#${extras.applicationsChannelId}>` : '',
-      extras.verificationEnabled ? 'Подтверди доступ кнопкой ниже, чтобы получить стартовую роль.' : ''
+      extras.verificationEnabled ? 'Дождись подтверждения администратора, чтобы получить стартовую роль.' : ''
     ].filter(Boolean).join('\n'),
     footer: `${BRAND_FOOTER} • Welcome`,
     thumbnail: avatarUrl(member.user),
     image: imageUrl
   }).addFields(section('Старт', [
     '1. Изучи правила сервера',
-    '2. Пройди подтверждение',
-    '3. Открой панель семьи и подай заявку'
+    '2. Дождись подтверждения администратора или старшего состава',
+    extras.applicationsChannelId
+      ? `3. После получения стартовой роли перейди в <#${extras.applicationsChannelId}> и подай заявку`
+      : '3. После получения стартовой роли перейди в канал заявок и подай анкету'
   ].join('\n')));
 }
 
@@ -877,7 +879,7 @@ export function buildVerificationStatusEmbed(config: AnyRecord = {}): EmbedBuild
     description: [
       `Статус: ${config.enabled ? 'включено' : 'выключено'}`,
       `Роль после подтверждения: ${config.roleId ? `<@&${config.roleId}>` : 'не задана'}`,
-      `Анкета: ${config.questionnaireEnabled ? 'включена' : 'выключена'}`
+      'Подтверждают: только пользователи с разрешением Administrator'
     ].join('\n'),
     footer: `${BRAND_FOOTER} • Verification`
   });

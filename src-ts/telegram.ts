@@ -5,6 +5,7 @@ export {
 
 export type {
   ApplicationNotificationInput,
+  MemberJoinedNotificationInput,
   TelegramNotificationService,
   TelegramSenderLike,
   TicketActivityNotificationInput

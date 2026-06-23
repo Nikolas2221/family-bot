@@ -83,12 +83,26 @@ async function testWelcomeEmbedShowsJoinFlow() {
         }
       }
     },
-    'BRHD Family'
+    'BRHD Family',
+    '',
+    '',
+    { memberCount: 286, verificationEnabled: true, applicationsChannelId: '987654321098765432' }
   ).toJSON();
 
   assert.match(embed.title, /BRHD Family|Phoenix/);
   assert.match(embed.description, /BRHD Family/);
+  assert.match(embed.description, /286-й участник/u);
+  assert.match(embed.description, /подтверждения администратора/u);
+  assert.match(embed.fields[0].value, /987654321098765432/u);
   assert.ok(embed.fields?.length);
+}
+
+async function testWelcomeButtonsExcludeApplication() {
+  const rows = embeds.buildWelcomeButtons('123456789012345678').map(row => row.toJSON());
+  const buttons = rows.flatMap(row => row.components || []);
+  assert.equal(buttons.some(button => button.custom_id === 'welcome_verify:123456789012345678'), true);
+  assert.equal(buttons.some(button => button.custom_id === 'welcome_rules'), true);
+  assert.equal(buttons.some(button => button.custom_id === 'family_apply'), false);
 }
 
 async function testFamilyPanelDoesNotDuplicateMemberAcrossRoles() {
@@ -290,6 +304,7 @@ async function main() {
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
   await runTest('welcome embed shows join flow', testWelcomeEmbedShowsJoinFlow);
+  await runTest('welcome buttons exclude application', testWelcomeButtonsExcludeApplication);
   await runTest('menu and applications embeds expose configured images', testMenuAndApplicationsEmbedsExposeConfiguredImages);
   await runTest('family menu summary and buttons render', testFamilyMenuSummaryAndButtons);
   await runTest('family panel does not duplicate member across roles', testFamilyPanelDoesNotDuplicateMemberAcrossRoles);

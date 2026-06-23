@@ -14,6 +14,7 @@ const {
   formatModerationTimestamp,
   resolveTargetTextChannel
 } = require('../dist-ts/runtime-access-helpers');
+const { canConfirmWelcome } = require('../dist-ts/interaction-runtime');
 
 async function main() {
   const accessApi = {
@@ -46,6 +47,15 @@ async function main() {
   };
   assert.equal(canDebugConfig({ memberPermissions: fakePermissions }), true);
   assert.equal(canDebugConfig({}), false);
+  const startRole = { position: 1 };
+  assert.equal(canConfirmWelcome({
+    guild: { ownerId: 'owner' },
+    member: { id: 'admin', permissions: { has: flag => flag === 8n }, roles: { highest: { position: 2 } } }
+  }, startRole), true);
+  assert.equal(canConfirmWelcome({
+    guild: { ownerId: 'owner' },
+    member: { id: 'senior', permissions: { has: () => false }, roles: { highest: { position: 99 } } }
+  }, startRole), false);
 
   const channel = { id: 'chan', type: 0 };
   assert.equal(

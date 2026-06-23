@@ -217,6 +217,7 @@ interface EventRuntimeOptions {
   stopVoiceSession(member: MemberLike): void;
   enforceBlacklist(member: MemberLike): Promise<boolean>;
   sendWelcomeInvite(member: MemberLike): Promise<unknown>;
+  notifyTelegramMemberJoined(member: MemberLike): Promise<unknown>;
   applyAutorole(member: MemberLike): Promise<boolean>;
   resolveGuildSettings(guildId: string): WelcomeSettingsLike;
   findReactionRoleEntry(guildId: string, messageId: string, emojiKey: string): ReactionRoleEntryLike | null;
@@ -296,6 +297,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     stopVoiceSession,
     enforceBlacklist,
     sendWelcomeInvite,
+    notifyTelegramMemberJoined,
     applyAutorole,
     resolveGuildSettings,
     findReactionRoleEntry,
@@ -402,6 +404,8 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     getGuildStorage(member.guild.id).trackJoin();
     const blocked = await enforceBlacklist(member);
     if (blocked) return;
+
+    await notifyTelegramMemberJoined(member).catch(() => null);
 
     if (isModuleEnabled(member.guild.id, 'welcome')) {
       const settings = resolveGuildSettings(member.guild.id);

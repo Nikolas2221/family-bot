@@ -17,6 +17,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   adminChatId: string;
   tickets: TicketService;
   announcements: AnnouncementService;
+  verifyWelcomeMember?: (guildId: string, userId: string, actorName: string) => Promise<'ok' | 'already' | 'not_found' | 'role_missing' | 'failed'>;
 }): void {
   if (!bot) return;
   const adminChatId = String(options.adminChatId || '').trim();
@@ -46,6 +47,34 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
     }
     await ctx.answerCbQuery('Заявка взята в работу');
     await ctx.reply(`✅ Заявка #${ticketId} взята в работу.`);
+  });
+
+  bot.action(/^welcome_verify:(\d{16,20}):(\d{16,20})$/u, async (ctx: any) => {
+    if (!(await requireAdminChat(ctx))) return;
+    const guildId = String(ctx.match?.[1] || '');
+    const userId = String(ctx.match?.[2] || '');
+    if (!options.verifyWelcomeMember) {
+      await ctx.answerCbQuery('Подтверждение временно недоступно', { show_alert: true });
+      return;
+    }
+    const result = await options.verifyWelcomeMember(guildId, userId, telegramAuthor(ctx).name);
+    if (result === 'not_found') {
+      await ctx.answerCbQuery('Участник или сервер не найден', { show_alert: true });
+      return;
+    }
+    if (result === 'role_missing') {
+      await ctx.answerCbQuery('Стартовая роль не настроена', { show_alert: true });
+      return;
+    }
+    if (result === 'failed') {
+      await ctx.answerCbQuery('Discord не выдал роль. Проверь права бота.', { show_alert: true });
+      return;
+    }
+    await ctx.answerCbQuery(result === 'already' ? 'Роль уже была выдана' : 'Участник подтверждён');
+    await ctx.editMessageReplyMarkup?.({ inline_keyboard: [] }).catch(() => null);
+    await ctx.reply(result === 'already'
+      ? `ℹ️ Участник <@${userId}> уже подтверждён.`
+      : `✅ Участник <@${userId}> подтверждён через Telegram. Стартовая роль выдана.`);
   });
 
   bot.command('reply', async (ctx: any) => {

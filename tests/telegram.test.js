@@ -23,7 +23,7 @@ async function main() {
       discovery: 'Discord',
       about: 'Хочу вступить в семью.'
     },
-    guild: { id: '987654321098765432', name: 'Phoenix Guild' },
+    guild: { id: '987654321098765432', name: 'Phoenix Guild', memberCount: 286 },
     candidate: { id: '123456789012345678', username: 'candidate' },
     ticketChannel: { id: '111111111111111111' }
   });
@@ -42,6 +42,17 @@ async function main() {
   assert.match(sent[0].text, /https:\/\/discord\.com\/channels\/987654321098765432\/111111111111111111/);
   assert.equal(sent[0].options.reply_markup.inline_keyboard[0][0].text, 'Открыть тикет');
   assert.equal(sent[0].options.reply_markup.inline_keyboard[1][0].callback_data, 'ticket_take:application-1');
+
+  const joined = await service.notifyMemberJoined({
+    guild: { id: '987654321098765432', name: 'Phoenix Guild', memberCount: 286 },
+    member: { id: '222222222222222222', username: 'new-member', createdAt: new Date('2026-06-23T12:00:00Z') }
+  });
+  assert.equal(joined, true);
+  assert.equal(sent.length, 2);
+  assert.match(sent[1].text, /Новый участник/u);
+  assert.match(sent[1].text, /222222222222222222/u);
+  assert.match(sent[1].text, /286/u);
+  assert.equal(sent[1].options.reply_markup.inline_keyboard[0][0].callback_data, 'welcome_verify:987654321098765432:222222222222222222');
 
   const warnings = [];
   const unavailable = createTelegramNotificationService({
