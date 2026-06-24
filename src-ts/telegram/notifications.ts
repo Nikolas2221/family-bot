@@ -6,6 +6,7 @@ export interface TelegramSenderLike {
 
 export interface ApplicationNotificationInput {
   application: Record<string, any>;
+  familyTitle?: string;
   guild?: { id?: string; name?: string } | null;
   candidate?: { id?: string; username?: string; globalName?: string | null; tag?: string } | null;
   moderator?: { id?: string; username?: string; globalName?: string | null; tag?: string } | null;
@@ -89,7 +90,7 @@ function buildNewApplicationMessage(input: ApplicationNotificationInput): string
   const application = input.application;
   const id = candidateId(input);
   return [
-    '📩 Новая заявка в семью',
+    `📩 Новая заявка в ${clean(input.familyTitle, 'семью', 100)}`,
     '',
     `Кандидат: <@${id}> / ${candidateName(input)}`,
     `Discord ID: ${id}`,

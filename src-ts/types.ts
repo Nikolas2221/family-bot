@@ -71,6 +71,7 @@ export interface AppConfig {
   messageId: string;
   updateIntervalMs: number;
   applicationCooldownMs: number;
+  applicationTicketDeleteDelaySeconds: number;
   applicationDefaultRole: string;
   familyTitle: string;
   accessApplications: string[];

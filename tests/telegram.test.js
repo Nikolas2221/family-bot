@@ -14,6 +14,7 @@ async function main() {
   });
 
   const ok = await service.notifyApplicationCreated({
+    familyTitle: 'Test Family',
     application: {
       id: 'application-1',
       discordId: '123456789012345678',
@@ -31,6 +32,7 @@ async function main() {
   assert.equal(ok, true);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].chatId, '-1001234567890');
+  assert.match(sent[0].text, /Новая заявка в Test Family/u);
   assert.match(sent[0].text, /Кандидат: <@123456789012345678> \/ candidate/);
   assert.match(sent[0].text, /Discord ID: 123456789012345678/);
   assert.match(sent[0].text, /Ник в игре: Phoenix_Player/);

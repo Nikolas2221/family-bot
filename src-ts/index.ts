@@ -1136,6 +1136,7 @@ function getApplicationsService(guildId: any) {
     applicationDefaultRole: settings.applicationDefaultRole,
     logChannelId: settings.channels.logs,
     applicationsBanner: settings.visuals.applicationsBanner,
+    familyTitle: settings.familyTitle,
     familyRoles: settings.roles,
     applicationAccessRoleIds: settings.access.applications,
     client,
@@ -1143,7 +1144,8 @@ function getApplicationsService(guildId: any) {
     sendAcceptLog,
     sendAcceptanceDm,
     telegramNotifications,
-    ticketService
+    ticketService,
+    ticketDeleteDelayMs: config.applicationTicketDeleteDelaySeconds * 1000
   });
 }
 

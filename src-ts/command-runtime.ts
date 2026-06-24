@@ -189,7 +189,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       return true;
     }
 
-    await interaction.showModal(embeds.buildApplyModal());
+    await interaction.showModal(embeds.buildApplyModal({ familyTitle: resolveGuildSettings(guildId).familyTitle }));
     return true;
   }
 

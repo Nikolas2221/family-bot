@@ -195,10 +195,18 @@ async function testFamilyPanelDoesNotDuplicateMemberAcrossRoles() {
 
 async function testMenuAndApplicationsEmbedsExposeConfiguredImages() {
   const familyEmbed = buildFamilyMenuEmbed({ imageUrl: 'https://example.com/family-banner.png' }).toJSON();
-  const applicationsEmbed = buildApplicationsPanelEmbed({ imageUrl: 'https://example.com/apply-banner.png' }).toJSON();
+  const applicationsEmbed = buildApplicationsPanelEmbed({ imageUrl: 'https://example.com/apply-banner.png', familyTitle: 'Test Family' }).toJSON();
 
   assert.equal(familyEmbed.image.url, 'https://example.com/family-banner.png');
   assert.equal(applicationsEmbed.image.url, 'https://example.com/apply-banner.png');
+  assert.match(applicationsEmbed.title, /Test Family/u);
+  const applicationEmbed = embeds.buildApplicationEmbed({
+    user: { id: '123456789012345678' }, applicationId: 'app-1', familyTitle: 'Test Family'
+  }).toJSON();
+  assert.match(applicationEmbed.title, /Test Family/u);
+  const applicationButtons = embeds.buildApplicationButtons('app-1', '123456789012345678')
+    .flatMap(row => row.toJSON().components.map(component => component.custom_id));
+  assert.equal(applicationButtons.some(customId => customId.startsWith('app_close:')), false);
 }
 
 async function testFamilyMenuSummaryAndButtons() {

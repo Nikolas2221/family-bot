@@ -636,7 +636,9 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
       return true;
     }
 
-    await interaction.showModal(options.embeds.buildApplyModal());
+    await interaction.showModal(options.embeds.buildApplyModal({
+      familyTitle: options.resolveGuildSettings(interaction.guild.id).familyTitle
+    }));
     return true;
   }
 

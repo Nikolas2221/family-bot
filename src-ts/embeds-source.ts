@@ -257,10 +257,10 @@ export function buildAiAdvisorModal(): ModalBuilder {
     );
 }
 
-export function buildApplyModal(): ModalBuilder {
+export function buildApplyModal({ familyTitle = 'Семья' }: AnyRecord = {}): ModalBuilder {
   return new ModalBuilder()
     .setCustomId('family_apply_modal')
-    .setTitle(text(copy.applications?.applyModalTitle, 'Заявка в семью'))
+    .setTitle(`Заявка в ${text(familyTitle, 'семью')}`.slice(0, 45))
     .addComponents(
       inputRow(new TextInputBuilder().setCustomId('nickname').setLabel('Ник в игре').setStyle(TextInputStyle.Short).setRequired(true)),
       inputRow(new TextInputBuilder().setCustomId('level').setLabel('Какой лвл?').setStyle(TextInputStyle.Short).setRequired(true)),
@@ -357,10 +357,6 @@ export function buildApplicationButtons(applicationId: string, userId: string, {
       new ButtonBuilder().setCustomId(`app_ai:${applicationId}:${userId}`).setLabel(text(copy.applications?.aiButton, 'AI-анализ')).setStyle(ButtonStyle.Secondary)
     ));
   }
-
-  rows.push(buttonRow(
-    new ButtonBuilder().setCustomId(`app_close:${applicationId}:${userId}`).setLabel(text(copy.applications?.closeTicketButton, 'Закрыть тикет')).setStyle(ButtonStyle.Secondary)
-  ));
 
   return rows;
 }
@@ -577,19 +573,19 @@ export function buildWelcomeEmbed(
   ].join('\n')));
 }
 
-export function buildApplicationsPanelEmbed({ imageUrl }: AnyRecord = {}): EmbedBuilder {
+export function buildApplicationsPanelEmbed({ imageUrl, familyTitle = 'Семья' }: AnyRecord = {}): EmbedBuilder {
   return card({
-    title: text(copy.applications?.panelTitle, 'Заявки в семью'),
+    title: `📝 Заявки в ${text(familyTitle, 'семью')}`,
     color: THEME.phoenix,
     description: [
-      'Подача заявки в семью в стиле BRHD / Phoenix.',
+      `Подача заявки в ${text(familyTitle, 'семью')}.`,
       '',
       text(copy.applications?.panelDescription, 'Нажми кнопку ниже, чтобы подать заявку в семью.'),
       '',
       'Как проходит подача:',
       '1. Нажми кнопку ниже',
       '2. Заполни анкету кандидата',
-      '3. Руководство получит тикет на рассмотрение'
+      '3. Руководство получит карточку на рассмотрение'
     ].join('\n'),
     footer: `${BRAND_FOOTER} • Applications`,
     image: imageUrl
@@ -606,7 +602,8 @@ export function buildApplicationEmbed({
   age = '',
   text: legacyText = '',
   applicationId,
-  source
+  source,
+  familyTitle = 'Семья'
 }: AnyRecord): EmbedBuilder {
   const normalizedLevel = level || age || 'не указано';
   const normalizedAbout = about || legacyText || 'не указано';
@@ -614,7 +611,7 @@ export function buildApplicationEmbed({
   const status = text(copy.applications?.statusLabel?.('review'), 'На рассмотрении');
 
   return card({
-    title: `${text(copy.applications?.embedTitle, 'Заявка в семью')} • Phoenix Intake`,
+    title: `📝 Заявка в ${text(familyTitle, 'семью')}`,
     color: THEME.phoenix,
     description: text(copy.applications?.description?.(sourceLabel, user.id, status), `> **${sourceLabel} от <@${user.id}>**\n> Статус: **${status}**`),
     footer: `${BRAND_FOOTER} • Candidate Card`,

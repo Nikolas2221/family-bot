@@ -64,6 +64,7 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     messageId: trim(env.MESSAGE_ID),
     updateIntervalMs: parseNumber(env.UPDATE_INTERVAL_MS, 60000, { min: 60000 }),
     applicationCooldownMs: parseNumber(env.APPLICATION_COOLDOWN_MS, 300000, { min: 10000 }),
+    applicationTicketDeleteDelaySeconds: parseNumber(env.APPLICATION_TICKET_DELETE_DELAY_SECONDS, 5, { min: 1 }),
     applicationDefaultRole: trim(env.APPLICATION_DEFAULT_ROLE) || roleNewbie,
     familyTitle: trim(env.FAMILY_TITLE) || copy.defaults.familyTitle,
     accessApplications: parseCsv(env.ACCESS_APPLICATIONS),

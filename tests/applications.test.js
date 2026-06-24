@@ -160,11 +160,11 @@ async function testSubmitApplication() {
 
   assert.equal(storage.listGuildRecentApplications(guildId, 1).length, 1);
   assert.equal(storage.getGuildCooldown(guildId, 'user-1') > 0, true);
-  assert.equal(channel.sent.length, 2);
+  assert.equal(channel.sent.length, 1);
   assert.match(replies[0].content, /заявка отправлена/i);
 }
 
-async function testSubmitApplicationCreatesThreadTicket() {
+async function testSubmitApplicationCreatesReviewCardWithoutThread() {
   const storage = createTempStorage();
   const guildId = 'guild-thread';
   const threadMessages = [];
@@ -231,12 +231,13 @@ async function testSubmitApplicationCreatesThreadTicket() {
 
   const saved = storage.listGuildRecentApplications(guildId, 1)[0];
   assert.equal(channel.sent.length, 1);
-  assert.equal(threadMessages.length, 1);
-  assert.equal(saved.ticketThreadId, 'thread-1');
-  assert.equal(saved.ticketStarterMessageId, 'starter-1');
-  assert.equal(saved.ticketMessageId, 'thread-message-1');
-  assert.equal(threadOptions.name.startsWith('ticket-Threader-'), true);
-  assert.match(starterEdited.content, /тикет/i);
+  assert.equal(threadMessages.length, 0);
+  assert.equal(saved.ticketThreadId, '');
+  assert.equal(saved.ticketStarterMessageId, '');
+  assert.equal(saved.ticketMessageId, 'starter-1');
+  assert.equal(threadOptions, null);
+  assert.equal(starterEdited, null);
+  assert.match(channel.sent[0].content, /<@&role-admin-1>/u);
 }
 
 async function testSubmitApplicationSurvivesTelegramFailure() {
@@ -293,7 +294,7 @@ async function testSubmitApplicationSurvivesTelegramFailure() {
     });
 
     assert.equal(storage.listGuildRecentApplications(guildId, 1).length, 1);
-    assert.equal(channel.sent.length, 2);
+    assert.equal(channel.sent.length, 1);
     assert.equal(replies.length, 1);
     assert.equal(warnings.length, 1);
   } finally {
@@ -678,7 +679,9 @@ async function testCloseTicketNotifiesTelegram() {
   });
   let archived = false;
   let locked = false;
+  let deleted = false;
   let telegramClosed = null;
+  let telegramCloseCount = 0;
 
   const service = createApplicationsService({
     storage: createGuildScopedStorage(storage, guildId),
@@ -691,10 +694,12 @@ async function testCloseTicketNotifiesTelegram() {
     sendAcceptLog: async () => {},
     telegramNotifications: {
       notifyTicketClosed: async payload => {
+        telegramCloseCount += 1;
         telegramClosed = payload;
         return true;
       }
-    }
+    },
+    ticketDeleteDelayMs: 0
   });
 
   const channel = {
@@ -705,6 +710,9 @@ async function testCloseTicketNotifiesTelegram() {
     },
     async setLocked() {
       locked = true;
+    },
+    async delete() {
+      deleted = true;
     }
   };
 
@@ -715,15 +723,27 @@ async function testCloseTicketNotifiesTelegram() {
     async reply() {}
   }, applicationId);
 
-  assert.equal(archived, true);
+  assert.equal(deleted, true);
+  assert.equal(archived, false);
   assert.equal(locked, true);
   assert.equal(telegramClosed.application.id, applicationId);
   assert.equal(telegramClosed.ticketChannel.id, 'thread-close');
+  assert.equal(telegramCloseCount, 1);
+
+  const repeatReplies = [];
+  await service.closeTicket({
+    guild: { id: guildId, name: 'Close Guild' },
+    user: { id: 'moderator-close', username: 'CloserMod' },
+    channel,
+    async reply(payload) { repeatReplies.push(payload); }
+  }, applicationId);
+  assert.equal(telegramCloseCount, 1);
+  assert.match(repeatReplies[0].content, /уже закрыт/u);
 }
 
 async function main() {
   await runTest('submitApplication stores data and sends application message', testSubmitApplication);
-  await runTest('submitApplication creates thread ticket when threads are available', testSubmitApplicationCreatesThreadTicket);
+  await runTest('submitApplication creates review card without a thread', testSubmitApplicationCreatesReviewCardWithoutThread);
   await runTest('submitApplication survives Telegram notification failure', testSubmitApplicationSurvivesTelegramFailure);
   await runTest('accept updates status and logs admission', testAcceptApplication);
   await runTest('accept assigns resolved family role', testAcceptApplicationAssignsResolvedFamilyRole);

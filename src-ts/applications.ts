@@ -33,6 +33,7 @@ interface ApplicationsOptions {
   applicationDefaultRole: string;
   logChannelId: string;
   applicationsBanner: string;
+  familyTitle?: string;
   familyRoles?: RoleDefinition[];
   applicationAccessRoleIds?: string[];
   client: any;
@@ -41,6 +42,7 @@ interface ApplicationsOptions {
   sendAcceptanceDm?: (...args: any[]) => Promise<unknown>;
   telegramNotifications?: TelegramNotificationService;
   ticketService?: Pick<TicketService, 'registerTicket' | 'markDecision' | 'markClosed'>;
+  ticketDeleteDelayMs?: number;
 }
 
 export function createApplicationsService({
@@ -50,6 +52,7 @@ export function createApplicationsService({
   applicationDefaultRole,
   logChannelId,
   applicationsBanner,
+  familyTitle = 'Семья',
   familyRoles = [],
   applicationAccessRoleIds = [],
   client,
@@ -57,8 +60,10 @@ export function createApplicationsService({
   sendAcceptLog,
   sendAcceptanceDm = async () => {},
   telegramNotifications,
-  ticketService
+  ticketService,
+  ticketDeleteDelayMs = 5000
 }: ApplicationsOptions): ApplicationsService {
+  const closingTickets = new Set<string>();
   async function notifyTelegram(task?: Promise<boolean>): Promise<void> {
     if (!task) return;
     await task.catch(error => {
@@ -88,28 +93,10 @@ export function createApplicationsService({
       .join(' ');
   }
 
-  async function createApplicationTicket(channel: any, application: any, user: any) {
+  async function createApplicationReviewCard(channel: any, application: any, user: any) {
     const managerMentions = buildApplicationManagerMentions();
-    const starterMessage = await channel.send({
-      content: managerMentions || copy.applications.ticketThreadHeader(user.id, application.id),
-      allowedMentions: {
-        parse: [],
-        roles: applicationAccessRoleIds,
-        users: []
-      }
-    });
-
-    const thread = typeof starterMessage.startThread === 'function'
-      ? await starterMessage.startThread({
-        name: copy.applications.ticketThreadName(application.nickname || 'candidate', application.id),
-        autoArchiveDuration: 1440,
-        reason: copy.applications.ticketReason(user.id)
-      }).catch(() => null)
-      : null;
-
-    const targetChannel = thread || channel;
-    const ticketMessage = await targetChannel.send({
-      content: thread ? copy.applications.ticketThreadHeader(user.id, application.id) : managerMentions,
+    const reviewMessage = await channel.send({
+      content: managerMentions,
       embeds: [
         embeds.buildApplicationEmbed({
           user,
@@ -120,35 +107,25 @@ export function createApplicationsService({
           about: application.about,
           age: application.age,
           text: application.text,
-          applicationId: application.id
+          applicationId: application.id,
+          familyTitle
         })
       ],
       components: embeds.buildApplicationButtons(application.id, user.id),
       allowedMentions: {
         parse: [],
-        roles: thread ? [] : applicationAccessRoleIds,
+        roles: applicationAccessRoleIds,
         users: []
       }
     });
 
-    if (thread) {
-      await starterMessage.edit({
-        content: [copy.applications.ticketStarter(user.id, thread.id), managerMentions].filter(Boolean).join('\n'),
-        allowedMentions: {
-          parse: [],
-          roles: applicationAccessRoleIds,
-          users: []
-        }
-      }).catch(() => {});
-    }
-
     storage.setApplicationTicketInfo(application, {
-      ticketThreadId: thread?.id || '',
-      ticketMessageId: ticketMessage?.id || '',
-      ticketStarterMessageId: starterMessage?.id || ''
+      ticketThreadId: '',
+      ticketMessageId: reviewMessage?.id || '',
+      ticketStarterMessageId: ''
     });
 
-    return { starterMessage, thread, ticketMessage };
+    return reviewMessage;
   }
 
   async function cleanupAcceptedTicket(guild: any, application: any, activeChannel: any = null) {
@@ -237,7 +214,7 @@ export function createApplicationsService({
     }
 
     await channel.send({
-      embeds: [embeds.buildApplicationsPanelEmbed({ imageUrl: applicationsBanner })],
+      embeds: [embeds.buildApplicationsPanelEmbed({ imageUrl: applicationsBanner, familyTitle })],
       components: embeds.buildApplicationsPanelButtons()
     });
 
@@ -275,19 +252,14 @@ export function createApplicationsService({
       return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
     }
 
-    const ticket = await createApplicationTicket(channel, application, interaction.user);
-    const ticketChannel = ticket.thread || channel;
-    ticketService?.registerTicket(application, {
-      channelId: ticketChannel.id,
-      channelName: ticketChannel.name || '',
-      discordUsername: interaction.user.globalName || interaction.user.username || interaction.user.tag || ''
-    });
+    await createApplicationReviewCard(channel, application, interaction.user);
 
     await notifyTelegram(telegramNotifications?.notifyApplicationCreated({
       application,
+      familyTitle,
       guild: interaction.guild,
       candidate: interaction.user,
-      ticketChannel
+      ticketChannel: channel
     }));
 
     return interaction.reply(ephemeral({ content: copy.applications.sent }));
@@ -342,7 +314,8 @@ export function createApplicationsService({
       age: application.age,
       text: application.text,
       applicationId,
-      source: copy.applications.source
+      source: copy.applications.source,
+      familyTitle
     });
 
     accepted
@@ -359,7 +332,7 @@ export function createApplicationsService({
       return interaction.reply(ephemeral({ content: copy.common.unknownError }));
     }
 
-    await targetMessage.edit({ embeds: [accepted], components: embeds.buildApplicationButtons(applicationId, userId, { closed: true }) });
+    await targetMessage.edit({ embeds: [accepted], components: [] });
     await sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName);
     await sendAcceptanceDm({
       guild: interaction.guild,
@@ -407,7 +380,8 @@ export function createApplicationsService({
       age: application.age,
       text: application.text,
       applicationId,
-      source: copy.applications.source
+      source: copy.applications.source,
+      familyTitle
     });
 
     review
@@ -442,7 +416,8 @@ export function createApplicationsService({
       age: application.age,
       text: application.text,
       applicationId,
-      source: copy.applications.source
+      source: copy.applications.source,
+      familyTitle
     });
 
     rejected
@@ -450,7 +425,7 @@ export function createApplicationsService({
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('rejected')))
       .setFooter({ text: copy.applications.rejectedFooter(interaction.user.username) });
 
-    await interaction.message.edit({ embeds: [rejected], components: embeds.buildApplicationButtons(applicationId, userId, { closed: true }) });
+    await interaction.message.edit({ embeds: [rejected], components: [] });
 
     const user = await client.users.fetch(userId).catch(() => null);
     if (user && logChannelId) {
@@ -491,10 +466,20 @@ export function createApplicationsService({
       return interaction.reply(ephemeral({ content: copy.applications.ticketOnlyInThread }));
     }
 
-    await interaction.reply(ephemeral({ content: copy.applications.ticketClosedReply }));
-    await interaction.channel.setArchived(true, copy.applications.ticketReason(application.discordId || 'user')).catch(() => {});
-    await interaction.channel.setLocked(true).catch(() => {});
+    if (application.ticketStatus === 'closed' || closingTickets.has(applicationId)) {
+      return interaction.reply(ephemeral({ content: '🔒 Этот тикет уже закрыт или удаляется.' }));
+    }
+
+    closingTickets.add(applicationId);
+    try {
+    const channel = interaction.channel;
+    const delaySeconds = Math.max(0, Math.ceil(ticketDeleteDelayMs / 1000));
+    await interaction.reply(ephemeral({ content: `🔒 Тикет будет полностью удалён через ${delaySeconds} сек.` }));
     const closeReason = String(details.reason || '').trim() || copy.applications.ticketReason(application.discordId || 'user');
+    application.ticketStatus = 'closed';
+    application.handledBy = interaction.user.username || interaction.user.id;
+    application.closeReason = closeReason;
+    application.closedAt = new Date().toISOString();
     ticketService?.markClosed(application, {
       handledBy: interaction.user.username || interaction.user.id,
       reason: closeReason
@@ -508,7 +493,26 @@ export function createApplicationsService({
       reason: closeReason,
       status: application.ticketStatus || 'closed'
     }));
+    await channel.setLocked?.(true).catch(() => {});
+    if (ticketDeleteDelayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, ticketDeleteDelayMs));
+    }
+    const deleted = await channel.delete?.(closeReason).then(() => true).catch(() => false);
+    if (!deleted) {
+      console.warn(`Application ticket ${channel.id} could not be deleted; archiving it instead.`);
+      await channel.setArchived?.(true, closeReason).catch(() => {});
+      await channel.setLocked?.(true).catch(() => {});
+    } else {
+      storage.setApplicationTicketInfo(application, {
+        ticketThreadId: '',
+        ticketMessageId: '',
+        ticketStarterMessageId: ''
+      });
+    }
     return true;
+    } finally {
+      closingTickets.delete(applicationId);
+    }
   }
 
   return {
