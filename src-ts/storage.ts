@@ -23,6 +23,8 @@ function defaultStore(): StoreState {
     },
     applications: [],
     announcements: [],
+    supportTickets: [],
+    supportTicketCooldowns: {},
     cooldowns: {},
     warns: [],
     commends: [],
@@ -120,6 +122,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       Object.keys(value.members || {}).length
       || Object.keys(value.analytics?.daily || {}).length
       || (value.applications || []).length
+      || (value.supportTickets || []).length
       || Object.keys(value.cooldowns || {}).length
       || (value.warns || []).length
       || (value.commends || []).length

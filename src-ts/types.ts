@@ -22,6 +22,17 @@ export interface GuardConfig {
   allowedRoles: string[];
 }
 
+export interface SupportTicketConfig {
+  categoryId: string;
+  supportRoleId: string;
+  logChannelId: string;
+  panelChannelId: string;
+  pingSupport: boolean;
+  cooldownSeconds: number;
+  maxOpenPerUser: number;
+  deleteDelaySeconds: number;
+}
+
 export interface RoleEnvEntry {
   key: string;
   value: string;
@@ -59,6 +70,7 @@ export interface AppConfig {
   deepSeekApiKey: string;
   deepSeekBaseUrl: string;
   deepSeekModel: string;
+  supportTickets: SupportTicketConfig;
   autoRanks: AutoRanksConfig;
   leakGuard: GuardConfig;
   channelGuard: GuardConfig;
@@ -566,12 +578,32 @@ export interface StoreState {
   };
   applications: ApplicationRecord[];
   announcements: AnnouncementRecord[];
+  supportTickets: SupportTicketRecord[];
+  supportTicketCooldowns: Record<string, number>;
   cooldowns: Record<string, number>;
   warns: WarnEntry[];
   commends: CommendEntry[];
   blacklist: BlacklistEntry[];
   panelMessageId: string;
   panelMessageIds: Record<string, string>;
+}
+
+export interface SupportTicketRecord {
+  channelId: string;
+  channelName: string;
+  userId: string;
+  guildId: string;
+  createdAt: string;
+  status: 'open' | 'closed';
+  topic: string;
+  description: string;
+  evidence: string;
+  claimedBy: string | null;
+  closedAt: string | null;
+  closedBy: string | null;
+  closeReason: string | null;
+  firstMessageId?: string;
+  addedUserIds?: string[];
 }
 
 export interface ApplicationFieldsInput {

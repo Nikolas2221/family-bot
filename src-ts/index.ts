@@ -22,6 +22,7 @@ const { createTicketService } = require('./services/tickets');
 const { canSendDiscordAnnouncement, createAnnouncementService } = require('./services/announcements');
 const { createLawService } = require('./services/law');
 const { createDeepSeekService } = require('./services/deepseek');
+const { createSupportTicketService } = require('./services/support-tickets');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -130,6 +131,7 @@ const deepSeekService = createDeepSeekService({
   model: config.deepSeekModel
 });
 const lawService = createLawService(deepSeekService.enabled ? deepSeekService : null);
+const supportTicketService = createSupportTicketService({ storage, client, config: config.supportTickets });
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
@@ -721,6 +723,7 @@ function getHelpCatalog(interaction: any) {
     { name: 'applications', description: copy.commands.applicationsDescription },
     { name: 'profile', description: copy.commands.profileDescription },
     { name: 'law', description: 'Разобрать ситуацию по законодательной базе Majestic RP' },
+    { name: 'ticket', description: 'Создать или управлять обращением в поддержку' },
     { name: 'help', description: copy.commands.helpDescription }
   ];
 
@@ -1623,6 +1626,7 @@ registerInteractionRuntime({
   buildPremiumActivityReportEmbed,
   buildAiAdvisorEmbed,
   getHelpCatalog,
+  supportTicketService,
   resolveMemberQuery,
   formatRankResult,
   syncAutoRanks,

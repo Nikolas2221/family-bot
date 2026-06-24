@@ -14,6 +14,22 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('adminpanel').setDescription(copy.commands.adminPanelDescription),
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
     new SlashCommandBuilder()
+      .setName('ticket')
+      .setDescription('Управление системой поддержки')
+      .addSubcommand(subcommand => subcommand.setName('setup').setDescription('Отправить панель создания тикета'))
+      .addSubcommand(subcommand => subcommand.setName('info').setDescription('Показать информацию о тикетах'))
+      .addSubcommand(subcommand => subcommand.setName('close').setDescription('Закрыть текущий тикет'))
+      .addSubcommand(subcommand => subcommand.setName('claim').setDescription('Взять текущий тикет в работу'))
+      .addSubcommand(subcommand =>
+        subcommand.setName('add').setDescription('Добавить участника в текущий тикет')
+          .addUserOption(option => option.setName('user').setDescription('Участник').setRequired(true))
+      )
+      .addSubcommand(subcommand =>
+        subcommand.setName('remove').setDescription('Убрать участника из текущего тикета')
+          .addUserOption(option => option.setName('user').setDescription('Участник').setRequired(true))
+      )
+      .addSubcommand(subcommand => subcommand.setName('list').setDescription('Показать открытые тикеты')),
+    new SlashCommandBuilder()
       .setName('law')
       .setDescription('Разобрать ситуацию по законодательной базе Majestic RP')
       .addStringOption(option =>

@@ -1,6 +1,22 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.34': {
+    added: [
+      'отдельная нейтральная система support tickets с командами /ticket setup, info, close, claim, add, remove и list',
+      'modal создания обращения с темой, описанием и доказательствами, приватный канал и persistent-кнопки управления',
+      'claim, добавление и удаление участников, подтверждение закрытия, причина, подробные логи и текстовый transcript',
+      'настройки категории, роли поддержки, логов, панели, cooldown, лимита и задержки удаления через env'
+    ],
+    updated: [
+      'support tickets хранятся отдельно от Discord application tickets в существующем JSON storage',
+      'создание защищено от повторных кликов, параллельных запросов и частично созданных каналов'
+    ],
+    fixed: [
+      'ошибки Telegram, лог-канала и transcript не останавливают основной ticket flow',
+      'после закрытия пользователь снова может создать обращение, а обычные участники не получают доступ к чужим каналам'
+    ]
+  },
   '1.0.33': {
     added: [],
     updated: [

@@ -50,6 +50,7 @@ interface InteractionRuntimeOptions {
   doPanelUpdate(guildId: string, force?: boolean): Promise<unknown>;
   sendScheduledReport(guild: any, period: string, channelId: string): Promise<boolean>;
   getHelpCatalog(interaction: any): any;
+  supportTicketService: { handleInteraction(interaction: any): Promise<boolean> };
 }
 
 async function handleWelcomeCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
@@ -1012,6 +1013,9 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
   client.removeAllListeners('interactionCreate');
   client.on('interactionCreate', async (interaction: any) => {
     try {
+      if (await options.supportTicketService.handleInteraction(interaction)) {
+        return;
+      }
       if (interaction.isButton?.() && interaction.customId?.startsWith('help_page:')) {
         const page = Number(interaction.customId.split(':')[1] || 0);
         const catalog = options.getHelpCatalog(interaction);

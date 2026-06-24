@@ -71,6 +71,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   const event = commands.find(command => command.name === 'event');
   const close = commands.find(command => command.name === 'close');
   const law = commands.find(command => command.name === 'law');
+  const ticket = commands.find(command => command.name === 'ticket');
 
   assert.ok(automod);
   assert.ok(serverReport);
@@ -84,6 +85,8 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.ok(event);
   assert.ok(close);
   assert.ok(law);
+  assert.ok(ticket);
+  assert.deepEqual(ticket.options.map(option => option.name), ['setup', 'info', 'close', 'claim', 'add', 'remove', 'list']);
   assert.equal(law.options[0].name, 'question');
   assert.equal(announce.options[0].name, 'text');
   assert.equal(event.options[0].name, 'text');

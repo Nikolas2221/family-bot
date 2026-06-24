@@ -8,6 +8,7 @@ Family Bot for Discord
 - поддерживает ручные ранги, авто-ранги и защитные функции
 - умеет отвечать через DeepSeek API, а без ключа автоматически использует локальный режим
 - разбирает вопросы по законодательству Majestic RP через `/law question:<ситуация>` и прикладывает ссылки на найденные нормы
+- создаёт приватные обращения поддержки через `/ticket` с логами, transcript и системой прав
 - хранит setup и подписки серверов в JSON-базе без SQL
 
 Быстрый старт:
@@ -27,6 +28,18 @@ Family Bot for Discord
 7. Для Railway лучше укажи пути к постоянным файлам:
    `DATABASE_FILE=/data/database.json`
    `STORAGE_FILE=/data/storage.json`
+
+Support tickets:
+- `TICKET_CATEGORY_ID` — категория приватных тикетов
+- `TICKET_SUPPORT_ROLE_ID` — роль поддержки
+- `TICKET_LOG_CHANNEL_ID` — канал логов (необязательно)
+- `TICKET_PANEL_CHANNEL_ID` — канал панели (необязательно; иначе текущий канал)
+- `TICKET_PING_SUPPORT=true`
+- `TICKET_COOLDOWN_SECONDS=60`
+- `TICKET_MAX_OPEN_PER_USER=1`
+- `TICKET_DELETE_DELAY_SECONDS=5`
+
+Команды: `/ticket setup`, `/ticket info`, `/ticket close`, `/ticket claim`, `/ticket add`, `/ticket remove`, `/ticket list`.
 8. Если нужен AI-анализ заявок, задай:
    `ACCESS_APPLICATIONS`
 9. Для Telegram-моста укажи:

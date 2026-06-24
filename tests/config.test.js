@@ -123,6 +123,26 @@ async function testTelegramConfigIsSafeAndRequiresBothValues() {
   assert.doesNotMatch(summary, /telegram-secret-token/);
 }
 
+async function testSupportTicketConfig() {
+  const config = createConfig({
+    TOKEN: 'token', GUILD_ID: '123456789012345678', CHANNEL_ID: '123456789012345679',
+    TICKET_CATEGORY_ID: '123456789012345680',
+    TICKET_SUPPORT_ROLE_ID: '123456789012345681',
+    TICKET_LOG_CHANNEL_ID: '123456789012345682',
+    TICKET_PANEL_CHANNEL_ID: '123456789012345683',
+    TICKET_PING_SUPPORT: 'false',
+    TICKET_COOLDOWN_SECONDS: '45',
+    TICKET_MAX_OPEN_PER_USER: '1',
+    TICKET_DELETE_DELAY_SECONDS: '7'
+  });
+  assert.equal(config.supportTickets.categoryId, '123456789012345680');
+  assert.equal(config.supportTickets.supportRoleId, '123456789012345681');
+  assert.equal(config.supportTickets.pingSupport, false);
+  assert.equal(config.supportTickets.cooldownSeconds, 45);
+  assert.equal(config.supportTickets.deleteDelaySeconds, 7);
+  assert.match(summarizeConfig(config).join('\n'), /support tickets: configured/);
+}
+
 async function main() {
   await runTest('config validation fails when required env is missing', testMissingRequiredEnv);
   await runTest('config validation allows offline AI without API key', testAiEnabledWorksInOfflineModeWithoutKey);
@@ -131,6 +151,7 @@ async function main() {
   await runTest('DeepSeek config keeps API key secret', testDeepSeekConfigKeepsKeySecret);
   await runTest('config validation catches invalid auto rank thresholds', testAutoRanksThresholdValidation);
   await runTest('Telegram config is paired and token stays secret', testTelegramConfigIsSafeAndRequiresBothValues);
+  await runTest('support ticket config is parsed', testSupportTicketConfig);
   console.log('ALL CONFIG TESTS PASSED');
 }
 

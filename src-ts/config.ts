@@ -75,6 +75,16 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     deepSeekApiKey: trim(env.DEEPSEEK_API_KEY),
     deepSeekBaseUrl: trim(env.DEEPSEEK_BASE_URL) || 'https://api.deepseek.com',
     deepSeekModel: trim(env.DEEPSEEK_MODEL) || 'deepseek-chat',
+    supportTickets: {
+      categoryId: trim(env.TICKET_CATEGORY_ID),
+      supportRoleId: trim(env.TICKET_SUPPORT_ROLE_ID),
+      logChannelId: trim(env.TICKET_LOG_CHANNEL_ID),
+      panelChannelId: trim(env.TICKET_PANEL_CHANNEL_ID),
+      pingSupport: parseBoolean(env.TICKET_PING_SUPPORT || 'true'),
+      cooldownSeconds: parseNumber(env.TICKET_COOLDOWN_SECONDS, 60, { min: 5 }),
+      maxOpenPerUser: parseNumber(env.TICKET_MAX_OPEN_PER_USER, 1, { min: 1 }),
+      deleteDelaySeconds: parseNumber(env.TICKET_DELETE_DELAY_SECONDS, 5, { min: 1 })
+    },
     autoRanks: {
       enabled: parseBoolean(env.AUTO_RANKS_ENABLED),
       intervalMs: parseNumber(env.AUTO_RANKS_INTERVAL_MS, 300000, { min: 60000 }),
@@ -133,6 +143,10 @@ export function validateConfig(config: AppConfig): ValidationResult {
   validateDiscordId('MESSAGE_ID', config.messageId, errors, warnings);
   validateDiscordId('APPLICATION_DEFAULT_ROLE', config.applicationDefaultRole, errors, warnings);
   validateDiscordId('DISCORD_ANNOUNCEMENTS_CHANNEL_ID', config.discordAnnouncementsChannelId, errors, warnings);
+  validateDiscordId('TICKET_CATEGORY_ID', config.supportTickets.categoryId, errors, warnings);
+  validateDiscordId('TICKET_SUPPORT_ROLE_ID', config.supportTickets.supportRoleId, errors, warnings);
+  validateDiscordId('TICKET_LOG_CHANNEL_ID', config.supportTickets.logChannelId, errors, warnings);
+  validateDiscordId('TICKET_PANEL_CHANNEL_ID', config.supportTickets.panelChannelId, errors, warnings);
 
   for (const role of config.roles) {
     validateDiscordId(role.key, role.value, errors, warnings);
@@ -235,6 +249,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- bot owners: ${ownersSummary}`,
     `- Telegram notifications: ${config.telegramBotToken && config.telegramAdminChatId ? 'enabled' : 'disabled'}`,
     `- announcements bridge: ${config.telegramAnnouncementsChatId && config.discordAnnouncementsChannelId ? 'enabled' : 'disabled'}`,
+    `- support tickets: ${config.supportTickets.categoryId && config.supportTickets.supportRoleId ? 'configured' : 'not configured'}`,
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,

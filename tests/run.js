@@ -24,6 +24,8 @@ async function main() {
   const { main: runRuntimeNotificationHelpersTests } = require('./runtime-notification-helpers.test');
   const { main: runSecurityTests } = require('./security.test');
   const { main: runStorageTests } = require('./storage.test');
+  const { main: runSupportTicketTests } = require('./support-tickets.test');
+  const { main: runSupportTicketUiTests } = require('./support-ticket-ui.test');
   const { main: runTelegramTests } = require('./telegram.test');
   const { main: runTelegramHandlersTests } = require('./telegram-handlers.test');
   const { main: runTicketBridgeTests } = require('./ticket-bridge.test');
@@ -56,6 +58,8 @@ async function main() {
   await runRuntimeNotificationHelpersTests();
   await runSecurityTests();
   await runStorageTests();
+  await runSupportTicketTests();
+  await runSupportTicketUiTests();
   await runTelegramTests();
   await runTelegramHandlersTests();
   await runTicketBridgeTests();
