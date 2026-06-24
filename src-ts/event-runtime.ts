@@ -227,6 +227,7 @@ interface EventRuntimeOptions {
   restoreDeletedChannel(channel: ChannelDeleteLike, reason: string): Promise<unknown>;
   doPanelUpdate(guildId: string, force: boolean): Promise<unknown>;
   handleDiscordTicketMessage(message: MessageLike): Promise<boolean>;
+  handleAfkMessage(message: MessageLike): Promise<boolean>;
 }
 
 async function hydrateReaction(reaction: ReactionLike | null | undefined): Promise<ReactionLike | null> {
@@ -306,7 +307,8 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     fetchDeletedChannelExecutor,
     restoreDeletedChannel,
     doPanelUpdate,
-    handleDiscordTicketMessage
+    handleDiscordTicketMessage,
+    handleAfkMessage
   } = options;
 
   const managedEvents = [
@@ -340,6 +342,14 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     const guildStorage = getGuildStorage(message.guild.id);
 
     if (await handleAutomodMessage(message)) {
+      return;
+    }
+
+    if (await handleAfkMessage(message).catch(error => {
+      console.warn('AFK leave message handler failed:', error);
+      return false;
+    })) {
+      guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
       return;
     }
 

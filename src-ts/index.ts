@@ -23,6 +23,7 @@ const { canSendDiscordAnnouncement, createAnnouncementService } = require('./ser
 const { createLawService } = require('./services/law');
 const { createDeepSeekService } = require('./services/deepseek');
 const { createSupportTicketService } = require('./services/support-tickets');
+const { createAfkLeaveService } = require('./services/afk-leave');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -132,6 +133,7 @@ const deepSeekService = createDeepSeekService({
 });
 const lawService = createLawService(deepSeekService.enabled ? deepSeekService : null);
 const supportTicketService = createSupportTicketService({ storage, client, config: config.supportTickets });
+const afkLeaveService = createAfkLeaveService({ storage, client, config: config.afkLeave });
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
@@ -724,6 +726,7 @@ function getHelpCatalog(interaction: any) {
     { name: 'profile', description: copy.commands.profileDescription },
     { name: 'law', description: 'Разобрать ситуацию по законодательной базе Majestic RP' },
     { name: 'ticket', description: 'Создать или управлять обращением в поддержку' },
+    { name: 'afk', description: 'Подать или проверить заявку на АФК-отпуск' },
     { name: 'help', description: copy.commands.helpDescription }
   ];
 
@@ -1449,7 +1452,8 @@ registerEventRuntime({
   fetchDeletedChannelExecutor,
   restoreDeletedChannel,
   doPanelUpdate,
-  handleDiscordTicketMessage: ticketService.handleDiscordTicketMessage
+  handleDiscordTicketMessage: ticketService.handleDiscordTicketMessage,
+  handleAfkMessage: afkLeaveService.handleMessage
 });
 
 process.on('SIGINT', () => {
@@ -1627,6 +1631,7 @@ registerInteractionRuntime({
   buildAiAdvisorEmbed,
   getHelpCatalog,
   supportTicketService,
+  afkLeaveService,
   resolveMemberQuery,
   formatRankResult,
   syncAutoRanks,

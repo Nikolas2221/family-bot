@@ -143,6 +143,22 @@ async function testSupportTicketConfig() {
   assert.match(summarizeConfig(config).join('\n'), /support tickets: configured/);
 }
 
+async function testAfkLeaveConfig() {
+  const config = createConfig({
+    TOKEN: 'token', GUILD_ID: '123456789012345678', CHANNEL_ID: '123456789012345679',
+    AFK_CHANNEL_ID: '123456789012345680',
+    AFK_LOG_CHANNEL_ID: '123456789012345681',
+    AFK_MANAGER_ROLE_ID: '123456789012345682',
+    AFK_USE_MODAL: 'true', AFK_USE_MESSAGE_FORM: 'false', AFK_ALLOW_DM_NOTIFY: 'true',
+    AFK_PIN_PANEL: 'false', AFK_PREVENT_DUPLICATE_PANEL: 'true'
+  });
+  assert.equal(config.afkLeave.channelId, '123456789012345680');
+  assert.equal(config.afkLeave.useModal, true);
+  assert.equal(config.afkLeave.useMessageForm, false);
+  assert.equal(config.afkLeave.pinPanel, false);
+  assert.match(summarizeConfig(config).join('\n'), /AFK leave: configured/);
+}
+
 async function main() {
   await runTest('config validation fails when required env is missing', testMissingRequiredEnv);
   await runTest('config validation allows offline AI without API key', testAiEnabledWorksInOfflineModeWithoutKey);
@@ -152,6 +168,7 @@ async function main() {
   await runTest('config validation catches invalid auto rank thresholds', testAutoRanksThresholdValidation);
   await runTest('Telegram config is paired and token stays secret', testTelegramConfigIsSafeAndRequiresBothValues);
   await runTest('support ticket config is parsed', testSupportTicketConfig);
+  await runTest('AFK leave config is parsed', testAfkLeaveConfig);
   console.log('ALL CONFIG TESTS PASSED');
 }
 

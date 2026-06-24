@@ -25,6 +25,8 @@ function defaultStore(): StoreState {
     announcements: [],
     supportTickets: [],
     supportTicketCooldowns: {},
+    afkPanels: {},
+    afkRequests: [],
     cooldowns: {},
     warns: [],
     commends: [],
@@ -123,6 +125,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       || Object.keys(value.analytics?.daily || {}).length
       || (value.applications || []).length
       || (value.supportTickets || []).length
+      || Object.keys(value.afkPanels || {}).length
+      || (value.afkRequests || []).length
       || Object.keys(value.cooldowns || {}).length
       || (value.warns || []).length
       || (value.commends || []).length

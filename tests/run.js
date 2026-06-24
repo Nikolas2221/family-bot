@@ -1,4 +1,6 @@
 async function main() {
+  const { main: runAfkLeaveTests } = require('./afk-leave.test');
+  const { main: runAfkLeaveUiTests } = require('./afk-leave-ui.test');
   const { main: runAiTests } = require('./ai.test');
   const { main: runAutomodTests } = require('./automod.test');
   const { main: runApplicationsTests } = require('./applications.test');
@@ -33,6 +35,8 @@ async function main() {
   const { main: runTsDebtTests } = require('./ts-debt.test');
   const { main: runTsMigrationTests } = require('./ts-migration.test');
 
+  await runAfkLeaveTests();
+  await runAfkLeaveUiTests();
   await runAiTests();
   await runAutomodTests();
   await runApplicationsTests();

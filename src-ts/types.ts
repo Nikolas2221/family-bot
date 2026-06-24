@@ -33,6 +33,17 @@ export interface SupportTicketConfig {
   deleteDelaySeconds: number;
 }
 
+export interface AfkLeaveConfig {
+  channelId: string;
+  logChannelId: string;
+  managerRoleId: string;
+  useModal: boolean;
+  useMessageForm: boolean;
+  allowDmNotify: boolean;
+  pinPanel: boolean;
+  preventDuplicatePanel: boolean;
+}
+
 export interface RoleEnvEntry {
   key: string;
   value: string;
@@ -71,6 +82,7 @@ export interface AppConfig {
   deepSeekBaseUrl: string;
   deepSeekModel: string;
   supportTickets: SupportTicketConfig;
+  afkLeave: AfkLeaveConfig;
   autoRanks: AutoRanksConfig;
   leakGuard: GuardConfig;
   channelGuard: GuardConfig;
@@ -580,12 +592,40 @@ export interface StoreState {
   announcements: AnnouncementRecord[];
   supportTickets: SupportTicketRecord[];
   supportTicketCooldowns: Record<string, number>;
+  afkPanels: Record<string, AfkPanelRecord>;
+  afkRequests: AfkRequestRecord[];
   cooldowns: Record<string, number>;
   warns: WarnEntry[];
   commends: CommendEntry[];
   blacklist: BlacklistEntry[];
   panelMessageId: string;
   panelMessageIds: Record<string, string>;
+}
+
+export interface AfkPanelRecord {
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AfkRequestRecord {
+  id: string;
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  userId: string;
+  nicknameStatic: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'declined';
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  declineReason: string | null;
+  source?: 'modal' | 'message';
 }
 
 export interface SupportTicketRecord {

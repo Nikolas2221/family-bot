@@ -30,6 +30,22 @@ export function buildCommands(): CommandJson[] {
       )
       .addSubcommand(subcommand => subcommand.setName('list').setDescription('Показать открытые тикеты')),
     new SlashCommandBuilder()
+      .setName('afk')
+      .setDescription('Управление АФК-отпусками')
+      .addSubcommand(subcommand => subcommand.setName('setup').setDescription('Создать или обновить панель АФК-отпуска'))
+      .addSubcommand(subcommand => subcommand.setName('list').setDescription('Показать заявки на рассмотрении'))
+      .addSubcommand(subcommand =>
+        subcommand.setName('approve').setDescription('Одобрить заявку')
+          .addStringOption(option => option.setName('id').setDescription('ID заявки').setRequired(true))
+      )
+      .addSubcommand(subcommand =>
+        subcommand.setName('decline').setDescription('Отклонить заявку')
+          .addStringOption(option => option.setName('id').setDescription('ID заявки').setRequired(true))
+          .addStringOption(option => option.setName('reason').setDescription('Причина отклонения').setRequired(false))
+      )
+      .addSubcommand(subcommand => subcommand.setName('status').setDescription('Проверить свою текущую заявку'))
+      .addSubcommand(subcommand => subcommand.setName('refresh').setDescription('Принудительно обновить панель')),
+    new SlashCommandBuilder()
       .setName('law')
       .setDescription('Разобрать ситуацию по законодательной базе Majestic RP')
       .addStringOption(option =>

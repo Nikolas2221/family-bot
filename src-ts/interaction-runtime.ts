@@ -51,6 +51,7 @@ interface InteractionRuntimeOptions {
   sendScheduledReport(guild: any, period: string, channelId: string): Promise<boolean>;
   getHelpCatalog(interaction: any): any;
   supportTicketService: { handleInteraction(interaction: any): Promise<boolean> };
+  afkLeaveService: { handleInteraction(interaction: any): Promise<boolean> };
 }
 
 async function handleWelcomeCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
@@ -1014,6 +1015,9 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
   client.on('interactionCreate', async (interaction: any) => {
     try {
       if (await options.supportTicketService.handleInteraction(interaction)) {
+        return;
+      }
+      if (await options.afkLeaveService.handleInteraction(interaction)) {
         return;
       }
       if (interaction.isButton?.() && interaction.customId?.startsWith('help_page:')) {

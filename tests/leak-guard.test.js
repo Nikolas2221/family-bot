@@ -71,7 +71,8 @@ async function main() {
     findReactionRoleEntry: () => null, getReactionEmojiKey: () => '',
     canBypassChannelGuard: () => false, fetchDeletedChannelExecutor: async () => null,
     restoreDeletedChannel: async () => null, doPanelUpdate: async () => {},
-    handleDiscordTicketMessage: async () => false
+    handleDiscordTicketMessage: async () => false,
+    handleAfkMessage: async () => false
   });
 
   await listeners.get('guildMemberAdd')({

@@ -85,6 +85,16 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
       maxOpenPerUser: parseNumber(env.TICKET_MAX_OPEN_PER_USER, 1, { min: 1 }),
       deleteDelaySeconds: parseNumber(env.TICKET_DELETE_DELAY_SECONDS, 5, { min: 1 })
     },
+    afkLeave: {
+      channelId: trim(env.AFK_CHANNEL_ID),
+      logChannelId: trim(env.AFK_LOG_CHANNEL_ID),
+      managerRoleId: trim(env.AFK_MANAGER_ROLE_ID),
+      useModal: parseBoolean(env.AFK_USE_MODAL || 'true'),
+      useMessageForm: parseBoolean(env.AFK_USE_MESSAGE_FORM || 'true'),
+      allowDmNotify: parseBoolean(env.AFK_ALLOW_DM_NOTIFY || 'true'),
+      pinPanel: parseBoolean(env.AFK_PIN_PANEL || 'true'),
+      preventDuplicatePanel: parseBoolean(env.AFK_PREVENT_DUPLICATE_PANEL || 'true')
+    },
     autoRanks: {
       enabled: parseBoolean(env.AUTO_RANKS_ENABLED),
       intervalMs: parseNumber(env.AUTO_RANKS_INTERVAL_MS, 300000, { min: 60000 }),
@@ -147,6 +157,9 @@ export function validateConfig(config: AppConfig): ValidationResult {
   validateDiscordId('TICKET_SUPPORT_ROLE_ID', config.supportTickets.supportRoleId, errors, warnings);
   validateDiscordId('TICKET_LOG_CHANNEL_ID', config.supportTickets.logChannelId, errors, warnings);
   validateDiscordId('TICKET_PANEL_CHANNEL_ID', config.supportTickets.panelChannelId, errors, warnings);
+  validateDiscordId('AFK_CHANNEL_ID', config.afkLeave.channelId, errors, warnings);
+  validateDiscordId('AFK_LOG_CHANNEL_ID', config.afkLeave.logChannelId, errors, warnings);
+  validateDiscordId('AFK_MANAGER_ROLE_ID', config.afkLeave.managerRoleId, errors, warnings);
 
   for (const role of config.roles) {
     validateDiscordId(role.key, role.value, errors, warnings);
@@ -250,6 +263,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- Telegram notifications: ${config.telegramBotToken && config.telegramAdminChatId ? 'enabled' : 'disabled'}`,
     `- announcements bridge: ${config.telegramAnnouncementsChatId && config.discordAnnouncementsChannelId ? 'enabled' : 'disabled'}`,
     `- support tickets: ${config.supportTickets.categoryId && config.supportTickets.supportRoleId ? 'configured' : 'not configured'}`,
+    `- AFK leave: ${config.afkLeave.channelId ? 'configured' : 'not configured'}`,
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,
