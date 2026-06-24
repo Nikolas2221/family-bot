@@ -53,6 +53,7 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     telegramAnnouncementsChatId: trim(env.TELEGRAM_ANNOUNCEMENTS_CHAT_ID) || trim(env.TELEGRAM_ADMIN_CHAT_ID),
     discordAnnouncementsChannelId: trim(env.DISCORD_ANNOUNCEMENTS_CHANNEL_ID),
     discordAnnouncerRoleIds: parseCsv(env.DISCORD_ANNOUNCER_ROLE_IDS),
+    discordOnlineGuildId: trim(env.DISCORD_ONLINE_GUILD_ID) || trim(env.GUILD_ID),
     guildId: trim(env.GUILD_ID),
     channelId,
     hasApplicationsChannelId: Boolean(trim(env.APPLICATIONS_CHANNEL_ID)),
@@ -147,6 +148,7 @@ export function validateConfig(config: AppConfig): ValidationResult {
   }
 
   validateDiscordId('GUILD_ID', config.guildId, errors, warnings, { required: true });
+  validateDiscordId('DISCORD_ONLINE_GUILD_ID', config.discordOnlineGuildId, errors, warnings);
   validateDiscordId('CHANNEL_ID', config.channelId, errors, warnings, { required: true });
   validateDiscordId('APPLICATIONS_CHANNEL_ID', config.applicationsChannelId, errors, warnings);
   validateDiscordId('LOG_CHANNEL_ID', config.logChannelId, errors, warnings);

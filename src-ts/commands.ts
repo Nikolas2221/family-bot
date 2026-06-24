@@ -42,7 +42,7 @@ export function buildCommands(): CommandJson[] {
       .addSubcommand(subcommand =>
         subcommand.setName('decline').setDescription('Отклонить заявку')
           .addStringOption(option => option.setName('id').setDescription('ID заявки').setRequired(true))
-          .addStringOption(option => option.setName('reason').setDescription('Причина отклонения').setRequired(false))
+          .addStringOption(option => option.setName('reason').setDescription('Причина отклонения').setRequired(true))
       )
       .addSubcommand(subcommand => subcommand.setName('status').setDescription('Проверить свою текущую заявку'))
       .addSubcommand(subcommand => subcommand.setName('refresh').setDescription('Принудительно обновить панель')),

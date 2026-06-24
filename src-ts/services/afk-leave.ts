@@ -24,7 +24,7 @@ export interface AfkLeaveService {
   handleMessage(message: any): Promise<boolean>;
   findRequest(requestId: string): AfkRequestRecord | null;
   pendingFor(guildId: string, userId: string): AfkRequestRecord | null;
-  reviewFromTelegram(requestId: string, decision: 'approved' | 'declined', actorId: string, actorName: string): Promise<'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'guild_missing' | 'failed'>;
+  reviewFromTelegram(requestId: string, decision: 'approved' | 'declined', actorId: string, actorName: string, declineReason?: string): Promise<'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'reason_required' | 'guild_missing' | 'failed'>;
 }
 
 function parseDate(value: string): Date | null {
@@ -342,7 +342,7 @@ export function createAfkLeaveService(options: {
     await user.send({ content }).catch(() => null);
   }
 
-  type ReviewResult = 'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'failed';
+  type ReviewResult = 'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'reason_required' | 'failed';
 
   async function applyReview(input: {
     guild: any;
@@ -353,6 +353,7 @@ export function createAfkLeaveService(options: {
     actorName?: string;
   }): Promise<ReviewResult> {
     const { guild, requestId, decision, declineReason = '', actorId, actorName = '' } = input;
+    if (decision === 'declined' && String(declineReason).trim().length < 3) return 'reason_required';
     const request = findRequest(requestId);
     if (!request || request.guildId !== guild.id) return 'not_found';
     if (request.status !== 'pending') return 'already_reviewed';
@@ -433,6 +434,8 @@ export function createAfkLeaveService(options: {
           ? 'Эта заявка уже была рассмотрена.'
           : result === 'busy'
             ? 'Эта заявка уже рассматривается другим сотрудником.'
+            : result === 'reason_required'
+              ? 'Обязательно укажи причину отказа.'
             : 'Не удалось изменить статус заявки.';
     await interaction.editReply({ content });
   }
@@ -441,8 +444,9 @@ export function createAfkLeaveService(options: {
     requestId: string,
     decision: 'approved' | 'declined',
     actorId: string,
-    actorName: string
-  ): Promise<'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'guild_missing' | 'failed'> {
+    actorName: string,
+    declineReason = ''
+  ): Promise<'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'reason_required' | 'guild_missing' | 'failed'> {
     const request = findRequest(requestId);
     if (!request) return 'not_found';
     const guild = client.guilds.cache.get(request.guildId)
@@ -452,6 +456,7 @@ export function createAfkLeaveService(options: {
       guild,
       requestId,
       decision,
+      declineReason,
       actorId: `telegram:${actorId}`,
       actorName: `${actorName} (Telegram)`
     });

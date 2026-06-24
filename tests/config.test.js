@@ -150,11 +150,13 @@ async function testAfkLeaveConfig() {
     AFK_LOG_CHANNEL_ID: '123456789012345681',
     AFK_MANAGER_ROLE_ID: '123456789012345682',
     AFK_APPROVED_ROLE_ID: '123456789012345683',
+    DISCORD_ONLINE_GUILD_ID: '123456789012345684',
     AFK_USE_MODAL: 'true', AFK_USE_MESSAGE_FORM: 'false', AFK_ALLOW_DM_NOTIFY: 'true',
     AFK_PIN_PANEL: 'false', AFK_PREVENT_DUPLICATE_PANEL: 'true'
   });
   assert.equal(config.afkLeave.channelId, '123456789012345680');
   assert.equal(config.afkLeave.approvedRoleId, '123456789012345683');
+  assert.equal(config.discordOnlineGuildId, '123456789012345684');
   assert.equal(config.afkLeave.useModal, true);
   assert.equal(config.afkLeave.useMessageForm, false);
   assert.equal(config.afkLeave.pinPanel, false);

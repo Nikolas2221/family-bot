@@ -15,6 +15,8 @@ async function main() {
     ui.buildAfkReviewButtons(request.id)[0].toJSON().components.map(component => component.custom_id),
     ['afk_approve_abcdef12', 'afk_decline_abcdef12']
   );
+  const declineInput = ui.buildAfkDeclineModal(request.id).toJSON().components[0].components[0];
+  assert.equal(declineInput.required, true);
   const text = JSON.stringify([panel.embeds[0].toJSON(), ui.buildAfkRequestEmbed(request).toJSON()]);
   assert.doesNotMatch(text, /KLAIZ|Phoenix|BRHD/iu);
   console.log('ALL AFK LEAVE UI TESTS PASSED');

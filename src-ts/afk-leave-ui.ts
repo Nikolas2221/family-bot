@@ -112,8 +112,8 @@ export function buildAfkDeclineModal(requestId: string): ModalBuilder {
   return new ModalBuilder().setCustomId(`afk_decline_modal_${requestId}`).setTitle('Отклонение АФК-отпуска').addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder().setCustomId('reason').setLabel('Причина отклонения')
-        .setPlaceholder('Укажи причину или оставь поле пустым')
-        .setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500)
+        .setPlaceholder('Обязательно укажи причину отказа')
+        .setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(3).setMaxLength(500)
     )
   );
 }

@@ -60,6 +60,7 @@ export interface AppConfig {
   telegramAnnouncementsChatId: string;
   discordAnnouncementsChannelId: string;
   discordAnnouncerRoleIds: string[];
+  discordOnlineGuildId: string;
   guildId: string;
   channelId: string;
   hasApplicationsChannelId: boolean;

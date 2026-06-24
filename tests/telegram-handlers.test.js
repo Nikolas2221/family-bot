@@ -35,8 +35,8 @@ async function main() {
       }
     },
     afkLeave: {
-      reviewFromTelegram: async (id, decision, actorId, actorName) => {
-        afkReviews.push({ id, decision, actorId, actorName });
+      reviewFromTelegram: async (id, decision, actorId, actorName, reason) => {
+        afkReviews.push({ id, decision, actorId, actorName, reason });
         return 'ok';
       }
     },
@@ -73,6 +73,7 @@ async function main() {
   const takeHandler = actions[0].handler;
   const welcomeVerifyHandler = actions[1].handler;
   const afkReviewHandler = actions[2].handler;
+  const afkDeclinePromptHandler = actions[3].handler;
   assert.equal(typeof takeHandler, 'function');
 
   await takeHandler({
@@ -102,7 +103,7 @@ async function main() {
 
   await afkReviewHandler({
     chat: { id: -1001, type: 'supergroup' }, from: { id: 8, username: 'member' },
-    match: ['afk_approve:a1b2c3d4', 'approve', 'a1b2c3d4'],
+    match: ['afk_approve:a1b2c3d4', 'a1b2c3d4'],
     getChatMember: async () => ({ status: 'member' }),
     answerCbQuery: async (text, options) => callbackAnswers.push({ text, options }),
     reply: async text => replies.push(text)
@@ -112,16 +113,36 @@ async function main() {
 
   await afkReviewHandler({
     chat: { id: -1001, type: 'supergroup' }, from: { id: 7, username: 'admin' },
-    match: ['afk_approve:a1b2c3d4', 'approve', 'a1b2c3d4'],
+    match: ['afk_approve:a1b2c3d4', 'a1b2c3d4'],
     getChatMember: async () => ({ status: 'administrator' }),
     answerCbQuery: async text => callbackAnswers.push(text),
     editMessageReplyMarkup: async () => {},
     reply: async text => replies.push(text)
   });
   assert.deepEqual(afkReviews[0], {
-    id: 'a1b2c3d4', decision: 'approved', actorId: '7', actorName: '@admin'
+    id: 'a1b2c3d4', decision: 'approved', actorId: '7', actorName: '@admin', reason: undefined
   });
   assert.match(replies.at(-1), /одобрена администратором/u);
+
+  await afkDeclinePromptHandler({
+    chat: { id: -1001, type: 'supergroup' }, from: { id: 7, username: 'admin' },
+    match: ['afk_decline:d4c3b2a1', 'd4c3b2a1'],
+    getChatMember: async () => ({ status: 'administrator' }),
+    answerCbQuery: async text => callbackAnswers.push(text),
+    reply: async text => replies.push(text)
+  });
+  assert.equal(afkReviews.length, 1);
+  assert.match(replies.at(-1), /\/afkdecline d4c3b2a1/u);
+
+  await commands.get('afkdecline')({
+    chat: { id: -1001, type: 'supergroup' }, from: { id: 7, username: 'admin' },
+    message: { text: '/afkdecline d4c3b2a1 Недостаточная причина' },
+    getChatMember: async () => ({ status: 'administrator' }),
+    reply: async text => replies.push(text)
+  });
+  assert.deepEqual(afkReviews[1], {
+    id: 'd4c3b2a1', decision: 'declined', actorId: '7', actorName: '@admin', reason: 'Недостаточная причина'
+  });
 
   await commands.get('online')({
     chat: { id: -1001 }, from: { id: 7, username: 'admin' },

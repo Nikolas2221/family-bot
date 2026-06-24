@@ -178,6 +178,8 @@ async function main() {
   const second = store.afkRequests[0];
   assert.equal(second.source, 'message');
   assert.equal(rawMessage.reactionsAdded[0], '⏳');
+  assert.equal(await service.reviewFromTelegram(second.id, 'declined', '7', '@admin'), 'reason_required');
+  assert.equal(second.status, 'pending');
 
   const declineButton = baseInteraction(guild, afkChannel, adminUser, adminMember);
   declineButton.isButton = () => true;

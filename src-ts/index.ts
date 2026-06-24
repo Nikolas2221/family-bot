@@ -159,8 +159,9 @@ registerTelegramHandlers(telegramBot, {
   announcements: announcementService,
   afkLeave: afkLeaveService,
   getOnlineMembers: async () => {
-    const guild = client.guilds.cache.get(config.guildId)
-      || await client.guilds.fetch(config.guildId).catch(() => null);
+    const guildId = config.discordOnlineGuildId;
+    const guild = client.guilds.cache.get(guildId)
+      || await client.guilds.fetch(guildId).catch(() => null);
     return guild ? buildDiscordOnlineMembersText(guild) : '❌ Discord-сервер не найден.';
   },
   verifyWelcomeMember: verifyWelcomeMemberFromTelegram

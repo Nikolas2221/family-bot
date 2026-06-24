@@ -40,7 +40,9 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
     if (ctx.chat?.type === 'private') return true;
     const member = await ctx.getChatMember?.(ctx.from?.id).catch(() => null);
     if (member?.status === 'administrator' || member?.status === 'creator') return true;
-    await ctx.answerCbQuery?.('Только администратор Telegram-чата может рассматривать заявки', { show_alert: true });
+    const message = 'Только администратор Telegram-чата может рассматривать заявки';
+    if (ctx.answerCbQuery) await ctx.answerCbQuery(message, { show_alert: true });
+    else await ctx.reply(message);
     return false;
   }
 
@@ -89,16 +91,15 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
       : `✅ Участник <@${userId}> подтверждён через Telegram. Стартовая роль выдана.`);
   });
 
-  bot.action(/^afk_(approve|decline):([a-f0-9]{8})$/u, async (ctx: any) => {
+  bot.action(/^afk_approve:([a-f0-9]{8})$/u, async (ctx: any) => {
     if (!(await requireAfkTelegramAdmin(ctx))) return;
     if (!options.afkLeave) {
       await ctx.answerCbQuery('Система АФК-отпусков недоступна', { show_alert: true });
       return;
     }
-    const decision = ctx.match?.[1] === 'approve' ? 'approved' : 'declined';
-    const requestId = String(ctx.match?.[2] || '');
+    const requestId = String(ctx.match?.[1] || '');
     const author = telegramAuthor(ctx);
-    const result = await options.afkLeave.reviewFromTelegram(requestId, decision, author.id, author.name);
+    const result = await options.afkLeave.reviewFromTelegram(requestId, 'approved', author.id, author.name);
     if (result !== 'ok') {
       const message = result === 'not_found'
         ? 'Заявка не найдена'
@@ -110,11 +111,46 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
       await ctx.answerCbQuery(message, { show_alert: true });
       return;
     }
-    await ctx.answerCbQuery(decision === 'approved' ? 'Заявка одобрена' : 'Заявка отклонена');
+    await ctx.answerCbQuery('Заявка одобрена');
     await ctx.editMessageReplyMarkup?.({ inline_keyboard: [] }).catch(() => null);
-    await ctx.reply(decision === 'approved'
-      ? `✅ Заявка #${requestId} одобрена администратором ${author.name}.`
-      : `❌ Заявка #${requestId} отклонена администратором ${author.name}.`);
+    await ctx.reply(`✅ Заявка #${requestId} одобрена администратором ${author.name}.`);
+  });
+
+  bot.action(/^afk_decline:([a-f0-9]{8})$/u, async (ctx: any) => {
+    if (!(await requireAfkTelegramAdmin(ctx))) return;
+    const requestId = String(ctx.match?.[1] || '');
+    await ctx.answerCbQuery('Укажи причину отказа');
+    await ctx.reply(`Для отказа обязательно укажи причину:\n/afkdecline ${requestId} причина отказа`);
+  });
+
+  bot.command('afkdecline', async (ctx: any) => {
+    if (!(await requireAfkTelegramAdmin(ctx))) return;
+    if (!options.afkLeave) {
+      await ctx.reply('❌ Система АФК-отпусков недоступна.');
+      return;
+    }
+    const input = commandText(ctx);
+    const [requestId = '', ...parts] = input.split(/\s+/u);
+    const reason = parts.join(' ').trim();
+    if (!requestId) {
+      await ctx.reply('❌ Укажи ID заявки: /afkdecline ID причина');
+      return;
+    }
+    if (reason.length < 3) {
+      await ctx.reply('❌ Обязательно укажи причину отказа после ID заявки.');
+      return;
+    }
+    const author = telegramAuthor(ctx);
+    const result = await options.afkLeave.reviewFromTelegram(requestId, 'declined', author.id, author.name, reason);
+    if (result !== 'ok') {
+      await ctx.reply(result === 'not_found'
+        ? '❌ Заявка не найдена.'
+        : result === 'already_reviewed'
+          ? '❌ Заявка уже рассмотрена.'
+          : '❌ Не удалось отклонить заявку в Discord.');
+      return;
+    }
+    await ctx.reply(`❌ Заявка #${requestId} отклонена. Причина: ${reason}`);
   });
 
   bot.command('reply', async (ctx: any) => {
