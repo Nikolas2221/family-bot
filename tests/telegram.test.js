@@ -54,6 +54,19 @@ async function main() {
   assert.match(sent[1].text, /286/u);
   assert.equal(sent[1].options.reply_markup.inline_keyboard[0][0].callback_data, 'welcome_verify:987654321098765432:222222222222222222');
 
+  const afkSent = await service.notifyAfkRequestCreated({
+    request: {
+      id: 'a1b2c3d4', guildId: '987654321098765432', channelId: '111111111111111111',
+      messageId: '333333333333333333', userId: '222222222222222222',
+      nicknameStatic: 'Username #12345', startDate: '24.06.2026', endDate: '26.06.2026', reason: 'Отпуск'
+    }
+  });
+  assert.equal(afkSent, true);
+  assert.equal(sent.length, 3);
+  assert.match(sent[2].text, /Username #12345/u);
+  assert.equal(sent[2].options.reply_markup.inline_keyboard[1][0].callback_data, 'afk_approve:a1b2c3d4');
+  assert.equal(sent[2].options.reply_markup.inline_keyboard[1][1].callback_data, 'afk_decline:a1b2c3d4');
+
   const warnings = [];
   const unavailable = createTelegramNotificationService({
     adminChatId: 'admin',

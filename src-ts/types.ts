@@ -37,6 +37,7 @@ export interface AfkLeaveConfig {
   channelId: string;
   logChannelId: string;
   managerRoleId: string;
+  approvedRoleId: string;
   useModal: boolean;
   useMessageForm: boolean;
   allowDmNotify: boolean;
@@ -624,6 +625,7 @@ export interface AfkRequestRecord {
   createdAt: string;
   reviewedAt: string | null;
   reviewedBy: string | null;
+  reviewedByName?: string | null;
   declineReason: string | null;
   source?: 'modal' | 'message';
 }

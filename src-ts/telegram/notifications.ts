@@ -28,6 +28,20 @@ export interface MemberJoinedNotificationInput {
   member: { id: string; username?: string; globalName?: string | null; tag?: string; createdAt?: Date };
 }
 
+export interface AfkRequestNotificationInput {
+  request: {
+    id: string;
+    guildId: string;
+    channelId: string;
+    messageId: string;
+    userId: string;
+    nicknameStatic: string;
+    startDate: string;
+    endDate: string;
+    reason: string;
+  };
+}
+
 export interface TelegramNotificationService {
   enabled: boolean;
   notifyApplicationCreated(input: ApplicationNotificationInput): Promise<boolean>;
@@ -36,6 +50,7 @@ export interface TelegramNotificationService {
   notifyTicketClosed(input: ApplicationNotificationInput): Promise<boolean>;
   notifyTicketActivity(input: TicketActivityNotificationInput): Promise<boolean>;
   notifyMemberJoined(input: MemberJoinedNotificationInput): Promise<boolean>;
+  notifyAfkRequestCreated(input: AfkRequestNotificationInput): Promise<boolean>;
   sendAnnouncement(input: { type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string }>;
 }
 
@@ -187,6 +202,29 @@ export function createTelegramNotificationService(options: {
           }]]
         }
       });
+    },
+    notifyAfkRequestCreated(input) {
+      const request = input.request;
+      const url = request.guildId && request.channelId && request.messageId
+        ? `https://discord.com/channels/${request.guildId}/${request.channelId}/${request.messageId}`
+        : '';
+      const buttons: Array<Array<Record<string, string>>> = [[
+        { text: '✅ Одобрить', callback_data: `afk_approve:${request.id}` },
+        { text: '❌ Отклонить', callback_data: `afk_decline:${request.id}` }
+      ]];
+      if (url) buttons.unshift([{ text: 'Открыть заявку в Discord', url }]);
+      return send(adminChatId, [
+        '🏖️ Новая заявка на АФК-отпуск',
+        '',
+        `Пользователь: <@${clean(request.userId)}>`,
+        `Discord ID: ${clean(request.userId)}`,
+        `Ник и статик: ${clean(request.nicknameStatic)}`,
+        `Период: ${clean(request.startDate)} - ${clean(request.endDate)}`,
+        `Причина: ${clean(request.reason, 'Не указана', 1500)}`,
+        `ID заявки: ${clean(request.id)}`,
+        '',
+        `Discord: ${url || 'ссылка недоступна'}`
+      ].join('\n'), { reply_markup: { inline_keyboard: buttons } });
     },
     sendAnnouncement(input) {
       const title = input.type === 'event' ? '📅 Семейное событие' : '📢 Семейное объявление';

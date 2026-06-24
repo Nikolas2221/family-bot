@@ -1,6 +1,7 @@
 async function main() {
   const { main: runAfkLeaveTests } = require('./afk-leave.test');
   const { main: runAfkLeaveUiTests } = require('./afk-leave-ui.test');
+  const { main: runOnlineMembersTests } = require('./online-members.test');
   const { main: runAiTests } = require('./ai.test');
   const { main: runAutomodTests } = require('./automod.test');
   const { main: runApplicationsTests } = require('./applications.test');
@@ -37,6 +38,7 @@ async function main() {
 
   await runAfkLeaveTests();
   await runAfkLeaveUiTests();
+  await runOnlineMembersTests();
   await runAiTests();
   await runAutomodTests();
   await runApplicationsTests();

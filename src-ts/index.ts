@@ -18,6 +18,7 @@ const { createStorage } = require('./storage');
 const { createTelegramNotificationService } = require('./telegram');
 const { createTelegramBot, startTelegramBot, stopTelegramBot } = require('./telegram/bot');
 const { registerTelegramHandlers } = require('./telegram/handlers');
+const { buildDiscordOnlineMembersText } = require('./services/online-members');
 const { createTicketService } = require('./services/tickets');
 const { canSendDiscordAnnouncement, createAnnouncementService } = require('./services/announcements');
 const { createLawService } = require('./services/law');
@@ -133,12 +134,17 @@ const deepSeekService = createDeepSeekService({
 });
 const lawService = createLawService(deepSeekService.enabled ? deepSeekService : null);
 const supportTicketService = createSupportTicketService({ storage, client, config: config.supportTickets });
-const afkLeaveService = createAfkLeaveService({ storage, client, config: config.afkLeave });
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
   announcementsChatId: config.telegramAnnouncementsChatId,
   sender: telegramBot?.telegram || null
+});
+const afkLeaveService = createAfkLeaveService({
+  storage,
+  client,
+  config: config.afkLeave,
+  telegramNotifications
 });
 const ticketService = createTicketService({ storage, client, telegramNotifications });
 const announcementService = createAnnouncementService({
@@ -151,6 +157,12 @@ registerTelegramHandlers(telegramBot, {
   adminChatId: config.telegramAdminChatId,
   tickets: ticketService,
   announcements: announcementService,
+  afkLeave: afkLeaveService,
+  getOnlineMembers: async () => {
+    const guild = client.guilds.cache.get(config.guildId)
+      || await client.guilds.fetch(config.guildId).catch(() => null);
+    return guild ? buildDiscordOnlineMembersText(guild) : '❌ Discord-сервер не найден.';
+  },
   verifyWelcomeMember: verifyWelcomeMemberFromTelegram
 });
 

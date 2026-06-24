@@ -92,7 +92,11 @@ export function buildAfkRequestEmbed(request: AfkRequestRecord): EmbedBuilder {
       { name: 'Дата подачи', value: dateTime(request.createdAt), inline: true }
     )
     .setFooter({ text: `Заявка на АФК-отпуск • ${dateTime()}` });
-  if (request.reviewedBy) embed.addFields({ name: 'Рассмотрел', value: `<@${request.reviewedBy}>`, inline: true });
+  if (request.reviewedBy) {
+    const reviewer = request.reviewedByName
+      || (/^\d{16,20}$/u.test(request.reviewedBy) ? `<@${request.reviewedBy}>` : request.reviewedBy);
+    embed.addFields({ name: 'Рассмотрел', value: clean(reviewer), inline: true });
+  }
   if (request.status === 'declined') embed.addFields({ name: 'Причина отклонения', value: clean(request.declineReason) });
   return embed;
 }

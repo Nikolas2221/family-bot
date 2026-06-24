@@ -1,5 +1,6 @@
 import { createGuildStorageContext } from './guild-runtime';
 import { canSendDiscordAnnouncement } from './services/announcements';
+import { buildDiscordOnlineMembersText } from './services/online-members';
 
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
@@ -240,6 +241,13 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
         ? embeds.buildHelpPaginationButtons(catalog, 0)
         : []
     }));
+    return true;
+  }
+
+  if (interaction.commandName === 'online') {
+    await interaction.deferReply();
+    const text = await buildDiscordOnlineMembersText(interaction.guild);
+    await interaction.editReply({ content: text, allowedMentions: { parse: [] } });
     return true;
   }
 

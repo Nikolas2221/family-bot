@@ -18,6 +18,7 @@ async function main() {
   const announcements = [];
   const callbackAnswers = [];
   const verified = [];
+  const afkReviews = [];
   registerTelegramHandlers(bot, {
     adminChatId: '-1001',
     tickets: {
@@ -33,6 +34,13 @@ async function main() {
         return { ok: true };
       }
     },
+    afkLeave: {
+      reviewFromTelegram: async (id, decision, actorId, actorName) => {
+        afkReviews.push({ id, decision, actorId, actorName });
+        return 'ok';
+      }
+    },
+    getOnlineMembers: async () => '👥 Участники Discord в сети: 2',
     verifyWelcomeMember: async (guildId, userId, actor) => {
       verified.push({ guildId, userId, actor });
       return 'ok';
@@ -64,6 +72,7 @@ async function main() {
   assert.match(replies.at(-1), /только в административном чате/);
   const takeHandler = actions[0].handler;
   const welcomeVerifyHandler = actions[1].handler;
+  const afkReviewHandler = actions[2].handler;
   assert.equal(typeof takeHandler, 'function');
 
   await takeHandler({
@@ -90,6 +99,35 @@ async function main() {
   });
   assert.equal(markupRemoved, true);
   assert.match(replies.at(-1), /подтверждён через Telegram/u);
+
+  await afkReviewHandler({
+    chat: { id: -1001, type: 'supergroup' }, from: { id: 8, username: 'member' },
+    match: ['afk_approve:a1b2c3d4', 'approve', 'a1b2c3d4'],
+    getChatMember: async () => ({ status: 'member' }),
+    answerCbQuery: async (text, options) => callbackAnswers.push({ text, options }),
+    reply: async text => replies.push(text)
+  });
+  assert.equal(afkReviews.length, 0);
+  assert.match(callbackAnswers.at(-1).text, /Только администратор/u);
+
+  await afkReviewHandler({
+    chat: { id: -1001, type: 'supergroup' }, from: { id: 7, username: 'admin' },
+    match: ['afk_approve:a1b2c3d4', 'approve', 'a1b2c3d4'],
+    getChatMember: async () => ({ status: 'administrator' }),
+    answerCbQuery: async text => callbackAnswers.push(text),
+    editMessageReplyMarkup: async () => {},
+    reply: async text => replies.push(text)
+  });
+  assert.deepEqual(afkReviews[0], {
+    id: 'a1b2c3d4', decision: 'approved', actorId: '7', actorName: '@admin'
+  });
+  assert.match(replies.at(-1), /одобрена администратором/u);
+
+  await commands.get('online')({
+    chat: { id: -1001 }, from: { id: 7, username: 'admin' },
+    reply: async text => replies.push(text)
+  });
+  assert.match(replies.at(-1), /Участники Discord в сети: 2/u);
 }
 
 if (require.main === module) {

@@ -32,6 +32,8 @@ async function main() {
   const sent = [];
   const logs = [];
   const dms = [];
+  const telegramAfk = [];
+  const roleAdds = [];
   let panelSendCount = 0;
   function makeMessage(id, authorId = 'bot') {
     return {
@@ -65,24 +67,37 @@ async function main() {
   const user = { id: '444444444444444444', username: 'member' };
   const adminUser = { id: '555555555555555555', username: 'admin' };
   const ordinaryUser = { id: '666666666666666666', username: 'ordinary' };
-  const member = { id: user.id, permissions: permissions(), roles: { cache: new Map() } };
+  const approvedRoleId = '888888888888888888';
+  const member = {
+    id: user.id,
+    permissions: permissions(),
+    roles: { cache: new Map(), async add(roleId) { roleAdds.push(roleId); } }
+  };
   const adminMember = { id: adminUser.id, permissions: permissions(PermissionFlagsBits.Administrator), roles: { cache: new Map() } };
   const ordinaryMember = { id: ordinaryUser.id, permissions: permissions(), roles: { cache: new Map() } };
   const guild = {
     id: '777777777777777777',
-    members: { me: { permissions: permissions(PermissionFlagsBits.SendMessages) } },
+    members: {
+      me: { permissions: permissions(PermissionFlagsBits.SendMessages) },
+      cache: new Map([[user.id, member]]),
+      async fetch(id) { return id === user.id ? member : null; }
+    },
     channels: { cache: channels, async fetch(id) { return channels.get(id) || null; } }
   };
   const client = {
     user: { id: 'bot' },
+    guilds: { cache: new Map([[guild.id, guild]]), async fetch(id) { return id === guild.id ? guild : null; } },
     channels: { async fetch(id) { return channels.get(id) || null; } },
     users: { async fetch(id) { return { id, async send(payload) { dms.push(payload); } }; } }
   };
   const service = createAfkLeaveService({
     storage, client,
     config: {
-      channelId: afkChannel.id, logChannelId: logChannel.id, managerRoleId,
+      channelId: afkChannel.id, logChannelId: logChannel.id, managerRoleId, approvedRoleId,
       useModal: true, useMessageForm: true, allowDmNotify: true, pinPanel: true, preventDuplicatePanel: true
+    },
+    telegramNotifications: {
+      async notifyAfkRequestCreated(payload) { telegramAfk.push(payload); return true; }
     },
     now: () => new Date('2026-06-24T12:00:00Z')
   });
@@ -122,6 +137,7 @@ async function main() {
   assert.equal(first.status, 'pending');
   assert.equal(messages.get(first.messageId).reactionsAdded[0], '⏳');
   assert.equal(logs.length, 1);
+  assert.equal(telegramAfk.length, 1);
 
   const duplicate = baseInteraction(guild, afkChannel, user, member);
   duplicate.isButton = () => true;
@@ -143,6 +159,7 @@ async function main() {
   assert.equal(messages.get(first.messageId).reactionsAdded.at(-1), '✅');
   assert.equal(messages.get(first.messageId).edits.at(-1).components.length, 0);
   assert.equal(dms.length, 1);
+  assert.deepEqual(roleAdds, [approvedRoleId]);
 
   const repeat = baseInteraction(guild, afkChannel, adminUser, adminMember);
   repeat.isButton = () => true;
@@ -185,6 +202,21 @@ async function main() {
   status.options = { getSubcommand: () => 'status' };
   await service.handleInteraction(status);
   assert.match(status.replies[0].content, /Отклонено/u);
+
+  const telegramMessage = makeMessage('telegram-request', user.id);
+  Object.assign(telegramMessage, {
+    guild, channel: afkChannel, author: user, member,
+    content: '1. Username #12345\n2. 20.06.2026 - 21.06.2026\n3. Поездка', webhookId: null,
+    replies: [], async reply(payload) { this.replies.push(payload); }
+  });
+  messages.set(telegramMessage.id, telegramMessage);
+  await service.handleMessage(telegramMessage);
+  const third = store.afkRequests[0];
+  assert.equal(await service.reviewFromTelegram(third.id, 'approved', '7', '@telegram-admin'), 'ok');
+  assert.equal(third.status, 'approved');
+  assert.equal(third.reviewedBy, 'telegram:7');
+  assert.equal(third.reviewedByName, '@telegram-admin (Telegram)');
+  assert.deepEqual(roleAdds, [approvedRoleId, approvedRoleId]);
 
   console.log('ALL AFK LEAVE TESTS PASSED');
 }

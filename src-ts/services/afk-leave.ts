@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 import type { AfkLeaveConfig, AfkPanelRecord, AfkRequestRecord, StorageApi } from '../types';
+import type { TelegramNotificationService } from '../telegram';
 import {
   buildAfkDeclineModal,
   buildAfkLog,
@@ -23,6 +24,7 @@ export interface AfkLeaveService {
   handleMessage(message: any): Promise<boolean>;
   findRequest(requestId: string): AfkRequestRecord | null;
   pendingFor(guildId: string, userId: string): AfkRequestRecord | null;
+  reviewFromTelegram(requestId: string, decision: 'approved' | 'declined', actorId: string, actorName: string): Promise<'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'guild_missing' | 'failed'>;
 }
 
 function parseDate(value: string): Date | null {
@@ -77,9 +79,10 @@ export function createAfkLeaveService(options: {
   storage: StorageApi;
   client: any;
   config: AfkLeaveConfig;
+  telegramNotifications?: Pick<TelegramNotificationService, 'notifyAfkRequestCreated'>;
   now?: () => Date;
 }): AfkLeaveService {
-  const { storage, client, config } = options;
+  const { storage, client, config, telegramNotifications } = options;
   const now = options.now || (() => new Date());
   const submissionLocks = new Set<string>();
   const reviewLocks = new Set<string>();
@@ -217,6 +220,13 @@ export function createAfkLeaveService(options: {
     ], 0xf39c12)] });
   }
 
+  async function notifyTelegram(request: AfkRequestRecord): Promise<void> {
+    if (!telegramNotifications) return;
+    await telegramNotifications.notifyAfkRequestCreated({ request }).catch((error: unknown) => {
+      console.warn('AFK Telegram notification failed:', error);
+    });
+  }
+
   function makeRequest(guildId: string, channelId: string, userId: string, form: ParsedAfkForm, source: 'modal' | 'message'): AfkRequestRecord {
     return {
       id: crypto.randomBytes(4).toString('hex'),
@@ -279,6 +289,7 @@ export function createAfkLeaveService(options: {
       storage.save();
       await message.react('⏳').catch(() => null);
       await sendCreatedLog(interaction.guild, request);
+      await notifyTelegram(request);
       await interaction.editReply({ content: `Заявка принята на рассмотрение. ID: ${request.id}` });
     } catch (error) {
       console.error('AFK modal submission failed:', error);
@@ -311,6 +322,7 @@ export function createAfkLeaveService(options: {
     await message.react('⏳').catch(() => null);
     await message.reply({ content: `Заявка принята на рассмотрение. ID: ${request.id}`, allowedMentions: { repliedUser: true } }).catch(() => null);
     await sendCreatedLog(message.guild, request);
+    await notifyTelegram(request);
     return true;
   }
 
@@ -330,36 +342,41 @@ export function createAfkLeaveService(options: {
     await user.send({ content }).catch(() => null);
   }
 
-  async function review(interaction: any, requestId: string, decision: 'approved' | 'declined', declineReason = ''): Promise<void> {
-    if (!interaction.guild || !canManage(interaction.member)) {
-      await interaction.reply({ content: 'Недостаточно прав для рассмотрения заявок.', flags: MessageFlags.Ephemeral });
-      return;
-    }
+  type ReviewResult = 'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'failed';
+
+  async function applyReview(input: {
+    guild: any;
+    requestId: string;
+    decision: 'approved' | 'declined';
+    declineReason?: string;
+    actorId: string;
+    actorName?: string;
+  }): Promise<ReviewResult> {
+    const { guild, requestId, decision, declineReason = '', actorId, actorName = '' } = input;
     const request = findRequest(requestId);
-    if (!request || request.guildId !== interaction.guild.id) {
-      await interaction.reply({ content: 'Заявка не найдена.', flags: MessageFlags.Ephemeral });
-      return;
-    }
-    if (request.status !== 'pending') {
-      await interaction.reply({ content: 'Эта заявка уже была рассмотрена.', flags: MessageFlags.Ephemeral });
-      return;
-    }
-    if (reviewLocks.has(request.id)) {
-      await interaction.reply({ content: 'Эта заявка уже рассматривается другим сотрудником.', flags: MessageFlags.Ephemeral });
-      return;
-    }
+    if (!request || request.guildId !== guild.id) return 'not_found';
+    if (request.status !== 'pending') return 'already_reviewed';
+    if (reviewLocks.has(request.id)) return 'busy';
     reviewLocks.add(request.id);
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-      if (request.status !== 'pending') {
-        await interaction.editReply({ content: 'Эта заявка уже была рассмотрена.' });
-        return;
-      }
+      if (request.status !== 'pending') return 'already_reviewed';
       request.status = decision;
       request.reviewedAt = now().toISOString();
-      request.reviewedBy = interaction.user.id;
+      request.reviewedBy = actorId;
+      request.reviewedByName = actorName || null;
       request.declineReason = decision === 'declined' ? (String(declineReason || '').trim().slice(0, 500) || 'Не указана') : null;
       storage.save();
+
+      if (decision === 'approved' && config.approvedRoleId) {
+        const member = guild.members.cache?.get?.(request.userId)
+          || await guild.members.fetch(request.userId).catch(() => null);
+        if (!member) {
+          console.warn(`AFK approved role was not assigned: member ${request.userId} not found`);
+        } else {
+          await member.roles.add(config.approvedRoleId, `AFK request ${request.id} approved by ${actorName || actorId}`)
+            .catch((error: unknown) => console.warn('AFK approved role assignment failed:', error));
+        }
+      }
 
       const message = await fetchRequestMessage(request);
       if (message) {
@@ -373,11 +390,12 @@ export function createAfkLeaveService(options: {
       await notifyUser(request);
 
       const approved = decision === 'approved';
-      await sendLog(interaction.guild, { embeds: [buildAfkLog(
+      const reviewerLabel = actorName || `<@${actorId}>`;
+      await sendLog(guild, { embeds: [buildAfkLog(
         approved ? '✅ Заявка на АФК-отпуск одобрена' : '❌ Заявка на АФК-отпуск отклонена',
         [
           { name: 'Пользователь', value: `<@${request.userId}>`, inline: true },
-          { name: approved ? 'Одобрил' : 'Отклонил', value: `<@${interaction.user.id}>`, inline: true },
+          { name: approved ? 'Одобрил' : 'Отклонил', value: reviewerLabel, inline: true },
           { name: 'Период', value: `${request.startDate} - ${request.endDate}` },
           ...(approved ? [] : [{ name: 'Причина отклонения', value: request.declineReason || 'Не указана' }]),
           { name: approved ? 'Дата одобрения' : 'Дата отклонения', value: new Date(request.reviewedAt).toLocaleString('ru-RU') },
@@ -385,10 +403,58 @@ export function createAfkLeaveService(options: {
         ],
         approved ? 0x2ecc71 : 0xe74c3c
       )] });
-      await interaction.editReply({ content: `Заявка ${request.id}: ${statusLabel(request.status)}.` });
+      return 'ok';
+    } catch (error) {
+      console.error('AFK request review failed:', error);
+      return 'failed';
     } finally {
       reviewLocks.delete(request.id);
     }
+  }
+
+  async function review(interaction: any, requestId: string, decision: 'approved' | 'declined', declineReason = ''): Promise<void> {
+    if (!interaction.guild || !canManage(interaction.member)) {
+      await interaction.reply({ content: 'Недостаточно прав для рассмотрения заявок.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const result = await applyReview({
+      guild: interaction.guild,
+      requestId,
+      decision,
+      declineReason,
+      actorId: interaction.user.id
+    });
+    const content = result === 'ok'
+      ? `Заявка ${requestId}: ${statusLabel(decision)}.`
+      : result === 'not_found'
+        ? 'Заявка не найдена.'
+        : result === 'already_reviewed'
+          ? 'Эта заявка уже была рассмотрена.'
+          : result === 'busy'
+            ? 'Эта заявка уже рассматривается другим сотрудником.'
+            : 'Не удалось изменить статус заявки.';
+    await interaction.editReply({ content });
+  }
+
+  async function reviewFromTelegram(
+    requestId: string,
+    decision: 'approved' | 'declined',
+    actorId: string,
+    actorName: string
+  ): Promise<'ok' | 'not_found' | 'already_reviewed' | 'busy' | 'guild_missing' | 'failed'> {
+    const request = findRequest(requestId);
+    if (!request) return 'not_found';
+    const guild = client.guilds.cache.get(request.guildId)
+      || await client.guilds.fetch(request.guildId).catch(() => null);
+    if (!guild) return 'guild_missing';
+    return applyReview({
+      guild,
+      requestId,
+      decision,
+      actorId: `telegram:${actorId}`,
+      actorName: `${actorName} (Telegram)`
+    });
   }
 
   async function showStatus(interaction: any): Promise<void> {
@@ -483,5 +549,5 @@ export function createAfkLeaveService(options: {
     return false;
   }
 
-  return { handleInteraction, handleMessage, findRequest, pendingFor };
+  return { handleInteraction, handleMessage, findRequest, pendingFor, reviewFromTelegram };
 }

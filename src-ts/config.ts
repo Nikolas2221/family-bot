@@ -89,6 +89,7 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
       channelId: trim(env.AFK_CHANNEL_ID),
       logChannelId: trim(env.AFK_LOG_CHANNEL_ID),
       managerRoleId: trim(env.AFK_MANAGER_ROLE_ID),
+      approvedRoleId: trim(env.AFK_APPROVED_ROLE_ID),
       useModal: parseBoolean(env.AFK_USE_MODAL || 'true'),
       useMessageForm: parseBoolean(env.AFK_USE_MESSAGE_FORM || 'true'),
       allowDmNotify: parseBoolean(env.AFK_ALLOW_DM_NOTIFY || 'true'),
@@ -160,6 +161,7 @@ export function validateConfig(config: AppConfig): ValidationResult {
   validateDiscordId('AFK_CHANNEL_ID', config.afkLeave.channelId, errors, warnings);
   validateDiscordId('AFK_LOG_CHANNEL_ID', config.afkLeave.logChannelId, errors, warnings);
   validateDiscordId('AFK_MANAGER_ROLE_ID', config.afkLeave.managerRoleId, errors, warnings);
+  validateDiscordId('AFK_APPROVED_ROLE_ID', config.afkLeave.approvedRoleId, errors, warnings);
 
   for (const role of config.roles) {
     validateDiscordId(role.key, role.value, errors, warnings);
