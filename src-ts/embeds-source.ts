@@ -408,7 +408,7 @@ export async function buildFamilyEmbeds(
       });
 
     return {
-      name: text(item.name || item.role.name),
+      name: text(item.role.name || item.name),
       members: sortMembers(members as AnyRecord[], activityScore)
     };
   });
@@ -1000,6 +1000,10 @@ export function buildAdminPanelEmbed({ guildName, record }: AnyRecord): EmbedBui
   const isPremium = record?.plan === 'premium';
   const planLabel = isPremium ? 'Premium - 5$' : 'Free - 0$';
   const mode = settings.mode || 'hybrid';
+  const serviceRoleKeys = new Set(['mute', 'autorole', 'verification']);
+  const familyRoleLines = Object.entries(roles)
+    .filter(([key, roleId]) => !serviceRoleKeys.has(key) && Boolean(roleId))
+    .map(([, roleId]) => `<@&${roleId}>`);
 
   const moduleLines = [
     `Family: ${modules.family ? 'ON' : 'OFF'}`,
@@ -1035,11 +1039,7 @@ export function buildAdminPanelEmbed({ guildName, record }: AnyRecord): EmbedBui
       channelLine('Automod', channels.automod)
     ].join('\n')),
     section(text(copy.admin?.panelFieldRoles, 'Роли'), [
-      roleLine('Лидер', roles.leader),
-      roleLine('Зам', roles.deputy),
-      roleLine('Старший', roles.elder),
-      roleLine('Участник', roles.member),
-      roleLine('Новичок', roles.newbie),
+      ...(familyRoleLines.length ? familyRoleLines : ['Семейные роли: не заданы']),
       roleLine('Мут', roles.mute),
       roleLine('Автороль', roles.autorole),
       roleLine('После подтверждения', roles.verification)

@@ -2,6 +2,16 @@ import type { AppConfig, ReleaseNoteGroups, RoleEnvEntry, ValidationResult } fro
 import copy from './copy';
 
 const FAMILY_ROLE_ENV_KEYS = [
+  'ROLE_RANK_15',
+  'ROLE_RANK_14',
+  'ROLE_RANK_13',
+  'ROLE_RANK_12',
+  'ROLE_RANK_11',
+  'ROLE_RANK_10',
+  'ROLE_RANK_9',
+  'ROLE_RANK_8',
+  'ROLE_RANK_7',
+  'ROLE_RANK_6',
   'ROLE_LEADER',
   'ROLE_DEPUTY',
   'ROLE_ELDER',
@@ -10,6 +20,7 @@ const FAMILY_ROLE_ENV_KEYS = [
 ] as const;
 
 const AUTO_RANK_REQUIRED_KEYS = ['ROLE_ELDER', 'ROLE_MEMBER', 'ROLE_NEWBIE'] as const;
+const CORE_FAMILY_ROLE_ENV_KEYS = ['ROLE_LEADER', 'ROLE_DEPUTY', 'ROLE_ELDER', 'ROLE_MEMBER', 'ROLE_NEWBIE'] as const;
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -170,7 +181,9 @@ export function validateConfig(config: AppConfig): ValidationResult {
     validateDiscordId(role.key, role.value, errors, warnings);
   }
 
-  const missingRoles = config.roles.filter(role => !role.value).map(role => role.key);
+  const missingRoles = config.roles
+    .filter(role => CORE_FAMILY_ROLE_ENV_KEYS.includes(role.key as (typeof CORE_FAMILY_ROLE_ENV_KEYS)[number]) && !role.value)
+    .map(role => role.key);
   if (missingRoles.length) {
     warnings.push(`Не заданы некоторые роли семьи: ${missingRoles.join(', ')}`);
   }

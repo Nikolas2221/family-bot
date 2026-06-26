@@ -1,4 +1,4 @@
-export type FamilyRoleKey = 'leader' | 'deputy' | 'elder' | 'member' | 'newbie';
+export type FamilyRoleKey = string;
 export type BotMode = 'family' | 'server' | 'hybrid';
 export type SubscriptionPlan = 'free' | 'premium';
 export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'review';
@@ -389,6 +389,7 @@ export interface GuildRoles {
   elder: string;
   member: string;
   newbie: string;
+  [key: string]: string;
   mute: string;
   autorole: string;
   verification: string;

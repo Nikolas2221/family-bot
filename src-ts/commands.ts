@@ -73,6 +73,16 @@ export function buildCommands(): CommandJson[] {
           .setDescription(copy.commands.roleTargetDescription)
           .setRequired(true)
           .addChoices(
+            { name: '15 ранг', value: 'rank15' },
+            { name: '14 ранг', value: 'rank14' },
+            { name: '13 ранг', value: 'rank13' },
+            { name: '12 ранг', value: 'rank12' },
+            { name: '11 ранг', value: 'rank11' },
+            { name: '10 ранг', value: 'rank10' },
+            { name: '9 ранг', value: 'rank9' },
+            { name: '8 ранг', value: 'rank8' },
+            { name: '7 ранг', value: 'rank7' },
+            { name: '6 ранг', value: 'rank6' },
             { name: copy.commands.roleTargetLeader, value: 'leader' },
             { name: copy.commands.roleTargetDeputy, value: 'deputy' },
             { name: copy.commands.roleTargetElder, value: 'elder' },

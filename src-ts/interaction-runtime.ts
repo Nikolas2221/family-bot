@@ -580,8 +580,15 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
   const guildStorage = options.getGuildStorage(guildId);
   const applicationsService = options.getApplicationsService(guildId);
   const rankService = options.getRankService(guildId);
+  const isAdministrator = Boolean(interaction.member?.permissions?.has(PermissionFlagsBits.Administrator));
+  const requireAdministrator = async () => {
+    if (isAdministrator) return true;
+    await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+    return false;
+  };
 
   if (interaction.customId === 'family_refresh') {
+    if (!(await requireAdministrator())) return true;
     await interaction.deferReply({ flags: 64 });
     await options.syncAutoRanks(guildId, 'manual-refresh');
     await options.doPanelUpdate(guildId, true);
@@ -643,10 +650,7 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
   }
 
   if (interaction.customId === 'admin_applications') {
-    if (!options.canApplications(interaction.member)) {
-      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
-      return true;
-    }
+    if (!(await requireAdministrator())) return true;
 
     await interaction.reply(options.ephemeral({
       embeds: [options.embeds.buildApplicationsListEmbed(guildStorage.listRecentApplications(10))]
@@ -655,6 +659,8 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
   }
 
   if (interaction.customId === 'admin_aiadvisor') {
+    if (!(await requireAdministrator())) return true;
+
     if (!options.isPremiumGuild(guildId)) {
       await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
       return true;
@@ -670,10 +676,7 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
   }
 
   if (interaction.customId === 'admin_panel') {
-    if (!options.canDebugConfig(interaction)) {
-      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
-      return true;
-    }
+    if (!(await requireAdministrator())) return true;
 
     await interaction.reply(options.ephemeral({
       embeds: [options.embeds.buildAdminPanelEmbed({
@@ -685,6 +688,8 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
   }
 
   if (interaction.customId === 'admin_blacklist') {
+    if (!(await requireAdministrator())) return true;
+
     if (!options.isPremiumGuild(guildId)) {
       await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
       return true;
@@ -702,6 +707,8 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
   }
 
   if (interaction.customId === 'admin_activityreport') {
+    if (!(await requireAdministrator())) return true;
+
     if (!options.isPremiumGuild(guildId)) {
       await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
       return true;

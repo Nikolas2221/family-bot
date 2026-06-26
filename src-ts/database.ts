@@ -4,6 +4,8 @@ import path from 'node:path';
 import type { BotMode, DatabaseApi, DatabaseState, GuildRecord, GuildSettings, ModuleFlags } from './types';
 import { normalizeAutomodConfig } from './automod';
 
+const EXTENDED_FAMILY_ROLE_KEYS = Array.from({ length: 10 }, (_, index) => `rank${15 - index}`);
+
 function defaultDatabase(): DatabaseState {
   return {
     meta: {
@@ -179,6 +181,7 @@ function normalizeGuildRecord(guildId: string, guild: GuildRecordPatch = {}): Gu
         automod: guild.settings?.channels?.automod || ''
       },
       roles: {
+        ...Object.fromEntries(EXTENDED_FAMILY_ROLE_KEYS.map(key => [key, guild.settings?.roles?.[key] || ''])),
         leader: guild.settings?.roles?.leader || '',
         deputy: guild.settings?.roles?.deputy || '',
         elder: guild.settings?.roles?.elder || '',
