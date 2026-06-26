@@ -105,7 +105,7 @@ async function testWelcomeButtonsExcludeApplication() {
   assert.equal(buttons.some(button => button.custom_id === 'family_apply'), false);
 }
 
-async function testFamilyPanelShowsMemberInEveryAssignedRole() {
+async function testFamilyPanelShowsMemberOnlyInHighestRole() {
   const familyMember = {
     id: 'user-1',
     displayName: 'Nikolas',
@@ -188,7 +188,7 @@ async function testFamilyPanelShowsMemberInEveryAssignedRole() {
     .join('\n')
     .match(/<@user-1>/g) || [];
 
-  assert.equal(fieldMentions.length, 2);
+  assert.equal(fieldMentions.length, 1);
   assert.match(serialized, /1 \/ 1/);
   assert.match(serialized, /Premium/);
 }
@@ -315,7 +315,7 @@ async function main() {
   await runTest('welcome buttons exclude application', testWelcomeButtonsExcludeApplication);
   await runTest('menu and applications embeds expose configured images', testMenuAndApplicationsEmbedsExposeConfiguredImages);
   await runTest('family menu summary and buttons render', testFamilyMenuSummaryAndButtons);
-  await runTest('family panel shows member in every assigned role', testFamilyPanelShowsMemberInEveryAssignedRole);
+  await runTest('family panel shows member only in highest role', testFamilyPanelShowsMemberOnlyInHighestRole);
   await runTest('update announcement embed shows structured changes', testUpdateAnnouncementEmbedShowsStructuredChanges);
   await runTest('embeds public api stays complete', testEmbedsPublicApiStaysComplete);
   console.log('ALL EMBEDS TESTS PASSED');

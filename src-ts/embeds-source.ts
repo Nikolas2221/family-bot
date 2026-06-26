@@ -398,13 +398,16 @@ export async function buildFamilyEmbeds(
     .sort((a: AnyRecord, b: AnyRecord) => (b.role.position || 0) - (a.role.position || 0));
 
   const familyMemberIds = new Set<string>();
+  const displayedMemberIds = new Set<string>();
   const snapshots = configuredRoles.map((item: AnyRecord) => {
     const members = Array.from(item.role.members?.values?.() || [])
-      .filter((member: any) => !member.user?.bot);
-
-    for (const member of members as AnyRecord[]) {
-      familyMemberIds.add(member.id);
-    }
+      .filter((member: any) => !member.user?.bot)
+      .filter((member: any) => {
+        familyMemberIds.add(member.id);
+        if (displayedMemberIds.has(member.id)) return false;
+        displayedMemberIds.add(member.id);
+        return true;
+      });
 
     return {
       name: text(item.role.name || item.name),

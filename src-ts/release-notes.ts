@@ -1,6 +1,15 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.43': {
+    added: [],
+    updated: [
+      'панель состава снова показывает участника только в одной секции роли'
+    ],
+    fixed: [
+      'если у участника несколько выбранных ролей панели, он отображается только в самой высокой Discord-роли'
+    ]
+  },
   '1.0.42': {
     added: [
       'команда /setpanelroles roles:<список> для массового выбора ролей, которые отображаются в панели состава',
