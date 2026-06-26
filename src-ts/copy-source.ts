@@ -57,7 +57,7 @@ const copy: any = {
     artTargetOptionName: 'блок',
     artTargetDescription: 'Для какой карточки настроить баннер',
     artUrlOptionName: 'url',
-    artUrlDescription: 'Ссылка на изображение/GIF или off для удаления',
+    artUrlDescription: 'Ссылка на изображение/GIF/Imgur или off для удаления',
     artTargetFamily: 'Панель семьи',
     artTargetApplications: 'Подача заявки'
   },

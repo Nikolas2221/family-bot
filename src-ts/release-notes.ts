@@ -1,6 +1,17 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.44': {
+    added: [
+      'автоматическое извлечение прямой картинки из Imgur-ссылок для /setart'
+    ],
+    updated: [
+      'описание параметра /setart url теперь явно поддерживает изображение, GIF и Imgur'
+    ],
+    fixed: [
+      'ссылки вида imgur.com/a/... больше не отклоняются сразу: бот пытается найти og:image и сохранить прямой image URL'
+    ]
+  },
   '1.0.43': {
     added: [],
     updated: [

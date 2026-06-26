@@ -23,6 +23,45 @@ function isRenderableArtUrl(value: string): boolean {
   }
 }
 
+function isImgurPageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return ['imgur.com', 'www.imgur.com'].includes(host);
+  } catch {
+    return false;
+  }
+}
+
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+async function resolveRenderableArtUrl(value: string): Promise<string> {
+  if (isRenderableArtUrl(value)) return value;
+  if (!isImgurPageUrl(value)) return '';
+
+  try {
+    const response = await fetch(value, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 FamilyBot/1.0'
+      }
+    });
+    const html = await response.text();
+    const match = html.match(/<meta\s+(?:property|name)=["'](?:og:image|twitter:image)["']\s+content=["']([^"']+)["']/i)
+      || html.match(/<meta\s+content=["']([^"']+)["']\s+(?:property|name)=["'](?:og:image|twitter:image)["']/i);
+    const imageUrl = match ? decodeHtmlAttribute(match[1]) : '';
+    return imageUrl && isRenderableArtUrl(imageUrl) ? imageUrl : '';
+  } catch {
+    return '';
+  }
+}
+
 function parseRoleIds(value: string): string[] {
   return Array.from(new Set((value.match(/\d{16,20}/g) || []).map(String)));
 }
@@ -462,16 +501,17 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     const rawValue = interaction.options.getString(copy.commands.artUrlOptionName, true).trim();
     const clearValues = new Set(['off', 'none', 'clear', 'remove']);
     const value = clearValues.has(rawValue.toLowerCase()) ? '' : rawValue;
+    const resolvedValue = value ? await resolveRenderableArtUrl(value) : '';
 
-    if (value && !isRenderableArtUrl(value)) {
-      await interaction.reply(ephemeral({ content: 'Укажи прямую http/https-ссылку на изображение или GIF: .gif, .png, .jpg, .webp, Discord CDN, media.tenor.com или Giphy /media/. Чтобы удалить баннер, напиши `off`.' }));
+    if (value && !resolvedValue) {
+      await interaction.reply(ephemeral({ content: 'Укажи прямую http/https-ссылку на изображение или GIF: .gif, .png, .jpg, .webp, Discord CDN, media.tenor.com, Giphy /media/ или ссылку Imgur, из которой можно достать картинку. Чтобы удалить баннер, напиши `off`.' }));
       return true;
     }
 
-    database.updateGuildSettings(guildId, { visuals: { [key]: value } });
+    database.updateGuildSettings(guildId, { visuals: { [key]: resolvedValue } });
     const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
     await doPanelUpdate(guildId, true);
-    await interaction.reply(adminPanelReply(interaction, options, record, value ? `Баннер **${key}** сохранён.` : `Баннер **${key}** отключён.`));
+    await interaction.reply(adminPanelReply(interaction, options, record, resolvedValue ? `Баннер **${key}** сохранён.` : `Баннер **${key}** отключён.`));
     return true;
   }
 
