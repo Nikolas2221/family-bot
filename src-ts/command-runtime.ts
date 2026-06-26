@@ -2,6 +2,31 @@ import { createGuildStorageContext } from './guild-runtime';
 import { canSendDiscordAnnouncement } from './services/announcements';
 import { buildDiscordOnlineMembersText } from './services/online-members';
 
+function isRenderableArtUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol)) return false;
+
+    const host = url.hostname.toLowerCase();
+    const pathWithQuery = `${url.pathname}${url.search}`.toLowerCase();
+    if (/\.(?:gif|png|jpe?g|webp)(?:$|[?#])/i.test(pathWithQuery)) return true;
+
+    return (
+      host === 'media.tenor.com' ||
+      host === 'cdn.discordapp.com' ||
+      host === 'media.discordapp.net' ||
+      host.endsWith('.discordapp.net') ||
+      (host.includes('giphy.com') && url.pathname.toLowerCase().includes('/media/'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function parseRoleIds(value: string): string[] {
+  return Array.from(new Set((value.match(/\d{16,20}/g) || []).map(String)));
+}
+
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
   AUTO_RANKS: any;
@@ -321,6 +346,51 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     return true;
   }
 
+  if (interaction.commandName === 'setpanelroles') {
+    if (!canDebugConfig(interaction)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
+    const rawRoles = interaction.options.getString('roles', true).trim();
+    const clearValues = new Set(['off', 'none', 'clear', 'remove', 'reset']);
+    const roleIds = clearValues.has(rawRoles.toLowerCase()) ? [] : parseRoleIds(rawRoles);
+
+    if (!clearValues.has(rawRoles.toLowerCase()) && !roleIds.length) {
+      await interaction.reply(ephemeral({ content: 'Укажи роли через упоминания или ID, например: `@Owner @OG @MAIN`, либо `off` для сброса.' }));
+      return true;
+    }
+
+    const resolvedRoles = [];
+    const missingRoleIds = [];
+    for (const roleId of roleIds) {
+      const role = interaction.guild.roles.cache.get(roleId) || await interaction.guild.roles.fetch(roleId).catch(() => null);
+      if (role) {
+        resolvedRoles.push(role);
+      } else {
+        missingRoleIds.push(roleId);
+      }
+    }
+
+    if (missingRoleIds.length) {
+      await interaction.reply(ephemeral({ content: `Не нашёл роли: ${missingRoleIds.map((roleId) => `\`${roleId}\``).join(', ')}` }));
+      return true;
+    }
+
+    const sortedRoleIds = resolvedRoles
+      .sort((left, right) => (right.position || 0) - (left.position || 0))
+      .map((role) => role.id);
+
+    database.updateGuildSettings(guildId, { panelRoleIds: sortedRoleIds });
+    const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
+    await doPanelUpdate(guildId, true);
+    const label = sortedRoleIds.length
+      ? `Роли панели сохранены: ${sortedRoleIds.map((roleId) => `<@&${roleId}>`).join(', ')}`
+      : 'Список ролей панели сброшен. Бот снова использует семейные роли из /setrole.';
+    await interaction.reply(adminPanelReply(interaction, options, record, label));
+    return true;
+  }
+
   if (interaction.commandName === 'setchannel') {
     if (!canDebugConfig(interaction)) {
       await interaction.reply(ephemeral({ content: copy.common.noAccess }));
@@ -393,8 +463,8 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     const clearValues = new Set(['off', 'none', 'clear', 'remove']);
     const value = clearValues.has(rawValue.toLowerCase()) ? '' : rawValue;
 
-    if (value && !/^https?:\/\/\S+/i.test(value)) {
-      await interaction.reply(ephemeral({ content: 'Укажи прямую ссылку на изображение через http/https или напиши `off`.' }));
+    if (value && !isRenderableArtUrl(value)) {
+      await interaction.reply(ephemeral({ content: 'Укажи прямую http/https-ссылку на изображение или GIF: .gif, .png, .jpg, .webp, Discord CDN, media.tenor.com или Giphy /media/. Чтобы удалить баннер, напиши `off`.' }));
       return true;
     }
 

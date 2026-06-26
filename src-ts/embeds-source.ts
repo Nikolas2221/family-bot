@@ -397,15 +397,14 @@ export async function buildFamilyEmbeds(
     .filter((item: AnyRecord) => item.role)
     .sort((a: AnyRecord, b: AnyRecord) => (b.role.position || 0) - (a.role.position || 0));
 
-  const assignedMemberIds = new Set<string>();
+  const familyMemberIds = new Set<string>();
   const snapshots = configuredRoles.map((item: AnyRecord) => {
     const members = Array.from(item.role.members?.values?.() || [])
-      .filter((member: any) => !member.user?.bot)
-      .filter((member: any) => {
-        if (assignedMemberIds.has(member.id)) return false;
-        assignedMemberIds.add(member.id);
-        return true;
-      });
+      .filter((member: any) => !member.user?.bot);
+
+    for (const member of members as AnyRecord[]) {
+      familyMemberIds.add(member.id);
+    }
 
     return {
       name: text(item.role.name || item.name),
@@ -423,8 +422,8 @@ export async function buildFamilyEmbeds(
       ...familySummaryLines({
         ...summary,
         totalMembers: allMembers.length,
-        membersWithFamilyRoles: assignedMemberIds.size,
-        membersWithoutFamilyRoles: Math.max(0, allMembers.length - assignedMemberIds.size)
+        membersWithFamilyRoles: familyMemberIds.size,
+        membersWithoutFamilyRoles: Math.max(0, allMembers.length - familyMemberIds.size)
       }),
       '',
       `Активных секций: ${activeRoles.length}`,
@@ -441,14 +440,49 @@ export async function buildFamilyEmbeds(
     return [embed];
   }
 
+  const panelEmbeds = [embed];
+  let currentEmbed = embed;
+  let currentFieldCount = 0;
+
   for (const item of activeRoles) {
-    embed.addFields(section(
-      `${item.name} • ${item.members.length}`,
-      item.members.map((member: AnyRecord) => `${statusEmoji(member)} <@${member.id}> • ${activityScore(member.id)} очк.`).join('\n')
-    ));
+    const lines = item.members.map((member: AnyRecord) => `${statusEmoji(member)} <@${member.id}> • ${activityScore(member.id)} очк.`);
+    const chunks: string[][] = [];
+    let currentChunk: string[] = [];
+    let currentLength = 0;
+
+    for (const line of lines) {
+      if (currentChunk.length && currentLength + line.length + 1 > 1000) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+        currentLength = 0;
+      }
+
+      currentChunk.push(line);
+      currentLength += line.length + 1;
+    }
+
+    if (currentChunk.length) chunks.push(currentChunk);
+
+    chunks.forEach((chunk, index) => {
+      if (currentFieldCount >= 25) {
+        currentEmbed = card({
+          title: `${text(familyTitle || guild.name || 'Phoenix')} • продолжение`,
+          color: THEME.brand,
+          footer: `${BRAND_FOOTER} • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`
+        });
+        panelEmbeds.push(currentEmbed);
+        currentFieldCount = 0;
+      }
+
+      currentEmbed.addFields(section(
+        index === 0 ? `${item.name} • ${item.members.length}` : `${item.name} • ${item.members.length} (${index + 1})`,
+        chunk.join('\n')
+      ));
+      currentFieldCount += 1;
+    });
   }
 
-  return [embed];
+  return panelEmbeds;
 }
 
 export function buildProfileEmbed(

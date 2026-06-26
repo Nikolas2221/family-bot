@@ -418,6 +418,7 @@ export interface GuildSettings {
   familyTitle: string;
   channels: GuildChannels;
   roles: GuildRoles;
+  panelRoleIds: string[];
   access: GuildAccess;
   visuals: GuildVisuals;
   welcome: WelcomeSettings;

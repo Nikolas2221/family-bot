@@ -97,6 +97,15 @@ export function buildCommands(): CommandJson[] {
         option.setName(copy.commands.roleValueOptionName).setDescription(copy.commands.roleValueDescription).setRequired(true)
       ),
     new SlashCommandBuilder()
+      .setName('setpanelroles')
+      .setDescription('Задать роли, которые нужно показывать в панели состава')
+      .addStringOption(option =>
+        option
+          .setName('roles')
+          .setDescription('Упоминания или ID ролей через пробел/запятую, либо off для сброса')
+          .setRequired(true)
+      ),
+    new SlashCommandBuilder()
       .setName('setchannel')
       .setDescription(copy.commands.setChannelDescription)
       .addStringOption(option =>

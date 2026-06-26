@@ -91,6 +91,7 @@ interface LifecycleRuntimeHelpersOptions {
       panel?: string;
     };
     roles: unknown[];
+    panelDisplayRoles?: unknown[];
     familyTitle: string;
     visuals?: {
       familyBanner?: string;
@@ -195,7 +196,7 @@ export function createRuntimeLifecycleHelpers(options: LifecycleRuntimeHelpersOp
       const summary = buildFamilyDashboardStats(guild);
 
       const familyEmbeds = await embeds.buildFamilyEmbeds(guild, {
-        roles: settings.roles,
+        roles: settings.panelDisplayRoles || settings.roles,
         familyTitle: settings.familyTitle,
         updateIntervalMs,
         activityScore: guildStorage.getActivityScore,

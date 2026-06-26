@@ -746,6 +746,7 @@ function getHelpCatalog(interaction: any) {
   const adminFree = [
     { name: 'applypanel', description: copy.commands.applyPanelDescription },
     { name: 'setrole', description: copy.commands.setRoleDescription },
+    { name: 'setpanelroles', description: 'Задать роли, которые показываются в панели состава' },
     { name: 'setchannel', description: copy.commands.setChannelDescription },
     { name: 'setfamilytitle', description: copy.commands.setFamilyTitleDescription },
     { name: 'welcome', description: copy.commands.welcomeDescription },

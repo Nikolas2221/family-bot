@@ -175,6 +175,13 @@ export function createGuildRuntimeApi(options: {
       ...role,
       id: settings.roles?.[role.key] || (allowEnvDefaults ? role.id || '' : '')
     }));
+    const panelRoleIds = Array.from(new Set((settings.panelRoleIds || []).map(String).filter(Boolean)));
+    const panelRoles = panelRoleIds.map((roleId, index) => ({
+      key: `panel${index + 1}`,
+      envKey: 'PANEL_ROLE_IDS',
+      id: roleId,
+      name: `Panel role ${index + 1}`
+    }));
     const panel = settings.channels?.panel || (allowEnvDefaults ? defaults.channelId : '');
     const logs = settings.channels?.logs || (allowEnvDefaults ? defaults.logChannelId : '');
 
@@ -193,6 +200,9 @@ export function createGuildRuntimeApi(options: {
         automod: settings.channels?.automod || logs || ''
       },
       roles,
+      panelRoleIds,
+      panelRoles,
+      panelDisplayRoles: panelRoles.length ? panelRoles : roles,
       access: {
         applications: settings.access?.applications?.length ? settings.access.applications : defaults.accessApplications,
         discipline: settings.access?.discipline?.length ? settings.access.discipline : defaults.accessDiscipline,
@@ -247,7 +257,7 @@ export function createGuildRuntimeApi(options: {
   }
 
   function getRoleIds(guildId: string): string[] {
-    return resolveGuildSettings(guildId).roles.map(role => role.id).filter(Boolean);
+    return resolveGuildSettings(guildId).panelDisplayRoles.map(role => role.id).filter(Boolean);
   }
 
   function getGuildStorage(guildId: string): GuildStorageContext {
@@ -292,6 +302,7 @@ export function createGuildRuntimeApi(options: {
           autorole: settings.autoroleRoleId || '',
           verification: settings.verificationRoleId || ''
         },
+        panelRoleIds: settings.panelRoleIds,
         access: {
           applications: settings.access.applications,
           discipline: settings.access.discipline,

@@ -191,6 +191,7 @@ function normalizeGuildRecord(guildId: string, guild: GuildRecordPatch = {}): Gu
         autorole: guild.settings?.roles?.autorole || '',
         verification: guild.settings?.roles?.verification || ''
       },
+      panelRoleIds: Array.from(new Set((guild.settings?.panelRoleIds || []).map(String).filter(Boolean))),
       access: {
         applications: [...(guild.settings?.access?.applications || [])],
         discipline: [...(guild.settings?.access?.discipline || [])],
