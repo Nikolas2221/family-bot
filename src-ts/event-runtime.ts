@@ -27,6 +27,7 @@ interface MemberLike {
 interface GuildLike {
   id: string;
   ownerId?: string | null;
+  memberCount?: number;
   members: {
     cache: {
       get(id: string): MemberLike | undefined;
@@ -216,7 +217,7 @@ interface EventRuntimeOptions {
   startVoiceSession(member: MemberLike): void;
   stopVoiceSession(member: MemberLike): void;
   enforceBlacklist(member: MemberLike): Promise<boolean>;
-  sendWelcomeInvite(member: MemberLike): Promise<unknown>;
+  sendWelcomeInvite(member: MemberLike, memberCount?: number): Promise<unknown>;
   notifyTelegramMemberJoined(member: MemberLike): Promise<unknown>;
   applyAutorole(member: MemberLike): Promise<boolean>;
   resolveGuildSettings(guildId: string): WelcomeSettingsLike;
@@ -228,6 +229,12 @@ interface EventRuntimeOptions {
   doPanelUpdate(guildId: string, force: boolean): Promise<unknown>;
   handleDiscordTicketMessage(message: MessageLike): Promise<boolean>;
   handleAfkMessage(message: MessageLike): Promise<boolean>;
+}
+
+interface WelcomeInviteBatch {
+  items: MemberLike[];
+  timer: NodeJS.Timeout | null;
+  flushing: boolean;
 }
 
 async function hydrateReaction(reaction: ReactionLike | null | undefined): Promise<ReactionLike | null> {
@@ -310,6 +317,58 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     handleDiscordTicketMessage,
     handleAfkMessage
   } = options;
+  const welcomeInviteBatches = new Map<string, WelcomeInviteBatch>();
+
+  function scheduleWelcomeInvite(member: MemberLike): void {
+    const guildId = member.guild.id;
+    let batch = welcomeInviteBatches.get(guildId);
+    if (!batch) {
+      batch = { items: [], timer: null, flushing: false };
+      welcomeInviteBatches.set(guildId, batch);
+    }
+
+    batch.items.push(member);
+    if (batch.timer) clearTimeout(batch.timer);
+    batch.timer = setTimeout(() => {
+      void flushWelcomeInvites(guildId);
+    }, 1000);
+  }
+
+  async function flushWelcomeInvites(guildId: string): Promise<void> {
+    const batch = welcomeInviteBatches.get(guildId);
+    if (!batch || batch.flushing) return;
+
+    if (batch.timer) {
+      clearTimeout(batch.timer);
+      batch.timer = null;
+    }
+
+    const items = batch.items.splice(0);
+    if (!items.length) {
+      welcomeInviteBatches.delete(guildId);
+      return;
+    }
+
+    batch.flushing = true;
+    const finalMemberCount = Math.max(...items.map(member => Number(member.guild?.memberCount) || 0), 0);
+    const firstMemberCount = finalMemberCount > 0 ? Math.max(1, finalMemberCount - items.length + 1) : 0;
+
+    for (let index = 0; index < items.length; index += 1) {
+      const memberCount = firstMemberCount ? firstMemberCount + index : undefined;
+      await sendWelcomeInvite(items[index], memberCount).catch(() => null);
+    }
+
+    batch.flushing = false;
+    if (batch.items.length) {
+      if (batch.timer) clearTimeout(batch.timer);
+      batch.timer = setTimeout(() => {
+        void flushWelcomeInvites(guildId);
+      }, 1000);
+      return;
+    }
+
+    welcomeInviteBatches.delete(guildId);
+  }
 
   const managedEvents = [
     'messageCreate',
@@ -422,7 +481,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       if (!settings.verification.enabled) {
         await applyAutorole(member).catch(() => null);
       }
-      await sendWelcomeInvite(member).catch(() => null);
+      scheduleWelcomeInvite(member);
     }
   });
 

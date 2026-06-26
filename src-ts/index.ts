@@ -1256,6 +1256,10 @@ function buildMaintenanceEmbed({ title, description, color, fieldName, lines }: 
   return embed;
 }
 
+function isServerBooster(member: any) {
+  return Boolean(member?.premiumSince || member?.premiumSinceTimestamp);
+}
+
 async function runRolelessCleanup(guildId: any, reason = 'interval') {
   if (!isPremiumGuild(guildId)) return;
 
@@ -1277,6 +1281,7 @@ async function runRolelessCleanup(guildId: any, reason = 'interval') {
     if (member.user?.bot) continue;
     if (member.id === guild.ownerId) continue;
     if (hasPermission(member, PermissionFlagsBits.Administrator)) continue;
+    if (isServerBooster(member)) continue;
 
     const nonEveryoneRoles = member.roles.cache.filter((role: any) => role.id !== guild.id);
     if (nonEveryoneRoles.size > 0) continue;
@@ -1333,6 +1338,7 @@ async function runRolelessCleanupDetailed(guildId: any, reason = 'interval', opt
     if (member.user?.bot) continue;
     if (member.id === guild.ownerId) continue;
     if (hasPermission(member, PermissionFlagsBits.Administrator)) continue;
+    if (isServerBooster(member)) continue;
 
     const nonEveryoneRoles = member.roles.cache.filter((role: any) => role.id !== guild.id);
     if (nonEveryoneRoles.size > 0) continue;

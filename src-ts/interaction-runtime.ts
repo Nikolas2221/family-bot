@@ -26,7 +26,7 @@ interface InteractionRuntimeOptions {
   fetchTextChannel(guild: any, channelId?: string | null): Promise<any>;
   fetchMemberFast(guild: any, userId: string): Promise<any>;
   refreshMember(member: any): Promise<any>;
-  sendWelcomeInvite(member: any): Promise<unknown>;
+  sendWelcomeInvite(member: any, memberCount?: number): Promise<unknown>;
   sendRankDm(guild: any, member: any, result: any): Promise<unknown>;
   getVerificationRoleId(guildId: string): string;
   applyVerificationRole(member: any): Promise<{ ok: boolean; roleId?: string }>;

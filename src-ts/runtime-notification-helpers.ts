@@ -312,7 +312,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     await channel.send({ embeds: [embed] }).catch(() => {});
   }
 
-  async function sendWelcomeInvite(member: GuildMember) {
+  async function sendWelcomeInvite(member: GuildMember, memberCount?: number) {
     const settings = resolveGuildSettings(member.guild.id);
     if (!settings.welcome.enabled) return;
 
@@ -331,7 +331,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
         panelChannelId: settings.channels.panel,
         applicationsChannelId: settings.channels.applications,
         verificationEnabled: settings.verification.enabled,
-        memberCount: member.guild.memberCount
+        memberCount: memberCount || member.guild.memberCount
       }
     );
 
