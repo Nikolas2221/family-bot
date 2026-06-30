@@ -51,6 +51,7 @@ export interface TelegramNotificationService {
   notifyTicketClosed(input: ApplicationNotificationInput): Promise<boolean>;
   notifyTicketActivity(input: TicketActivityNotificationInput): Promise<boolean>;
   notifyMemberJoined(input: MemberJoinedNotificationInput): Promise<boolean>;
+  notifyScamBlocked(input: Record<string, any>): Promise<boolean>;
   notifyAfkRequestCreated(input: AfkRequestNotificationInput): Promise<boolean>;
   sendAnnouncement(input: { type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string }>;
 }
@@ -203,6 +204,26 @@ export function createTelegramNotificationService(options: {
           }]]
         }
       });
+    },
+    notifyScamBlocked(input) {
+      const guildName = clean(input.guild?.name || input.guild?.id, 'сервер', 100);
+      const userName = clean(input.user?.globalName || input.user?.username || input.user?.id, 'неизвестно', 100);
+      const channelId = clean(input.channel?.id, 'unknown', 32);
+      const status = [
+        input.deleted ? 'сообщение удалено' : 'сообщение НЕ удалено',
+        input.muted ? `мут ${clean(input.timeoutMinutes)} мин.` : 'мут НЕ выдан'
+      ].join(', ');
+      return send(adminChatId, [
+        '🚨 Scam guard сработал',
+        '',
+        `Сервер: ${guildName}`,
+        `Пользователь: ${userName} (${clean(input.user?.id, 'unknown', 32)})`,
+        `Канал: ${channelId}`,
+        `Причина: ${clean(input.reason, 'scam/phishing', 200)}`,
+        `Результат: ${status}`,
+        '',
+        `Фрагмент: ${clean(input.content, 'без текста', 1200)}`
+      ].join('\n'));
     },
     notifyAfkRequestCreated(input) {
       const request = input.request;

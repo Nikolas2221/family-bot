@@ -128,6 +128,12 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
       enabled: parseBoolean(trim(env.LEAK_GUARD_ENABLED || 'true')),
       allowedRoles: parseCsv(env.LEAK_GUARD_ALLOWED_ROLES)
     },
+    scamGuard: {
+      enabled: parseBoolean(trim(env.SCAM_GUARD_ENABLED || 'true')),
+      allowedRoles: parseCsv(env.SCAM_GUARD_ALLOWED_ROLES || env.LEAK_GUARD_ALLOWED_ROLES),
+      timeoutMinutes: parseNumber(env.SCAM_GUARD_TIMEOUT_MINUTES, 1440, { min: 1 }),
+      gifUrl: trim(env.SCAM_GUARD_GIF_URL) || 'https://media.giphy.com/media/3o6Zt4HU9uwXmXSAuI/giphy.gif'
+    },
     channelGuard: {
       enabled: parseBoolean(trim(env.CHANNEL_GUARD_ENABLED || 'true')),
       allowedRoles: parseCsv(env.CHANNEL_GUARD_ALLOWED_ROLES)
@@ -284,6 +290,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     ? `enabled every ${Math.floor(config.autoRanks.intervalMs / 1000)}s (member ${config.autoRanks.memberMinScore}, elder ${config.autoRanks.elderMinScore})`
     : 'disabled';
   const leakGuardSummary = config.leakGuard.enabled ? 'enabled' : 'disabled';
+  const scamGuardSummary = config.scamGuard.enabled ? `enabled (${config.scamGuard.timeoutMinutes}m timeout)` : 'disabled';
   const channelGuardSummary = config.channelGuard.enabled ? 'enabled' : 'disabled';
   const serverBackupSummary = config.serverBackup.enabled
     ? `enabled every ${config.serverBackup.intervalHours}h -> ${config.serverBackup.githubOwner || '?'}/${config.serverBackup.githubRepo || '?'}`
@@ -311,6 +318,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- AI: ${config.aiEnabled ? (config.deepSeekApiKey ? `DeepSeek enabled (${config.deepSeekModel})` : 'offline helper enabled') : 'disabled'}`,
     `- auto ranks: ${autoRanksSummary}`,
     `- leak guard: ${leakGuardSummary}`,
+    `- scam guard: ${scamGuardSummary}`,
     `- channel guard: ${channelGuardSummary}`,
     `- server backup: ${serverBackupSummary}`
   ];

@@ -6,6 +6,12 @@ import type {
 } from './types';
 
 const DISCORD_INVITE_PATTERN = /(?:https?:\/\/)?(?:www\.)?d[iі1][sѕ][cс][oо0]rd(?:app)?\.(?:gg|com\/invite)\/[a-z0-9-]+/i;
+const ZERO_WIDTH_PATTERN = /[\u200B-\u200D\u2060\uFEFF]/gu;
+const STEAM_SCAM_DOMAIN_PATTERN = /\b(?:steam|st[e3]am|stearn|stean|stre?am|staem)[a-z0-9-]{0,24}(?:community|communit+y|comrnunity|comnmunity|cornmunity|powered|store|gift|nitro)?\.(?:com|ru|net|org|top|xyz|shop|click|site|icu|me|cc|gift|lol|live|quest)\b/iu;
+const SHORTENER_PATTERN = /\b(?:dub\.sh|bit\.ly|tinyurl\.com|t\.co|cutt\.ly|is\.gd|soo\.gd|rebrand\.ly|shorturl\.at|rb\.gy|clck\.ru|goo\.su|s\.id|lnkd\.in|ow\.ly|buff\.ly|grabify\.link|iplogger\.(?:org|com)|2no\.co)\b/iu;
+const SCAM_PATH_PATTERN = /\/(?:gift|gifts|activation|activate|claim|promo|airdrop|free|nitro|giveaway|reward|bonus|skin|case|drop|login|verify|verification|auth|trade|steam|wallet)(?:[/?#]|$)/iu;
+const SCAM_TEXT_PATTERN = /\b(?:free|claim|gift|gifts?|activation|activate|airdrop|giveaway|nitro|steam|wallet|skins?|bonus|promo|reward|20\s*\$|50\s*\$|100\s*\$)\b/iu;
+const URL_PATTERN = /\b(?:https?:\/\/|www\.|[a-z0-9-]+\.[a-z]{2,})(?:\S*)/iu;
 
 export function normalizeInviteText(text = ''): string {
   return String(text || '')
@@ -20,6 +26,53 @@ export function normalizeInviteText(text = ''): string {
 
 export function containsDiscordInvite(text = ''): boolean {
   return DISCORD_INVITE_PATTERN.test(normalizeInviteText(text));
+}
+
+export function normalizeScamText(text = ''): string {
+  return String(text || '')
+    .normalize('NFKC')
+    .replace(ZERO_WIDTH_PATTERN, '')
+    .replace(/[аА]/gu, 'a')
+    .replace(/[еЕёЁ]/gu, 'e')
+    .replace(/[оО]/gu, 'o')
+    .replace(/[рР]/gu, 'p')
+    .replace(/[сС]/gu, 'c')
+    .replace(/[уУ]/gu, 'y')
+    .replace(/[хХ]/gu, 'x')
+    .replace(/[іІ]/gu, 'i')
+    .replace(/[ѕЅ]/gu, 's')
+    .replace(/\b(?:dot|точка)\b/giu, '.')
+    .replace(/[。｡]/gu, '.')
+    .replace(/\\/gu, '/')
+    .toLowerCase();
+}
+
+export function detectScamGift(text = ''): { matched: boolean; reason: string } {
+  const normalized = normalizeScamText(text);
+  const compact = normalized.replace(/[\s\[\](){}<>]+/gu, '');
+  const hasUrl = URL_PATTERN.test(normalized) || URL_PATTERN.test(compact);
+  const hasSteamScamDomain = STEAM_SCAM_DOMAIN_PATTERN.test(compact);
+  const hasShortener = SHORTENER_PATTERN.test(compact);
+  const hasScamPath = SCAM_PATH_PATTERN.test(compact);
+  const hasScamText = SCAM_TEXT_PATTERN.test(normalized) || SCAM_TEXT_PATTERN.test(compact);
+
+  if (hasSteamScamDomain && (hasScamPath || hasScamText || hasUrl)) {
+    return { matched: true, reason: 'steam-gift/phishing domain' };
+  }
+
+  if (hasShortener && hasScamText) {
+    return { matched: true, reason: 'shortener with gift/phishing text' };
+  }
+
+  if (hasUrl && hasScamPath && hasScamText) {
+    return { matched: true, reason: 'gift/claim phishing link' };
+  }
+
+  if (/\bsteamcommunity\.com\/gift\/activation\b/iu.test(compact)) {
+    return { matched: true, reason: 'steam gift activation link' };
+  }
+
+  return { matched: false, reason: '' };
 }
 
 export function explainKickFailure(member: SecurityMemberLike, actorMember?: SecurityMemberLike | null): string {

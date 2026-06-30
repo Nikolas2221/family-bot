@@ -93,7 +93,7 @@ async function main() {
       autoroleRoleId: 'autorole-1'
     }),
     currentBuildSignature: '1.0.16:abc1234',
-    productVersionLabel: 'BRHD/PHOENIX 1.0 RELEASE',
+    productVersionLabel: 'KLAIZ BOT 1.0 RELEASE',
     productVersionSemver: '1.0.16',
     deployBuildId: 'abc1234',
     deployCommitMessage: 'extract notification helpers',

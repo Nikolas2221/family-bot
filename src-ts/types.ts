@@ -22,6 +22,11 @@ export interface GuardConfig {
   allowedRoles: string[];
 }
 
+export interface ScamGuardConfig extends GuardConfig {
+  timeoutMinutes: number;
+  gifUrl: string;
+}
+
 export interface SupportTicketConfig {
   categoryId: string;
   supportRoleId: string;
@@ -99,6 +104,7 @@ export interface AppConfig {
   serverBackup: ServerBackupConfig;
   autoRanks: AutoRanksConfig;
   leakGuard: GuardConfig;
+  scamGuard: ScamGuardConfig;
   channelGuard: GuardConfig;
   roles: RoleEnvEntry[];
 }

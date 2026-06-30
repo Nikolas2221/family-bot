@@ -237,7 +237,7 @@ async function testFamilyMenuSummaryAndButtons() {
 
 async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
   const embed = buildUpdateAnnouncementEmbed({
-    versionLabel: 'BRHD/PHOENIX 1.0 RELEASE',
+    versionLabel: 'KLAIZ BOT 1.0 RELEASE',
     semver: '1.0.3',
     buildId: 'abc123',
     commitMessage: 'embed update',

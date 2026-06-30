@@ -3,7 +3,7 @@ const { PermissionFlagsBits } = require('discord.js');
 
 const { createAccessApi } = require('../dist-ts/access');
 const { buildLeakScanText, registerEventRuntime } = require('../dist-ts/event-runtime');
-const { containsDiscordInvite } = require('../security');
+const { containsDiscordInvite, detectScamGift } = require('../security');
 
 async function main() {
   assert.equal(containsDiscordInvite('https://discord.gg/family'), true);
@@ -12,6 +12,10 @@ async function main() {
   assert.equal(containsDiscordInvite('dіscоrd.gg/family'), true);
   assert.equal(containsDiscordInvite('discord\u200b.gg/family'), true);
   assert.equal(containsDiscordInvite('мы обсуждаем Discord без ссылок'), false);
+  assert.equal(detectScamGift('20$ steam - steamcommunity.com/gift/activation=QfkkZqjOxf').matched, true);
+  assert.equal(detectScamGift('steamcommunnity.com/gift/activation=QfkkZqjOxf').matched, true);
+  assert.equal(detectScamGift('20$ steam https://dub.sh/QfkkZqjOxf').matched, true);
+  assert.equal(detectScamGift('обычное слово gift без ссылки').matched, false);
 
   assert.match(buildLeakScanText({
     content: '',
@@ -36,6 +40,7 @@ async function main() {
   const listeners = new Map();
   const securityLogs = [];
   const telegramJoins = [];
+  const telegramScamReports = [];
   const client = {
     removeAllListeners(name) {
       listeners.delete(name);
@@ -47,6 +52,7 @@ async function main() {
   registerEventRuntime({
     client,
     leakGuard: { enabled: true },
+    scamGuard: { enabled: true, timeoutMinutes: 1440 },
     channelGuard: { enabled: false },
     copySecurity: {
       inviteGuardNotice: id => `blocked ${id}`,
@@ -61,10 +67,13 @@ async function main() {
     isModuleEnabled: () => true,
     hasFamilyRole: () => false,
     containsDiscordInvite,
+    detectScamGift,
     canBypassLeakGuard: () => false,
+    canBypassScamGuard: () => false,
     handleAutomodMessage: async () => false,
     handleCustomTriggerMessage: async () => {},
     sendSecurityLog: async (_guild, content) => securityLogs.push(content),
+    notifyTelegramScamBlocked: async report => telegramScamReports.push(report),
     startVoiceSession() {}, stopVoiceSession() {}, enforceBlacklist: async () => false,
     sendWelcomeInvite: async () => {}, notifyTelegramMemberJoined: async member => telegramJoins.push(member.id), applyAutorole: async () => false,
     resolveGuildSettings: () => ({ verification: { enabled: false } }),
@@ -86,7 +95,7 @@ async function main() {
     id: 'message-1',
     content: 'safe before edit',
     guild,
-    member: { id: 'user-1', guild },
+    member: { id: 'user-1', guild, moderatable: true, timeout: async () => {} },
     author: { id: 'user-1', username: 'user', bot: false },
     channel: { id: 'channel-1', send: async () => null },
     embeds: [],
@@ -119,6 +128,23 @@ async function main() {
   assert.match(securityLogs[1], /НЕ УДАЛЕНО/);
   assert.match(securityLogs[1], /user-1/);
   assert.match(securityLogs[1], /channel-1/);
+
+  let scamDeleted = false;
+  let scamMuted = false;
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-3',
+    content: '20$ steam - steamcommunity.com/gift/activation=QfkkZqjOxf',
+    delete: async () => { scamDeleted = true; },
+    member: {
+      ...baseMessage.member,
+      timeout: async () => { scamMuted = true; }
+    }
+  });
+  assert.equal(scamDeleted, true);
+  assert.equal(scamMuted, true);
+  assert.equal(telegramScamReports.length, 1);
+  assert.match(securityLogs[2], /Scam guard/);
 }
 
 if (require.main === module) {

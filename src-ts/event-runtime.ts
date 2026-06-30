@@ -18,10 +18,12 @@ interface MemberLike {
   id: string;
   user?: UserLike | null;
   guild: GuildLike;
+  moderatable?: boolean;
   roles: {
     add(role: RoleLike, reason?: string): Promise<unknown>;
     remove(role: RoleLike, reason?: string): Promise<unknown>;
   };
+  timeout?(duration: number, reason?: string): Promise<unknown>;
 }
 
 interface GuildLike {
@@ -97,6 +99,84 @@ export function buildLeakScanText(message: MessageLike): string {
 
 function safeLogExcerpt(value: string): string {
   return String(value || '').replace(/[`\r\n]+/gu, ' ').trim().slice(0, 300) || 'без текста';
+}
+
+async function enforceScamGuard(
+  message: MessageLike,
+  options: Pick<EventRuntimeOptions, 'scamGuard' | 'detectScamGift' | 'canBypassScamGuard' | 'sendSecurityLog' | 'notifyTelegramScamBlocked'>
+): Promise<boolean> {
+  if (!message.guild || !options.scamGuard.enabled) return false;
+  if (options.canBypassScamGuard(message.member)) return false;
+
+  const scanText = buildLeakScanText(message);
+  const scam = options.detectScamGift(scanText);
+  if (!scam.matched) return false;
+
+  let deletionError: unknown = null;
+  const deleted = await message.delete().then(() => true).catch(error => {
+    deletionError = error;
+    return false;
+  });
+
+  const timeoutMs = Math.max(1, Number(options.scamGuard.timeoutMinutes) || 1440) * 60 * 1000;
+  let muted = false;
+  let muteError: unknown = null;
+  if (message.member?.timeout && message.member.moderatable !== false) {
+    muted = await message.member.timeout(timeoutMs, `Scam guard: ${scam.reason}`).then(() => true).catch(error => {
+      muteError = error;
+      return false;
+    });
+  }
+
+  const authorLabel = message.author?.id ? `<@${message.author.id}> (\`${message.author.id}\`)` : 'unknown';
+  const channelLabel = message.channel?.id ? `<#${message.channel.id}> (\`${message.channel.id}\`)` : 'unknown';
+  const result = [
+    deleted ? 'message deleted' : 'message NOT deleted',
+    muted ? `timeout ${options.scamGuard.timeoutMinutes}m` : 'timeout NOT applied'
+  ].join(', ');
+  const logMessage = [
+    '🚨 Scam guard: подозрительная gift/phishing ссылка или текст',
+    `Автор: ${authorLabel}`,
+    `Канал: ${channelLabel}`,
+    `Причина: ${scam.reason}`,
+    `Результат: ${result}`,
+    `Фрагмент: \`${safeLogExcerpt(scanText)}\``
+  ].join('\n');
+
+  if (!deleted) {
+    console.error(`Scam guard failed to delete message ${message.id} in channel ${message.channel?.id}:`, deletionError);
+  }
+  if (!muted) {
+    console.error(`Scam guard failed to timeout member ${message.author?.id}:`, muteError || 'member is not moderatable');
+  }
+
+  await options.sendSecurityLog(message.guild, logMessage).catch(() => null);
+  await options.notifyTelegramScamBlocked({
+    guild: message.guild,
+    user: message.author,
+    channel: message.channel,
+    reason: scam.reason,
+    content: scanText,
+    deleted,
+    muted,
+    timeoutMinutes: options.scamGuard.timeoutMinutes
+  }).catch(() => null);
+
+  const gifUrl = String(options.scamGuard.gifUrl || '').trim();
+  const noticePayload: Record<string, unknown> = {
+    content: `😂 <@${message.author.id}>, ха-ха, попался. Scam-ссылка удалена, доступ к написанию временно ограничен. Ваше уголовное дело создано и отправлено в прокуратуру, ожидайте суда.`
+  };
+  if (gifUrl) {
+    noticePayload.embeds = [{ image: { url: gifUrl } }];
+  }
+  const notice = await message.channel.send?.(noticePayload).catch(() => null);
+  if (notice) {
+    setTimeout(() => {
+      void notice.delete().catch(() => null);
+    }, 10000);
+  }
+
+  return true;
 }
 
 async function enforceLeakGuard(
@@ -196,6 +276,11 @@ interface EventRuntimeOptions {
   leakGuard: {
     enabled: boolean;
   };
+  scamGuard: {
+    enabled: boolean;
+    timeoutMinutes: number;
+    gifUrl?: string;
+  };
   channelGuard: {
     enabled: boolean;
   };
@@ -210,10 +295,13 @@ interface EventRuntimeOptions {
   isModuleEnabled(guildId: string, moduleName: string | null): boolean;
   hasFamilyRole(member: MemberLike | null | undefined): boolean;
   containsDiscordInvite(content: string): boolean;
+  detectScamGift(content: string): { matched: boolean; reason: string };
   canBypassLeakGuard(member: MemberLike | null | undefined): boolean;
+  canBypassScamGuard(member: MemberLike | null | undefined): boolean;
   handleAutomodMessage(message: MessageLike): Promise<boolean>;
   handleCustomTriggerMessage(message: MessageLike): Promise<unknown>;
   sendSecurityLog(guild: GuildLike, content: string): Promise<unknown>;
+  notifyTelegramScamBlocked(input: Record<string, any>): Promise<unknown>;
   startVoiceSession(member: MemberLike): void;
   stopVoiceSession(member: MemberLike): void;
   enforceBlacklist(member: MemberLike): Promise<boolean>;
@@ -290,6 +378,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   const {
     client,
     leakGuard,
+    scamGuard,
     channelGuard,
     copySecurity,
     getGuildStorage,
@@ -297,10 +386,13 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     isModuleEnabled,
     hasFamilyRole,
     containsDiscordInvite,
+    detectScamGift,
     canBypassLeakGuard,
+    canBypassScamGuard,
     handleAutomodMessage,
     handleCustomTriggerMessage,
     sendSecurityLog,
+    notifyTelegramScamBlocked,
     startVoiceSession,
     stopVoiceSession,
     enforceBlacklist,
@@ -389,6 +481,13 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
   client.on('messageCreate', async (message: MessageLike) => {
     if (!message.guild || (message.author.bot && !message.webhookId)) return;
+    if (await enforceScamGuard(message, {
+      scamGuard,
+      detectScamGift,
+      canBypassScamGuard,
+      sendSecurityLog,
+      notifyTelegramScamBlocked
+    })) return;
     if (await enforceLeakGuard(message, {
       leakGuard,
       isPremiumGuild,
@@ -429,6 +528,13 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       message = await message.fetch().catch(() => message);
     }
     if (!message.guild || (message.author.bot && !message.webhookId)) return;
+    if (await enforceScamGuard(message, {
+      scamGuard,
+      detectScamGift,
+      canBypassScamGuard,
+      sendSecurityLog,
+      notifyTelegramScamBlocked
+    })) return;
     await enforceLeakGuard(message, {
       leakGuard,
       isPremiumGuild,

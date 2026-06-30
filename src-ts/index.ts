@@ -13,7 +13,7 @@ const embeds = require('./embeds').default || require('./embeds');
 const { createRankService } = require('./ranks');
 const { getReleaseNotes } = require('./release-notes');
 const ROLES = require('./roles').default || require('./roles');
-const { containsDiscordInvite, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
+const { containsDiscordInvite, detectScamGift, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
 const { createTelegramNotificationService } = require('./telegram');
 const { createTelegramBot, startTelegramBot, stopTelegramBot } = require('./telegram/bot');
@@ -102,6 +102,7 @@ const ACCESS_RANKS = config.accessRanks;
 const AI_ENABLED = config.aiEnabled;
 const AUTO_RANKS = config.autoRanks;
 const LEAK_GUARD = config.leakGuard;
+const SCAM_GUARD = config.scamGuard;
 const CHANNEL_GUARD = config.channelGuard;
 const ROLELESS_CLEANUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const AFK_WARNING_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
@@ -183,6 +184,10 @@ async function notifyTelegramMemberJoined(member: any) {
       createdAt: member.user?.createdAt
     }
   });
+}
+
+async function notifyTelegramScamBlocked(input: Record<string, any>) {
+  return telegramNotifications.notifyScamBlocked(input);
 }
 
 async function verifyWelcomeMemberFromTelegram(guildId: string, userId: string, actorName: string) {
@@ -934,6 +939,14 @@ function canBypassLeakGuard(member: any) {
   return canBypassLeakGuardHelper(accessApi, member);
 }
 
+function canBypassScamGuard(member: any) {
+  if (!SCAM_GUARD.enabled) return true;
+  if (!member) return false;
+  if (member.id && member.guild?.ownerId === member.id) return true;
+  if (member.permissions?.has?.(PermissionFlagsBits.Administrator)) return true;
+  return Boolean(SCAM_GUARD.allowedRoles.length && member.roles?.cache?.some((role: any) => SCAM_GUARD.allowedRoles.includes(role.id)));
+}
+
 function canBypassChannelGuard(member: any) {
   return canBypassChannelGuardHelper(accessApi, member);
 }
@@ -1460,6 +1473,7 @@ client.once('ready', () => {
 registerEventRuntime({
   client,
   leakGuard: LEAK_GUARD,
+  scamGuard: SCAM_GUARD,
   channelGuard: CHANNEL_GUARD,
   copySecurity: copy.security,
   getGuildStorage,
@@ -1467,10 +1481,13 @@ registerEventRuntime({
   isModuleEnabled,
   hasFamilyRole,
   containsDiscordInvite,
+  detectScamGift,
   canBypassLeakGuard,
+  canBypassScamGuard,
   handleAutomodMessage,
   handleCustomTriggerMessage,
   sendSecurityLog,
+  notifyTelegramScamBlocked,
   startVoiceSession,
   stopVoiceSession,
   enforceBlacklist,

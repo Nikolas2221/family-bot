@@ -5,9 +5,9 @@ import type { ReleaseNoteGroups } from './types';
 export const PRODUCT_VERSION_SEMVER = packageMeta.version || '1.0.17';
 
 function resolveProductVersionLabel(version: string): string {
-  if (/beta/i.test(version)) return 'BRHD/PHOENIX 0.1 BETA';
-  if (/\brc\b/i.test(version)) return 'BRHD/PHOENIX 1.0 RC';
-  return 'BRHD/PHOENIX 1.0 RELEASE';
+  if (/beta/i.test(version)) return 'KLAIZ BOT 0.1 BETA';
+  if (/\brc\b/i.test(version)) return 'KLAIZ BOT 1.0 RC';
+  return 'KLAIZ BOT 1.0 RELEASE';
 }
 
 export const PRODUCT_VERSION_LABEL = resolveProductVersionLabel(PRODUCT_VERSION_SEMVER);

@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.46': {
+    added: [
+      'KLAIZ BOT получил scam guard для Steam gift, fake claim, shortener и похожих phishing-ссылок',
+      'scam guard удаляет сообщение, выдаёт временный timeout на написание, отправляет отчёт в Discord-логи и Telegram',
+      'после удаления scam-ссылки бот тегает нарушителя с шуточным сообщением и GIF'
+    ],
+    updated: [
+      'защита проверяет новые сообщения, отредактированные сообщения, embed-текст и metadata вложений',
+      'лейбл карточки обновления теперь использует название KLAIZ BOT'
+    ],
+    fixed: [
+      'Steam gift/activation и короткие gift-ссылки больше не проходят мимо защиты как обычный текст'
+    ]
+  },
   '1.0.45': {
     added: [
       'модуль GitHub backup сервера с командами /serverbackup create, /serverbackup list и /serverbackup restore',
