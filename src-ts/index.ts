@@ -25,6 +25,7 @@ const { createLawService } = require('./services/law');
 const { createDeepSeekService } = require('./services/deepseek');
 const { createSupportTicketService } = require('./services/support-tickets');
 const { createAfkLeaveService } = require('./services/afk-leave');
+const { createServerBackupService } = require('./services/server-backups');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -152,6 +153,10 @@ const announcementService = createAnnouncementService({
   client,
   telegramNotifications,
   discordChannelId: config.discordAnnouncementsChannelId
+});
+const serverBackupService = createServerBackupService({
+  client,
+  config: config.serverBackup
 });
 registerTelegramHandlers(telegramBot, {
   adminChatId: config.telegramAdminChatId,
@@ -758,6 +763,7 @@ function getHelpCatalog(interaction: any) {
     { name: 'adminpanel', description: copy.commands.adminPanelDescription },
     { name: 'announce', description: 'Отправить семейное объявление в Telegram' },
     { name: 'event', description: 'Отправить семейное событие в Telegram' },
+    { name: 'serverbackup', description: 'Создать или восстановить backup структуры Discord-сервера' },
     { name: 'close', description: 'Закрыть текущий ticket' },
     { name: 'warn', description: copy.commands.warnDescription },
     { name: 'commend', description: copy.commands.commendDescription },
@@ -1447,6 +1453,10 @@ registerClientReadyRuntime({
   startVoiceSession
 });
 
+client.once('ready', () => {
+  serverBackupService.startAutoBackups();
+});
+
 registerEventRuntime({
   client,
   leakGuard: LEAK_GUARD,
@@ -1481,6 +1491,7 @@ registerEventRuntime({
 process.on('SIGINT', () => {
   stopTelegramBot(telegramBot, 'SIGINT');
   ticketService.stop();
+  serverBackupService.stopAutoBackups();
   flushVoiceSessions();
   database.flush();
   storage.flush();
@@ -1490,6 +1501,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   stopTelegramBot(telegramBot, 'SIGTERM');
   ticketService.stop();
+  serverBackupService.stopAutoBackups();
   flushVoiceSessions();
   database.flush();
   storage.flush();
@@ -1610,7 +1622,8 @@ registerInteractionRuntime({
     announcementService,
     discordAnnouncerRoleIds: config.discordAnnouncerRoleIds,
     ticketService,
-    lawService
+    lawService,
+    serverBackupService
   });
   },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,

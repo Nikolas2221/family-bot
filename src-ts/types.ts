@@ -45,6 +45,16 @@ export interface AfkLeaveConfig {
   preventDuplicatePanel: boolean;
 }
 
+export interface ServerBackupConfig {
+  enabled: boolean;
+  intervalHours: number;
+  githubToken: string;
+  githubOwner: string;
+  githubRepo: string;
+  githubBranch: string;
+  githubBasePath: string;
+}
+
 export interface RoleEnvEntry {
   key: string;
   value: string;
@@ -86,6 +96,7 @@ export interface AppConfig {
   deepSeekModel: string;
   supportTickets: SupportTicketConfig;
   afkLeave: AfkLeaveConfig;
+  serverBackup: ServerBackupConfig;
   autoRanks: AutoRanksConfig;
   leakGuard: GuardConfig;
   channelGuard: GuardConfig;

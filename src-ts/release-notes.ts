@@ -1,6 +1,18 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.45': {
+    added: [
+      'модуль GitHub backup сервера с командами /serverbackup create, /serverbackup list и /serverbackup restore',
+      'автоматический backup структуры Discord-сервера по таймеру через SERVER_BACKUP_ENABLED и SERVER_BACKUP_INTERVAL_HOURS'
+    ],
+    updated: [
+      'диагностика запуска теперь показывает статус server backup и целевой GitHub-репозиторий'
+    ],
+    fixed: [
+      'restore требует подтверждение RESTORE и создаёт роли/каналы без удаления текущей структуры сервера'
+    ]
+  },
   '1.0.44': {
     added: [
       'автоматическое извлечение прямой картинки из Imgur-ссылок для /setart'

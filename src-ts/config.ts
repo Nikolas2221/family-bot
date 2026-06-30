@@ -109,6 +109,15 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
       pinPanel: parseBoolean(env.AFK_PIN_PANEL || 'true'),
       preventDuplicatePanel: parseBoolean(env.AFK_PREVENT_DUPLICATE_PANEL || 'true')
     },
+    serverBackup: {
+      enabled: parseBoolean(env.SERVER_BACKUP_ENABLED),
+      intervalHours: parseNumber(env.SERVER_BACKUP_INTERVAL_HOURS, 48, { min: 1 }),
+      githubToken: trim(env.GITHUB_BACKUP_TOKEN),
+      githubOwner: trim(env.GITHUB_BACKUP_OWNER),
+      githubRepo: trim(env.GITHUB_BACKUP_REPO),
+      githubBranch: trim(env.GITHUB_BACKUP_BRANCH) || 'main',
+      githubBasePath: trim(env.GITHUB_BACKUP_BASE_PATH) || 'backups/server'
+    },
     autoRanks: {
       enabled: parseBoolean(env.AUTO_RANKS_ENABLED),
       intervalMs: parseNumber(env.AUTO_RANKS_INTERVAL_MS, 300000, { min: 60000 }),
@@ -230,6 +239,17 @@ export function validateConfig(config: AppConfig): ValidationResult {
     warnings.push('BOT_OWNER_IDS не задан. Owner-команды для подписок будут недоступны.');
   }
 
+  if (config.serverBackup.enabled) {
+    const missingBackupFields = [
+      ['GITHUB_BACKUP_TOKEN', config.serverBackup.githubToken],
+      ['GITHUB_BACKUP_OWNER', config.serverBackup.githubOwner],
+      ['GITHUB_BACKUP_REPO', config.serverBackup.githubRepo]
+    ].filter(([, value]) => !value).map(([name]) => name);
+    if (missingBackupFields.length) {
+      warnings.push(`SERVER_BACKUP_ENABLED=true, но не заданы GitHub backup переменные: ${missingBackupFields.join(', ')}`);
+    }
+  }
+
   if (!config.aiEnabled) {
     notes.push('AI отключён через AI_ENABLED=false.');
   } else if (config.deepSeekApiKey) {
@@ -265,6 +285,9 @@ export function summarizeConfig(config: AppConfig): string[] {
     : 'disabled';
   const leakGuardSummary = config.leakGuard.enabled ? 'enabled' : 'disabled';
   const channelGuardSummary = config.channelGuard.enabled ? 'enabled' : 'disabled';
+  const serverBackupSummary = config.serverBackup.enabled
+    ? `enabled every ${config.serverBackup.intervalHours}h -> ${config.serverBackup.githubOwner || '?'}/${config.serverBackup.githubRepo || '?'}`
+    : 'disabled';
   const ownersSummary = config.ownerIds.length ? `${config.ownerIds.length} owner(s)` : 'not configured';
 
   return [
@@ -288,7 +311,8 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- AI: ${config.aiEnabled ? (config.deepSeekApiKey ? `DeepSeek enabled (${config.deepSeekModel})` : 'offline helper enabled') : 'disabled'}`,
     `- auto ranks: ${autoRanksSummary}`,
     `- leak guard: ${leakGuardSummary}`,
-    `- channel guard: ${channelGuardSummary}`
+    `- channel guard: ${channelGuardSummary}`,
+    `- server backup: ${serverBackupSummary}`
   ];
 }
 

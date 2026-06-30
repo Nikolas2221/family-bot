@@ -1,4 +1,4 @@
-import { createGuildStorageContext } from './guild-runtime';
+﻿import { createGuildStorageContext } from './guild-runtime';
 import { canSendDiscordAnnouncement } from './services/announcements';
 import { buildDiscordOnlineMembersText } from './services/online-members';
 
@@ -137,6 +137,7 @@ interface CommandRuntimeOptions {
     answer(question: string): Promise<{ found: boolean; title: string; description: string }>;
     stats(): { documents: number };
   };
+  serverBackupService: any;
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -219,7 +220,8 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     announcementService,
     discordAnnouncerRoleIds,
     ticketService,
-    lawService
+    lawService,
+    serverBackupService
   } = options;
 
   const ephemeral = typeof rawEphemeral === 'function' ? rawEphemeral : ((payload: Record<string, unknown> = {}) => payload);
@@ -313,6 +315,57 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     const text = await buildDiscordOnlineMembersText(interaction.guild);
     await interaction.editReply({ content: text, allowedMentions: { parse: [] } });
     return true;
+  }
+
+  if (interaction.commandName === 'serverbackup') {
+    if (!canDebugConfig(interaction)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    if (subcommand === 'create') {
+      await interaction.deferReply({ flags: 64 });
+      const result = await serverBackupService.createBackup(interaction.guild, `manual-${interaction.user.id}`);
+      await interaction.editReply({
+        content: result.ok
+          ? `✅ Backup создан: \`${result.id}\`\n${result.url || result.path || ''}`
+          : `❌ Backup не создан: ${result.error || 'ошибка'}`
+      });
+      return true;
+    }
+
+    if (subcommand === 'list') {
+      await interaction.deferReply({ flags: 64 });
+      const backups = await serverBackupService.listBackups(interaction.guild.id);
+      const lines = backups
+        .slice(0, 10)
+        .map((backup: any, index: number) => `${index + 1}. \`${backup.id}\`${backup.url ? ` - ${backup.url}` : ''}`);
+      await interaction.editReply({
+        content: lines.length ? `Последние backup:\n${lines.join('\n')}` : 'Backup пока не найдены или GitHub не настроен.'
+      });
+      return true;
+    }
+
+    if (subcommand === 'restore') {
+      const backupId = interaction.options.getString('backup_id', true).trim();
+      const confirm = interaction.options.getString('confirm', true).trim();
+      if (confirm !== 'RESTORE') {
+        await interaction.reply(ephemeral({
+          content: 'Для восстановления напиши `RESTORE` в поле confirm. Restore создаёт роли и каналы, но не удаляет текущие.'
+        }));
+        return true;
+      }
+
+      await interaction.deferReply({ flags: 64 });
+      const result = await serverBackupService.restoreBackup(interaction.guild, backupId);
+      await interaction.editReply({
+        content: result.ok
+          ? `✅ Restore завершён: роли создано ${result.rolesCreated || 0}, каналов создано ${result.channelsCreated || 0}.`
+          : `❌ Restore не выполнен: ${result.error || 'ошибка'}`
+      });
+      return true;
+    }
   }
 
   if (interaction.commandName === 'law') {

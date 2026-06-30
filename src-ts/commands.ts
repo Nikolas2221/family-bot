@@ -15,6 +15,18 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
     new SlashCommandBuilder().setName('online').setDescription('Показать участников Discord в сети'),
     new SlashCommandBuilder()
+      .setName('serverbackup')
+      .setDescription('Создать или восстановить backup структуры Discord-сервера')
+      .addSubcommand(subcommand => subcommand.setName('create').setDescription('Создать backup сервера в GitHub'))
+      .addSubcommand(subcommand => subcommand.setName('list').setDescription('Показать последние backup сервера'))
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('restore')
+          .setDescription('Восстановить роли и каналы из backup')
+          .addStringOption(option => option.setName('backup_id').setDescription('ID backup из /serverbackup list').setRequired(true))
+          .addStringOption(option => option.setName('confirm').setDescription('Напиши RESTORE для подтверждения').setRequired(true))
+      ),
+    new SlashCommandBuilder()
       .setName('ticket')
       .setDescription('Управление системой поддержки')
       .addSubcommand(subcommand => subcommand.setName('setup').setDescription('Отправить панель создания тикета'))
