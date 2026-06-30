@@ -697,6 +697,24 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('testaccept').setDescription(copy.commands.testAcceptDescription),
     new SlashCommandBuilder().setName('debugconfig').setDescription(copy.commands.debugConfigDescription),
     new SlashCommandBuilder()
+      .setName('security')
+      .setDescription('Экстренная защита сервера')
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('lockdown')
+          .setDescription('Закрыть отправку сообщений на сервере')
+          .addIntegerOption(option =>
+            option
+              .setName('slowmode')
+              .setDescription('Slowmode в секундах для каналов')
+              .setRequired(false)
+              .setMinValue(0)
+              .setMaxValue(21600)
+          )
+      )
+      .addSubcommand(subcommand => subcommand.setName('unlock').setDescription('Снять emergency lockdown'))
+      .addSubcommand(subcommand => subcommand.setName('check').setDescription('Проверить права бота для защиты')),
+    new SlashCommandBuilder()
       .setName('profile')
       .setDescription(copy.commands.profileDescription)
       .addUserOption(option =>

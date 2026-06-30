@@ -74,6 +74,7 @@ async function main() {
     handleCustomTriggerMessage: async () => {},
     sendSecurityLog: async (_guild, content) => securityLogs.push(content),
     notifyTelegramScamBlocked: async report => telegramScamReports.push(report),
+    notifyTelegramSecurityAlert: async () => {},
     startVoiceSession() {}, stopVoiceSession() {}, enforceBlacklist: async () => false,
     sendWelcomeInvite: async () => {}, notifyTelegramMemberJoined: async member => telegramJoins.push(member.id), applyAutorole: async () => false,
     resolveGuildSettings: () => ({ verification: { enabled: false } }),

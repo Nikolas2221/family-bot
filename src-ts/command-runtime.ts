@@ -1,6 +1,7 @@
 ﻿import { createGuildStorageContext } from './guild-runtime';
 import { canSendDiscordAnnouncement } from './services/announcements';
 import { buildDiscordOnlineMembersText } from './services/online-members';
+import { ChannelType, PermissionFlagsBits } from 'discord.js';
 
 function isRenderableArtUrl(value: string): boolean {
   try {
@@ -66,6 +67,71 @@ function parseRoleIds(value: string): string[] {
   return Array.from(new Set((value.match(/\d{16,20}/g) || []).map(String)));
 }
 
+function isLockdownTargetChannel(channel: any): boolean {
+  return [
+    ChannelType.GuildText,
+    ChannelType.GuildAnnouncement,
+    ChannelType.GuildForum
+  ].includes(channel?.type);
+}
+
+function buildLockdownOverwrite(locked: boolean): Record<string, boolean | null> {
+  const value = locked ? false : null;
+  return {
+    SendMessages: value,
+    SendMessagesInThreads: value,
+    CreatePublicThreads: value,
+    CreatePrivateThreads: value,
+    AddReactions: value,
+    CreateInstantInvite: value
+  };
+}
+
+async function applyServerLockdown(guild: any, locked: boolean, actorId: string, slowmodeSeconds: number): Promise<{ touched: number; failed: number }> {
+  const fetched = await guild.channels.fetch?.().catch(() => null);
+  const channels: any[] = fetched?.values ? Array.from(fetched.values()) as any[] : Array.from(guild.channels.cache.values()) as any[];
+  const overwrite = buildLockdownOverwrite(locked);
+  const reason = `${locked ? 'Emergency lockdown' : 'Emergency unlock'} by ${actorId}`;
+  let touched = 0;
+  let failed = 0;
+
+  for (const channel of channels) {
+    if (!isLockdownTargetChannel(channel)) continue;
+
+    const overwriteOk = await channel.permissionOverwrites?.edit?.(guild.roles.everyone, overwrite, { reason })
+      .then(() => true)
+      .catch(() => false);
+    const slowmodeOk = typeof channel.setRateLimitPerUser === 'function'
+      ? await channel.setRateLimitPerUser(locked ? slowmodeSeconds : 0, reason).then(() => true).catch(() => false)
+      : true;
+
+    if (overwriteOk || slowmodeOk) {
+      touched += 1;
+    } else {
+      failed += 1;
+    }
+  }
+
+  return { touched, failed };
+}
+
+async function buildSecurityCheckLines(guild: any): Promise<string[]> {
+  const botMember = guild.members.me || await guild.members.fetchMe?.().catch(() => null);
+  const permissions = botMember?.permissions;
+  const checks = [
+    ['Manage Channels', PermissionFlagsBits.ManageChannels],
+    ['Manage Roles', PermissionFlagsBits.ManageRoles],
+    ['Manage Webhooks', PermissionFlagsBits.ManageWebhooks],
+    ['View Audit Log', PermissionFlagsBits.ViewAuditLog],
+    ['Moderate Members', PermissionFlagsBits.ModerateMembers],
+    ['Manage Messages', PermissionFlagsBits.ManageMessages],
+    ['Send Messages', PermissionFlagsBits.SendMessages],
+    ['Embed Links', PermissionFlagsBits.EmbedLinks]
+  ];
+
+  return checks.map(([label, permission]) => `${permissions?.has?.(permission) ? '✅' : '❌'} ${label}`);
+}
+
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
   AUTO_RANKS: any;
@@ -126,6 +192,8 @@ interface CommandRuntimeOptions {
   sendDisciplineLog(guild: any, embed: any): Promise<any>;
   sendDisciplineDm(kind: string, guild: any, user: any, moderator: any, reason: string): Promise<any>;
   sendRankDm(guild: any, member: any, result: any): Promise<any>;
+  sendSecurityLog(guild: any, content: string): Promise<any>;
+  notifyTelegramSecurityAlert(input: Record<string, any>): Promise<any>;
   aiService: any;
   isAiCommandOverviewQuery(query: string): boolean;
   buildAiCommandsOverview(interaction: any): string;
@@ -212,6 +280,8 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     sendDisciplineLog,
     sendDisciplineDm,
     sendRankDm,
+    sendSecurityLog,
+    notifyTelegramSecurityAlert,
     AUTO_RANKS,
     aiService,
     isAiCommandOverviewQuery: rawIsAiCommandOverviewQuery,
@@ -982,6 +1052,46 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
           : copy.moderation.unlockDone(channel.id)
         : copy.moderation.actionFailed(interaction.commandName)
     });
+    return true;
+  }
+
+  if (interaction.commandName === 'security') {
+    if (!canUseSecurity(interaction.member)) {
+      await interaction.reply(ephemeral({ content: copy.security.noSecurityAccess || copy.common.noAccess }));
+      return true;
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+
+    if (subcommand === 'check') {
+      const lines = await buildSecurityCheckLines(interaction.guild);
+      await interaction.reply(ephemeral({
+        content: ['🛡️ Проверка прав KLAIZ BOT', '', ...lines].join('\n')
+      }));
+      return true;
+    }
+
+    const locked = subcommand === 'lockdown';
+    const slowmodeSeconds = locked ? Math.max(0, Math.min(21600, interaction.options.getInteger('slowmode') ?? 60)) : 0;
+    await interaction.deferReply({ flags: 64 });
+    const result = await applyServerLockdown(interaction.guild, locked, interaction.user.id, slowmodeSeconds);
+    const title = locked ? '🚨 Emergency lockdown включён' : '✅ Emergency lockdown снят';
+    const text = [
+      title,
+      `Модератор: <@${interaction.user.id}> (${interaction.user.id})`,
+      `Каналов обработано: ${result.touched}`,
+      `Ошибок: ${result.failed}`,
+      locked ? `Slowmode: ${slowmodeSeconds} сек.` : 'Slowmode: снят'
+    ].join('\n');
+
+    await sendSecurityLog(interaction.guild, text).catch(() => null);
+    await notifyTelegramSecurityAlert({
+      title,
+      guild: interaction.guild,
+      actor: interaction.user,
+      content: text
+    }).catch(() => null);
+    await interaction.editReply({ content: text });
     return true;
   }
 

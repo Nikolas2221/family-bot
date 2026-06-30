@@ -1,3 +1,5 @@
+import { AuditLogEvent, PermissionFlagsBits } from 'discord.js';
+
 interface UserLike {
   id: string;
   bot?: boolean;
@@ -28,6 +30,7 @@ interface MemberLike {
 
 interface GuildLike {
   id: string;
+  name?: string;
   ownerId?: string | null;
   memberCount?: number;
   members: {
@@ -42,13 +45,16 @@ interface GuildLike {
     };
     fetch(id: string): Promise<RoleLike | null>;
   };
+  fetchAuditLogs?(options: Record<string, unknown>): Promise<any>;
 }
 
 interface ChannelLike {
   id: string;
   name?: string;
   archived?: boolean;
+  guild?: GuildLike | null;
   send?(payload: Record<string, unknown>): Promise<NoticeLike | null>;
+  fetchWebhooks?(): Promise<any>;
 }
 
 interface NoticeLike {
@@ -248,6 +254,19 @@ interface ChannelDeleteLike {
   guild?: GuildLike | null;
 }
 
+interface RoleEventLike {
+  id: string;
+  name?: string;
+  guild?: GuildLike | null;
+  managed?: boolean;
+  permissions?: {
+    has(permission: unknown): boolean;
+    bitfield?: unknown;
+  } | null;
+  delete?(reason?: string): Promise<unknown>;
+  edit?(options: Record<string, unknown>, reason?: string): Promise<unknown>;
+}
+
 interface GuildStorageLike {
   recordAnalyticsMessage(memberId: string, channelId: string): unknown;
   recordMessage(memberId: string): unknown;
@@ -297,6 +316,7 @@ interface EventRuntimeOptions {
   handleCustomTriggerMessage(message: MessageLike): Promise<unknown>;
   sendSecurityLog(guild: GuildLike, content: string): Promise<unknown>;
   notifyTelegramScamBlocked(input: Record<string, any>): Promise<unknown>;
+  notifyTelegramSecurityAlert(input: Record<string, any>): Promise<unknown>;
   startVoiceSession(member: MemberLike): void;
   stopVoiceSession(member: MemberLike): void;
   enforceBlacklist(member: MemberLike): Promise<boolean>;
@@ -369,6 +389,140 @@ async function applyReactionRoleChange(
   await member.roles.add(role, `Reaction role add ${entry.emoji}`).catch(() => null);
 }
 
+const dangerousRolePermissions = [
+  PermissionFlagsBits.Administrator,
+  PermissionFlagsBits.ManageGuild,
+  PermissionFlagsBits.ManageRoles,
+  PermissionFlagsBits.ManageChannels,
+  PermissionFlagsBits.ManageWebhooks,
+  PermissionFlagsBits.BanMembers,
+  PermissionFlagsBits.KickMembers,
+  PermissionFlagsBits.MentionEveryone
+];
+
+function roleHasDangerousPermissions(role: RoleEventLike | null | undefined): boolean {
+  return Boolean(role?.permissions && dangerousRolePermissions.some(permission => role.permissions?.has(permission)));
+}
+
+function roleGainedDangerousPermissions(oldRole: RoleEventLike | null | undefined, newRole: RoleEventLike | null | undefined): boolean {
+  if (!newRole?.permissions) return false;
+  return dangerousRolePermissions.some(permission => newRole.permissions?.has(permission) && !oldRole?.permissions?.has(permission));
+}
+
+async function fetchRecentAuditExecutor(guild: GuildLike, type: unknown, targetId?: string): Promise<UserLike | null> {
+  const logs = await guild.fetchAuditLogs?.({ type, limit: 5 }).catch(() => null);
+  if (!logs?.entries?.values) return null;
+
+  const now = Date.now();
+  for (const entry of logs.entries.values()) {
+    if (targetId && entry.target?.id !== targetId) continue;
+    if (entry.createdTimestamp && now - entry.createdTimestamp > 15000) continue;
+    return entry.executor || null;
+  }
+
+  return null;
+}
+
+async function isTrustedSecurityActor(guild: GuildLike, actor: UserLike | null, canBypassChannelGuard: EventRuntimeOptions['canBypassChannelGuard']): Promise<boolean> {
+  if (!actor?.id) return false;
+  if (guild.ownerId && guild.ownerId === actor.id) return true;
+  const member = await guild.members.fetch(actor.id).catch(() => null);
+  return canBypassChannelGuard(member);
+}
+
+async function reportSecurityAlert(
+  guild: GuildLike,
+  input: { title: string; actor?: UserLike | null; content: string },
+  options: Pick<EventRuntimeOptions, 'sendSecurityLog' | 'notifyTelegramSecurityAlert'>
+): Promise<void> {
+  const text = [input.title, input.actor?.id ? `Инициатор: <@${input.actor.id}> (${input.actor.id})` : '', input.content].filter(Boolean).join('\n');
+  await options.sendSecurityLog(guild, text).catch(() => null);
+  await options.notifyTelegramSecurityAlert({
+    title: input.title,
+    guild,
+    actor: input.actor,
+    content: input.content
+  }).catch(() => null);
+}
+
+async function handleDangerousRoleCreate(
+  role: RoleEventLike,
+  options: Pick<EventRuntimeOptions, 'isPremiumGuild' | 'isModuleEnabled' | 'canBypassChannelGuard' | 'sendSecurityLog' | 'notifyTelegramSecurityAlert'>
+): Promise<void> {
+  if (!role.guild || role.managed || !options.isPremiumGuild(role.guild.id) || !options.isModuleEnabled(role.guild.id, 'security')) return;
+  if (!roleHasDangerousPermissions(role)) return;
+
+  const actor = await fetchRecentAuditExecutor(role.guild, AuditLogEvent.RoleCreate, role.id);
+  if (await isTrustedSecurityActor(role.guild, actor, options.canBypassChannelGuard)) return;
+
+  const deleted = await role.delete?.(`Security guard: dangerous role created by ${actor?.id || 'unknown'}`).then(() => true).catch(() => false);
+  await reportSecurityAlert(role.guild, {
+    title: '🚨 Security: опасная роль создана',
+    actor,
+    content: [
+      `Роль: ${role.name || role.id} (${role.id})`,
+      `Действие: ${deleted ? 'роль удалена' : 'не удалось удалить роль'}`
+    ].join('\n')
+  }, options);
+}
+
+async function handleDangerousRoleUpdate(
+  oldRole: RoleEventLike,
+  newRole: RoleEventLike,
+  options: Pick<EventRuntimeOptions, 'isPremiumGuild' | 'isModuleEnabled' | 'canBypassChannelGuard' | 'sendSecurityLog' | 'notifyTelegramSecurityAlert'>
+): Promise<void> {
+  if (!newRole.guild || newRole.managed || !options.isPremiumGuild(newRole.guild.id) || !options.isModuleEnabled(newRole.guild.id, 'security')) return;
+  if (!roleGainedDangerousPermissions(oldRole, newRole)) return;
+
+  const actor = await fetchRecentAuditExecutor(newRole.guild, AuditLogEvent.RoleUpdate, newRole.id);
+  if (await isTrustedSecurityActor(newRole.guild, actor, options.canBypassChannelGuard)) return;
+
+  const previousPermissions = oldRole.permissions?.bitfield ?? oldRole.permissions;
+  const reverted = await newRole.edit?.({ permissions: previousPermissions }, `Security guard: dangerous role permissions by ${actor?.id || 'unknown'}`)
+    .then(() => true)
+    .catch(() => false);
+  await reportSecurityAlert(newRole.guild, {
+    title: '🚨 Security: опасные права роли',
+    actor,
+    content: [
+      `Роль: ${newRole.name || newRole.id} (${newRole.id})`,
+      `Действие: ${reverted ? 'права откатились' : 'не удалось откатить права'}`
+    ].join('\n')
+  }, options);
+}
+
+async function handleWebhookUpdate(
+  channel: ChannelLike,
+  options: Pick<EventRuntimeOptions, 'isPremiumGuild' | 'isModuleEnabled' | 'canBypassChannelGuard' | 'sendSecurityLog' | 'notifyTelegramSecurityAlert'>
+): Promise<void> {
+  const guild = channel.guild;
+  if (!guild || !options.isPremiumGuild(guild.id) || !options.isModuleEnabled(guild.id, 'security')) return;
+
+  const logs = await guild.fetchAuditLogs?.({ type: AuditLogEvent.WebhookCreate, limit: 5 }).catch(() => null);
+  const now = Date.now();
+  const entry: any = logs?.entries?.values
+    ? (Array.from(logs.entries.values()) as any[]).find((item: any) => (!item.createdTimestamp || now - item.createdTimestamp <= 15000))
+    : null;
+  const actor = entry?.executor || null;
+  if (await isTrustedSecurityActor(guild, actor, options.canBypassChannelGuard)) return;
+
+  const targetId = entry?.target?.id ? String(entry.target.id) : '';
+  if (!targetId || typeof channel.fetchWebhooks !== 'function') return;
+
+  const webhooks = await channel.fetchWebhooks().catch(() => null);
+  const webhook = webhooks?.get?.(targetId);
+  const deleted = webhook ? await webhook.delete(`Security guard: webhook created by ${actor?.id || 'unknown'}`).then(() => true).catch(() => false) : false;
+  await reportSecurityAlert(guild, {
+    title: '🚨 Security: webhook создан',
+    actor,
+    content: [
+      `Канал: <#${channel.id}> (${channel.id})`,
+      `Webhook: ${targetId}`,
+      `Действие: ${deleted ? 'webhook удалён' : 'не удалось удалить webhook'}`
+    ].join('\n')
+  }, options);
+}
+
 export function registerEventRuntime(options: EventRuntimeOptions): void {
   const {
     client,
@@ -388,6 +542,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     handleCustomTriggerMessage,
     sendSecurityLog,
     notifyTelegramScamBlocked,
+    notifyTelegramSecurityAlert,
     startVoiceSession,
     stopVoiceSession,
     enforceBlacklist,
@@ -467,7 +622,10 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     'messageReactionAdd',
     'messageReactionRemove',
     'guildMemberUpdate',
-    'channelDelete'
+    'channelDelete',
+    'roleCreate',
+    'roleUpdate',
+    'webhooksUpdate'
   ];
 
   for (const eventName of managedEvents) {
@@ -651,5 +809,41 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     } catch (error) {
       console.error('Ошибка защиты каналов:', error);
     }
+  });
+
+  client.on('roleCreate', async (role: RoleEventLike) => {
+    await handleDangerousRoleCreate(role, {
+      isPremiumGuild,
+      isModuleEnabled,
+      canBypassChannelGuard,
+      sendSecurityLog,
+      notifyTelegramSecurityAlert
+    }).catch(error => {
+      console.error('Ошибка защиты ролей:', error);
+    });
+  });
+
+  client.on('roleUpdate', async (oldRole: RoleEventLike, newRole: RoleEventLike) => {
+    await handleDangerousRoleUpdate(oldRole, newRole, {
+      isPremiumGuild,
+      isModuleEnabled,
+      canBypassChannelGuard,
+      sendSecurityLog,
+      notifyTelegramSecurityAlert
+    }).catch(error => {
+      console.error('Ошибка защиты ролей:', error);
+    });
+  });
+
+  client.on('webhooksUpdate', async (channel: ChannelLike) => {
+    await handleWebhookUpdate(channel, {
+      isPremiumGuild,
+      isModuleEnabled,
+      canBypassChannelGuard,
+      sendSecurityLog,
+      notifyTelegramSecurityAlert
+    }).catch(error => {
+      console.error('Ошибка защиты webhook:', error);
+    });
   });
 }

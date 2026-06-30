@@ -52,6 +52,7 @@ export interface TelegramNotificationService {
   notifyTicketActivity(input: TicketActivityNotificationInput): Promise<boolean>;
   notifyMemberJoined(input: MemberJoinedNotificationInput): Promise<boolean>;
   notifyScamBlocked(input: Record<string, any>): Promise<boolean>;
+  notifySecurityAlert(input: Record<string, any>): Promise<boolean>;
   notifyAfkRequestCreated(input: AfkRequestNotificationInput): Promise<boolean>;
   sendAnnouncement(input: { type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string }>;
 }
@@ -224,6 +225,18 @@ export function createTelegramNotificationService(options: {
         '',
         `Фрагмент: ${clean(input.content, 'без текста', 1200)}`
       ].join('\n'));
+    },
+    notifySecurityAlert(input) {
+      const title = clean(input.title, '🛡️ Security alert', 200);
+      const guildName = clean(input.guild?.name || input.guild?.id, 'сервер', 100);
+      const actorName = clean(input.actor?.globalName || input.actor?.username || input.actor?.id, 'неизвестно', 100);
+      return send(adminChatId, [
+        title,
+        '',
+        `Сервер: ${guildName}`,
+        input.actor ? `Инициатор: ${actorName} (${clean(input.actor?.id, 'unknown', 32)})` : '',
+        clean(input.content, '', 2500)
+      ].filter(Boolean).join('\n'));
     },
     notifyAfkRequestCreated(input) {
       const request = input.request;

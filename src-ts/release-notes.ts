@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.47': {
+    added: [
+      'команда /security lockdown для экстренного закрытия отправки сообщений, threads, reactions и invite-создания на сервере',
+      'команда /security unlock для снятия emergency lockdown со всех текстовых, announcement и forum-каналов',
+      'команда /security check для проверки прав KLAIZ BOT: Manage Channels, Manage Roles, Manage Webhooks, View Audit Log, Moderate Members и Manage Messages',
+      'security-мониторинг опасных ролей и webhook-ов с отчётами в Discord-логи и Telegram'
+    ],
+    updated: [
+      'опасные роли с Administrator/ManageRoles/ManageGuild/ManageWebhooks теперь удаляются или откатываются, если действие сделал не доверенный администратор'
+    ],
+    fixed: [
+      'webhook, созданный недоверенным пользователем, теперь удаляется по audit log и отправляет security-отчёт'
+    ]
+  },
   '1.0.46': {
     added: [
       'KLAIZ BOT получил scam guard для Steam gift, fake claim, shortener и похожих phishing-ссылок',

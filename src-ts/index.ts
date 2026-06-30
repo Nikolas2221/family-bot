@@ -190,6 +190,10 @@ async function notifyTelegramScamBlocked(input: Record<string, any>) {
   return telegramNotifications.notifyScamBlocked(input);
 }
 
+async function notifyTelegramSecurityAlert(input: Record<string, any>) {
+  return telegramNotifications.notifySecurityAlert(input);
+}
+
 async function verifyWelcomeMemberFromTelegram(guildId: string, userId: string, actorName: string) {
   const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
   if (!guild) return 'not_found' as const;
@@ -709,6 +713,7 @@ function getCommandModule(commandName: any) {
     case 'blacklistlist':
     case 'banlist':
     case 'unbanid':
+    case 'security':
       return 'security';
     case 'leaderboard':
     case 'voiceactivity':
@@ -777,6 +782,7 @@ function getHelpCatalog(interaction: any) {
     { name: 'unmute', description: copy.commands.unmuteDescription },
     { name: 'lockchannel', description: copy.commands.lockChannelDescription },
     { name: 'unlockchannel', description: copy.commands.unlockChannelDescription },
+    { name: 'security', description: 'Экстренная защита сервера' },
     { name: 'slowmode', description: copy.commands.slowmodeDescription },
     { name: 'warnhistory', description: copy.commands.warnHistoryDescription },
     { name: 'serverreport', description: copy.commands.serverReportDescription },
@@ -882,6 +888,7 @@ function canUseCommandInContext(commandName: any, interaction: any) {
     case 'blacklistlist':
     case 'banlist':
     case 'unbanid':
+    case 'security':
       return canUseSecurity(interaction.member);
     case 'subscription':
       return isOwner(interaction.user.id);
@@ -1488,6 +1495,7 @@ registerEventRuntime({
   handleCustomTriggerMessage,
   sendSecurityLog,
   notifyTelegramScamBlocked,
+  notifyTelegramSecurityAlert,
   startVoiceSession,
   stopVoiceSession,
   enforceBlacklist,
@@ -1626,6 +1634,8 @@ registerInteractionRuntime({
     sendRankDm,
     sendDisciplineDm,
     sendDisciplineLog,
+    sendSecurityLog,
+    notifyTelegramSecurityAlert,
     storage,
     summarizeConfig,
     syncAutoRanks,
