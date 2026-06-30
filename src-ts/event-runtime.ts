@@ -169,12 +169,7 @@ async function enforceScamGuard(
   if (gifUrl) {
     noticePayload.embeds = [{ image: { url: gifUrl } }];
   }
-  const notice = await message.channel.send?.(noticePayload).catch(() => null);
-  if (notice) {
-    setTimeout(() => {
-      void notice.delete().catch(() => null);
-    }, 10000);
-  }
+  await message.channel.send?.(noticePayload).catch(() => null);
 
   return true;
 }
