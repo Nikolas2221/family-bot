@@ -123,15 +123,10 @@ export function createAccessApi(options: CreateAccessApiOptions) {
   function canBypassChannelGuard(member: MemberLike | null | undefined): boolean {
     if (!channelGuard.enabled) return true;
     if (!member) return false;
-    if (!channelGuard.allowedRoles.length) {
-      return hasPermission(member, PermissionFlagsBits.ManageGuild) || hasPermission(member, PermissionFlagsBits.ManageChannels);
-    }
+    if (member.id && member.guild?.ownerId === member.id) return true;
+    if (hasPermission(member, PermissionFlagsBits.Administrator)) return true;
 
-    return (
-      hasAnyRole(member, channelGuard.allowedRoles) ||
-      hasPermission(member, PermissionFlagsBits.ManageGuild) ||
-      hasPermission(member, PermissionFlagsBits.ManageChannels)
-    );
+    return channelGuard.allowedRoles.length > 0 && hasAnyRole(member, channelGuard.allowedRoles);
   }
 
   function canManageTargetChannel(member: MemberLike | null | undefined, channel: ChannelLike | null | undefined): boolean {

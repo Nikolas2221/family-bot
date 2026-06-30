@@ -38,6 +38,18 @@ interface DatabaseLike {
   updateGuildMaintenance(guildId: string, patch: { lastUpdateAnnouncementId: string }): void;
 }
 
+interface TelegramNotificationsLike {
+  notifyUpdateAnnouncement?(input: {
+    guildId?: string;
+    versionLabel: string;
+    semver: string;
+    buildId: string;
+    commitMessage?: string;
+    changeLines?: ReleaseNoteGroups;
+    createdAt?: Date;
+  }): Promise<boolean>;
+}
+
 interface NotificationHelpersOptions {
   copy: CopyCatalog;
   embeds: EmbedsApi;
@@ -56,6 +68,7 @@ interface NotificationHelpersOptions {
     getReleaseGroups: (commitMessage?: string | null) => ReleaseNoteGroups
   ): ReleaseNoteGroups;
   getCurrentReleaseChangeGroups(commitMessage?: string | null): ReleaseNoteGroups;
+  telegramNotifications?: TelegramNotificationsLike;
 }
 
 async function sendDirectNotification(
@@ -103,7 +116,8 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     deployBuildId,
     deployCommitMessage,
     getUpdateChangeGroups,
-    getCurrentReleaseChangeGroups
+    getCurrentReleaseChangeGroups,
+    telegramNotifications
   } = options;
 
   async function sendAcceptanceDm({
@@ -283,7 +297,8 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     const channel = await fetchTextChannel(guild, channelId);
     if (!channel) return;
 
-    const sent = await channel
+    const changeLines = getUpdateChangeGroups(deployCommitMessage, getCurrentReleaseChangeGroups);
+    const sentDiscord = await channel
       .send({
         embeds: [
           embeds.buildUpdateAnnouncementEmbed({
@@ -291,13 +306,23 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
             semver: productVersionSemver,
             buildId: deployBuildId,
             commitMessage: deployCommitMessage,
-            changeLines: getUpdateChangeGroups(deployCommitMessage, getCurrentReleaseChangeGroups)
+            changeLines
           })
         ]
       })
-      .catch(() => null);
+      .then(() => true)
+      .catch(() => false);
+    const sentTelegram = await telegramNotifications?.notifyUpdateAnnouncement?.({
+      guildId: guild.id,
+      versionLabel: productVersionLabel,
+      semver: productVersionSemver,
+      buildId: deployBuildId,
+      commitMessage: deployCommitMessage,
+      changeLines,
+      createdAt: new Date()
+    }).catch(() => false);
 
-    if (sent) {
+    if (sentDiscord || sentTelegram) {
       database.updateGuildMaintenance(guild.id, { lastUpdateAnnouncementId: currentBuildSignature });
     }
   }

@@ -35,7 +35,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
     return false;
   }
 
-  async function requireAfkTelegramAdmin(ctx: any): Promise<boolean> {
+  async function requireTelegramAdmin(ctx: any): Promise<boolean> {
     if (!(await requireAdminChat(ctx))) return false;
     if (ctx.chat?.type === 'private') return true;
     const member = await ctx.getChatMember?.(ctx.from?.id).catch(() => null);
@@ -47,7 +47,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   }
 
   bot.action(/^ticket_take:(.+)$/u, async (ctx: any) => {
-    if (!(await requireAdminChat(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     const ticketId = String(ctx.match?.[1] || '').trim();
     const author = telegramAuthor(ctx);
     const result = await options.tickets.takeInWork(ticketId, author.name);
@@ -64,7 +64,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   });
 
   bot.action(/^welcome_verify:(\d{16,20}):(\d{16,20})$/u, async (ctx: any) => {
-    if (!(await requireAdminChat(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     const guildId = String(ctx.match?.[1] || '');
     const userId = String(ctx.match?.[2] || '');
     if (!options.verifyWelcomeMember) {
@@ -92,7 +92,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   });
 
   bot.action(/^afk_approve:([a-f0-9]{8})$/u, async (ctx: any) => {
-    if (!(await requireAfkTelegramAdmin(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     if (!options.afkLeave) {
       await ctx.answerCbQuery('Система АФК-отпусков недоступна', { show_alert: true });
       return;
@@ -117,14 +117,14 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   });
 
   bot.action(/^afk_decline:([a-f0-9]{8})$/u, async (ctx: any) => {
-    if (!(await requireAfkTelegramAdmin(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     const requestId = String(ctx.match?.[1] || '');
     await ctx.answerCbQuery('Укажи причину отказа');
     await ctx.reply(`Для отказа обязательно укажи причину:\n/afkdecline ${requestId} причина отказа`);
   });
 
   bot.command('afkdecline', async (ctx: any) => {
-    if (!(await requireAfkTelegramAdmin(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     if (!options.afkLeave) {
       await ctx.reply('❌ Система АФК-отпусков недоступна.');
       return;
@@ -154,7 +154,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   });
 
   bot.command('reply', async (ctx: any) => {
-    if (!(await requireAdminChat(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     const input = commandText(ctx);
     const [ticketId = '', ...parts] = input.split(/\s+/u);
     const text = parts.join(' ').trim();
@@ -179,7 +179,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   });
 
   async function handleAnnouncement(ctx: any, type: 'announcement' | 'event'): Promise<void> {
-    if (!(await requireAdminChat(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     const text = commandText(ctx);
     if (!text) {
       await ctx.reply('❌ Укажи текст объявления.');
@@ -198,7 +198,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
   bot.command('announce', (ctx: any) => handleAnnouncement(ctx, 'announcement'));
   bot.command('event', (ctx: any) => handleAnnouncement(ctx, 'event'));
   bot.command('online', async (ctx: any) => {
-    if (!(await requireAdminChat(ctx))) return;
+    if (!(await requireTelegramAdmin(ctx))) return;
     if (!options.getOnlineMembers) {
       await ctx.reply('❌ Не удалось получить список участников Discord.');
       return;

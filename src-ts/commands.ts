@@ -24,7 +24,7 @@ export function buildCommands(): CommandJson[] {
           .setName('restore')
           .setDescription('Восстановить роли и каналы из backup')
           .addStringOption(option => option.setName('backup_id').setDescription('ID backup из /serverbackup list').setRequired(true))
-          .addStringOption(option => option.setName('confirm').setDescription('Напиши RESTORE для подтверждения').setRequired(true))
+          .addStringOption(option => option.setName('confirm').setDescription('Напиши RESTORE-backup_id для подтверждения').setRequired(true))
       ),
     new SlashCommandBuilder()
       .setName('ticket')

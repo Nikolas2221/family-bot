@@ -1,4 +1,4 @@
-import { ChannelType, PermissionsBitField } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
 
 type BackupConfig = {
   enabled: boolean;
@@ -32,6 +32,28 @@ function permissionsToString(value: unknown): string {
   } catch {
     return String(value || '0');
   }
+}
+
+const unsafeRestoredRolePermissions = [
+  PermissionFlagsBits.Administrator,
+  PermissionFlagsBits.ManageGuild,
+  PermissionFlagsBits.ManageRoles,
+  PermissionFlagsBits.ManageWebhooks,
+  PermissionFlagsBits.MentionEveryone
+] as bigint[];
+
+function sanitizeRestoredRolePermissions(value: unknown): bigint {
+  let permissions: bigint;
+  try {
+    permissions = BigInt(String(value || '0'));
+  } catch {
+    return 0n;
+  }
+
+  for (const permission of unsafeRestoredRolePermissions) {
+    permissions &= ~permission;
+  }
+  return permissions;
 }
 
 function serializeOverwrites(channel: any) {
@@ -233,12 +255,21 @@ export function createServerBackupService({ client, config }: { client: any; con
   async function restoreBackup(guild: any, backupId: string): Promise<BackupResult & { rolesCreated?: number; channelsCreated?: number }> {
     const backup = await fetchBackup(guild.id, backupId);
     if (!backup) return { ok: false, error: `Backup ${backupId} not found.` };
+    if (backup.guild?.id && String(backup.guild.id) !== String(guild.id)) {
+      return { ok: false, error: `Backup ${backupId} belongs to another guild.` };
+    }
+
+    const backupRoles = Array.isArray(backup.roles) ? backup.roles : [];
+    const backupChannels = Array.isArray(backup.channels) ? backup.channels : [];
+    if (backupRoles.length > 250 || backupChannels.length > 500) {
+      return { ok: false, error: 'Backup is too large for safe automatic restore.' };
+    }
 
     const roleMap = new Map<string, string>();
     roleMap.set(backup.guild?.id || guild.id, guild.id);
 
     const existingRolesByName = new Map(Array.from(guild.roles.cache.values()).map((role: any) => [role.name, role]));
-    const roles = [...(backup.roles || [])].sort((left: any, right: any) => left.position - right.position);
+    const roles = [...backupRoles].sort((left: any, right: any) => left.position - right.position);
     let rolesCreated = 0;
     for (const roleData of roles) {
       const existing = existingRolesByName.get(roleData.name) as any;
@@ -251,7 +282,7 @@ export function createServerBackupService({ client, config }: { client: any; con
         color: roleData.color || undefined,
         hoist: roleData.hoist,
         mentionable: roleData.mentionable,
-        permissions: BigInt(roleData.permissions || '0'),
+        permissions: sanitizeRestoredRolePermissions(roleData.permissions),
         reason: `Restore server backup ${backupId}`
       });
       roleMap.set(roleData.id, role.id);
@@ -259,8 +290,8 @@ export function createServerBackupService({ client, config }: { client: any; con
     }
 
     const channelMap = new Map<string, string>();
-    const categories = (backup.channels || []).filter((channel: any) => channel.type === ChannelType.GuildCategory);
-    const children = (backup.channels || []).filter((channel: any) => channel.type !== ChannelType.GuildCategory);
+    const categories = backupChannels.filter((channel: any) => channel.type === ChannelType.GuildCategory);
+    const children = backupChannels.filter((channel: any) => channel.type !== ChannelType.GuildCategory);
     let channelsCreated = 0;
 
     async function createChannel(channelData: any) {

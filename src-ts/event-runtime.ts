@@ -1,4 +1,5 @@
-import { AuditLogEvent, PermissionFlagsBits } from 'discord.js';
+import { AuditLogEvent, ChannelType, PermissionFlagsBits } from 'discord.js';
+import { getActiveLockdown } from './services/security-lockdown';
 
 interface UserLike {
   id: string;
@@ -40,6 +41,7 @@ interface GuildLike {
     fetch(id: string): Promise<MemberLike | null>;
   };
   roles: {
+    everyone?: RoleLike;
     cache: {
       get(id: string): RoleLike | undefined;
     };
@@ -51,10 +53,15 @@ interface GuildLike {
 interface ChannelLike {
   id: string;
   name?: string;
+  type?: number;
   archived?: boolean;
   guild?: GuildLike | null;
   send?(payload: Record<string, unknown>): Promise<NoticeLike | null>;
   fetchWebhooks?(): Promise<any>;
+  permissionOverwrites?: {
+    edit(target: unknown, overwrite: Record<string, boolean | null>, options?: Record<string, unknown>): Promise<unknown>;
+  };
+  setRateLimitPerUser?(seconds: number, reason?: string): Promise<unknown>;
 }
 
 interface NoticeLike {
@@ -445,6 +452,49 @@ async function reportSecurityAlert(
   }).catch(() => null);
 }
 
+function isLockdownTargetChannel(channel: ChannelLike | null | undefined): boolean {
+  return [
+    ChannelType.GuildText,
+    ChannelType.GuildAnnouncement,
+    ChannelType.GuildForum
+  ].includes(channel?.type as any);
+}
+
+function buildLockdownOverwrite(): Record<string, boolean> {
+  return {
+    SendMessages: false,
+    SendMessagesInThreads: false,
+    CreatePublicThreads: false,
+    CreatePrivateThreads: false,
+    AddReactions: false,
+    CreateInstantInvite: false
+  };
+}
+
+async function applyActiveLockdownToNewChannel(
+  channel: ChannelLike,
+  options: Pick<EventRuntimeOptions, 'sendSecurityLog' | 'notifyTelegramSecurityAlert'>
+): Promise<void> {
+  const guild = channel.guild;
+  if (!guild || !isLockdownTargetChannel(channel)) return;
+  const state = getActiveLockdown(guild.id);
+  if (!state) return;
+
+  const reason = `Emergency lockdown active by ${state.actorId}`;
+  const overwriteOk = await channel.permissionOverwrites?.edit?.(guild.roles.everyone || guild.id, buildLockdownOverwrite(), { reason })
+    .then(() => true)
+    .catch(() => false);
+  const slowmodeOk = typeof channel.setRateLimitPerUser === 'function'
+    ? await channel.setRateLimitPerUser(state.slowmodeSeconds, reason).then(() => true).catch(() => false)
+    : true;
+
+  if (overwriteOk || slowmodeOk) return;
+  await reportSecurityAlert(guild, {
+    title: '🚨 Security: lockdown не применился к новому каналу',
+    content: `Канал: <#${channel.id}> (${channel.id})\nПроверь права бота Manage Channels.`
+  }, options);
+}
+
 async function handleDangerousRoleCreate(
   role: RoleEventLike,
   options: Pick<EventRuntimeOptions, 'isPremiumGuild' | 'isModuleEnabled' | 'canBypassChannelGuard' | 'sendSecurityLog' | 'notifyTelegramSecurityAlert'>
@@ -498,22 +548,41 @@ async function handleWebhookUpdate(
   const guild = channel.guild;
   if (!guild || !options.isPremiumGuild(guild.id) || !options.isModuleEnabled(guild.id, 'security')) return;
 
-  const logs = await guild.fetchAuditLogs?.({ type: AuditLogEvent.WebhookCreate, limit: 5 }).catch(() => null);
   const now = Date.now();
-  const entry: any = logs?.entries?.values
-    ? (Array.from(logs.entries.values()) as any[]).find((item: any) => (!item.createdTimestamp || now - item.createdTimestamp <= 15000))
-    : null;
+  const entries: any[] = [];
+  for (const type of [AuditLogEvent.WebhookCreate, AuditLogEvent.WebhookUpdate, AuditLogEvent.WebhookDelete]) {
+    const logs = await guild.fetchAuditLogs?.({ type, limit: 5 }).catch(() => null);
+    if (logs?.entries?.values) entries.push(...Array.from(logs.entries.values()) as any[]);
+  }
+  const entry: any = entries
+    .filter((item: any) => !item.createdTimestamp || now - item.createdTimestamp <= 15000)
+    .sort((left: any, right: any) => Number(right.createdTimestamp || 0) - Number(left.createdTimestamp || 0))[0] || null;
   const actor = entry?.executor || null;
   if (await isTrustedSecurityActor(guild, actor, options.canBypassChannelGuard)) return;
 
   const targetId = entry?.target?.id ? String(entry.target.id) : '';
-  if (!targetId || typeof channel.fetchWebhooks !== 'function') return;
+  if (!targetId) {
+    await reportSecurityAlert(guild, {
+      title: '🚨 Security: webhook изменён',
+      actor,
+      content: `Канал: <#${channel.id}> (${channel.id})\nAudit log не вернул target webhook. Проверь канал вручную.`
+    }, options);
+    return;
+  }
+  if (entry?.action === AuditLogEvent.WebhookDelete || typeof channel.fetchWebhooks !== 'function') {
+    await reportSecurityAlert(guild, {
+      title: '🚨 Security: webhook удалён или недоступен',
+      actor,
+      content: `Канал: <#${channel.id}> (${channel.id})\nWebhook: ${targetId}`
+    }, options);
+    return;
+  }
 
   const webhooks = await channel.fetchWebhooks().catch(() => null);
   const webhook = webhooks?.get?.(targetId);
   const deleted = webhook ? await webhook.delete(`Security guard: webhook created by ${actor?.id || 'unknown'}`).then(() => true).catch(() => false) : false;
   await reportSecurityAlert(guild, {
-    title: '🚨 Security: webhook создан',
+    title: entry?.action === AuditLogEvent.WebhookUpdate ? '🚨 Security: webhook изменён' : '🚨 Security: webhook создан',
     actor,
     content: [
       `Канал: <#${channel.id}> (${channel.id})`,
@@ -622,6 +691,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     'messageReactionAdd',
     'messageReactionRemove',
     'guildMemberUpdate',
+    'channelCreate',
     'channelDelete',
     'roleCreate',
     'roleUpdate',
@@ -788,6 +858,15 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     setTimeout(() => {
       void doPanelUpdate(newMember.guild.id, false).catch(() => null);
     }, 2000);
+  });
+
+  client.on('channelCreate', async (channel: ChannelLike) => {
+    await applyActiveLockdownToNewChannel(channel, {
+      sendSecurityLog,
+      notifyTelegramSecurityAlert
+    }).catch(error => {
+      console.error('Ошибка применения lockdown к новому каналу:', error);
+    });
   });
 
   client.on('channelDelete', async (channel: ChannelDeleteLike) => {

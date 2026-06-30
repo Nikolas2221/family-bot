@@ -1,6 +1,6 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "1.0.47",
+  "version": "1.0.48",
   "engines": { "node": ">=18" },
   "main": "dist-ts/index.js",
   "scripts": {
@@ -16,6 +16,9 @@
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
     "telegraf": "^4.16.3"
+  },
+  "overrides": {
+    "undici": "6.27.0"
   },
   "devDependencies": {
     "adm-zip": "^0.5.16",

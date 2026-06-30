@@ -19,6 +19,7 @@ async function main() {
   const callbackAnswers = [];
   const verified = [];
   const afkReviews = [];
+  const adminChatMember = async () => ({ status: 'administrator' });
   registerTelegramHandlers(bot, {
     adminChatId: '-1001',
     tickets: {
@@ -50,6 +51,7 @@ async function main() {
   await commands.get('reply')({
     chat: { id: -1001 },
     from: { id: 7, username: 'admin' },
+    getChatMember: adminChatMember,
     message: { text: '/reply ticket-1 Привет, ожидай.' },
     reply: async text => replies.push(text)
   });
@@ -58,6 +60,7 @@ async function main() {
   await commands.get('announce')({
     chat: { id: -1001 },
     from: { id: 7, username: 'admin' },
+    getChatMember: adminChatMember,
     message: { text: '/announce Собрание сегодня.' },
     reply: async text => replies.push(text)
   });
@@ -79,6 +82,7 @@ async function main() {
   await takeHandler({
     chat: { id: -1001 },
     from: { id: 7, username: 'admin' },
+    getChatMember: adminChatMember,
     match: ['ticket_take:ticket-1', 'ticket-1'],
     answerCbQuery: async text => callbackAnswers.push(text),
     reply: async text => replies.push(text)
@@ -90,6 +94,7 @@ async function main() {
   await welcomeVerifyHandler({
     chat: { id: -1001 },
     from: { id: 7, username: 'admin' },
+    getChatMember: adminChatMember,
     match: ['welcome_verify:987654321098765432:222222222222222222', '987654321098765432', '222222222222222222'],
     answerCbQuery: async text => callbackAnswers.push(text),
     editMessageReplyMarkup: async () => { markupRemoved = true; },
@@ -146,6 +151,7 @@ async function main() {
 
   await commands.get('online')({
     chat: { id: -1001 }, from: { id: 7, username: 'admin' },
+    getChatMember: adminChatMember,
     reply: async text => replies.push(text)
   });
   assert.match(replies.at(-1), /Участники Discord в сети: 2/u);

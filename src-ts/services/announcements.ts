@@ -18,6 +18,7 @@ interface DiscordClientLike {
 }
 
 type AnnouncementInput = {
+  guildId?: string;
   type: 'announcement' | 'event';
   text: string;
   authorId: string;
@@ -134,6 +135,7 @@ export function createAnnouncementService(options: {
     }
 
     const telegramResult: any = await telegramNotifications.sendAnnouncement({
+      guildId: input.guildId,
       type: input.type,
       text: input.text,
       authorName: input.authorName,

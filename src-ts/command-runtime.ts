@@ -1,6 +1,7 @@
 ﻿import { createGuildStorageContext } from './guild-runtime';
 import { canSendDiscordAnnouncement } from './services/announcements';
 import { buildDiscordOnlineMembersText } from './services/online-members';
+import { setActiveLockdown } from './services/security-lockdown';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 
 function isRenderableArtUrl(value: string): boolean {
@@ -111,6 +112,12 @@ async function applyServerLockdown(guild: any, locked: boolean, actorId: string,
       failed += 1;
     }
   }
+
+  setActiveLockdown(guild.id, locked ? {
+    actorId,
+    slowmodeSeconds,
+    updatedAt: Date.now()
+  } : null);
 
   return { touched, failed };
 }
@@ -388,7 +395,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   }
 
   if (interaction.commandName === 'serverbackup') {
-    if (!canDebugConfig(interaction)) {
+    if (!canUseSecurity(interaction.member)) {
       await interaction.reply(ephemeral({ content: copy.common.noAccess }));
       return true;
     }
@@ -420,9 +427,9 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     if (subcommand === 'restore') {
       const backupId = interaction.options.getString('backup_id', true).trim();
       const confirm = interaction.options.getString('confirm', true).trim();
-      if (confirm !== 'RESTORE') {
+      if (confirm !== `RESTORE-${backupId}`) {
         await interaction.reply(ephemeral({
-          content: 'Для восстановления напиши `RESTORE` в поле confirm. Restore создаёт роли и каналы, но не удаляет текущие.'
+          content: `Для восстановления напиши \`RESTORE-${backupId}\` в поле confirm. Restore создаёт роли и каналы, но не удаляет текущие.`
         }));
         return true;
       }
@@ -465,6 +472,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
     const text = interaction.options.getString('text', true).trim().slice(0, 3000);
     const result = await announcementService.sendTelegramFromDiscord({
+      guildId: interaction.guild.id,
       type: interaction.commandName === 'event' ? 'event' : 'announcement',
       text,
       authorId: interaction.user.id,

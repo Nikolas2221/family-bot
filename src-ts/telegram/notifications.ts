@@ -54,7 +54,20 @@ export interface TelegramNotificationService {
   notifyScamBlocked(input: Record<string, any>): Promise<boolean>;
   notifySecurityAlert(input: Record<string, any>): Promise<boolean>;
   notifyAfkRequestCreated(input: AfkRequestNotificationInput): Promise<boolean>;
-  sendAnnouncement(input: { type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string }>;
+  notifyUpdateAnnouncement(input: {
+    guildId?: string;
+    versionLabel: string;
+    semver: string;
+    buildId: string;
+    commitMessage?: string;
+    changeLines?: {
+      added?: string[];
+      updated?: string[];
+      fixed?: string[];
+    };
+    createdAt?: Date;
+  }): Promise<boolean>;
+  sendAnnouncement(input: { guildId?: string; type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string }>;
 }
 
 function clean(value: unknown, fallback = 'не указано', maxLength = 1000): string {
@@ -123,16 +136,73 @@ function buildDecisionMessage(title: string, input: ApplicationNotificationInput
   return lines.join('\n').slice(0, 4000);
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function updateGroupHtml(title: string, lines: string[] = []): string {
+  const cleanLines = lines.map(line => clean(line, '', 280)).filter(Boolean).slice(0, 8);
+  if (!cleanLines.length) return '';
+  return [
+    `<b>${escapeHtml(title)}</b>`,
+    ...cleanLines.map(line => `• ${escapeHtml(line)}`)
+  ].join('\n');
+}
+
+function buildUpdateAnnouncementHtml(input: {
+  versionLabel: string;
+  semver: string;
+  buildId: string;
+  commitMessage?: string;
+  changeLines?: {
+    added?: string[];
+    updated?: string[];
+    fixed?: string[];
+  };
+  createdAt?: Date;
+}): string {
+  const groups = input.changeLines || {};
+  const sections = [
+    updateGroupHtml('Добавлено', groups.added),
+    updateGroupHtml('Обновлено', groups.updated),
+    updateGroupHtml('Исправлено', groups.fixed)
+  ].filter(Boolean);
+  const date = (input.createdAt || new Date()).toLocaleString('ru-RU');
+  return [
+    '🚀 <b>Бот получил обновление</b>',
+    '',
+    `<b>${escapeHtml(clean(input.versionLabel, 'KLAIZ BOT', 120))}</b>`,
+    'Сборка успешно развернута на сервере.',
+    '',
+    '┌ <b>Версия</b>',
+    `├ Лейбл: <code>${escapeHtml(clean(input.versionLabel, '-', 120))}</code>`,
+    `├ Semver: <code>${escapeHtml(clean(input.semver, '-', 40))}</code>`,
+    `└ Build: <code>${escapeHtml(clean(input.buildId, '-', 80))}</code>`,
+    '',
+    '┌ <b>Коммит</b>',
+    `└ ${escapeHtml(clean(input.commitMessage || 'deploy update', 'deploy update', 280))}`,
+    sections.length ? '\n' + sections.join('\n\n') : '',
+    '',
+    `<i>${escapeHtml(date)}</i>`
+  ].filter(Boolean).join('\n').slice(0, 4000);
+}
+
 export function createTelegramNotificationService(options: {
   token?: string;
   adminChatId?: string;
   announcementsChatId?: string;
+  allowedGuildId?: string;
   sender?: TelegramSenderLike | null;
   logger?: Pick<Console, 'warn'>;
 }): TelegramNotificationService {
   const token = String(options.token || '').trim();
   const adminChatId = String(options.adminChatId || '').trim();
   const announcementsChatId = String(options.announcementsChatId || adminChatId).trim();
+  const allowedGuildId = String(options.allowedGuildId || '').trim();
   const enabled = Boolean(adminChatId && (options.sender || token));
   const sender = options.sender || (enabled ? new Telegraf(token).telegram : null);
   const logger = options.logger || console;
@@ -156,9 +226,15 @@ export function createTelegramNotificationService(options: {
     return (await sendWithResult(chatId, text, sendOptions)).ok;
   }
 
+  function allowsGuild(guildId?: string | null): boolean {
+    const id = String(guildId || '').trim();
+    return !allowedGuildId || !id || id === allowedGuildId;
+  }
+
   return {
     enabled,
     notifyApplicationCreated(input) {
+      if (!allowsGuild(input.guild?.id)) return Promise.resolve(false);
       const url = discordTicketUrl(input.guild?.id, input.ticketChannel?.id);
       const buttons: Array<Array<Record<string, string>>> = [];
       if (url) buttons.push([{ text: 'Открыть тикет', url }]);
@@ -167,10 +243,17 @@ export function createTelegramNotificationService(options: {
         reply_markup: { inline_keyboard: buttons }
       });
     },
-    notifyApplicationAccepted: input => send(adminChatId, buildDecisionMessage('✅ Заявка одобрена', { ...input, status: 'approved' })),
-    notifyApplicationRejected: input => send(adminChatId, buildDecisionMessage('❌ Заявка отклонена', { ...input, status: 'rejected' })),
-    notifyTicketClosed: input => send(adminChatId, buildDecisionMessage('✅ Тикет закрыт', { ...input, status: input.status || 'closed' })),
+    notifyApplicationAccepted: input => allowsGuild(input.guild?.id)
+      ? send(adminChatId, buildDecisionMessage('✅ Заявка одобрена', { ...input, status: 'approved' }))
+      : Promise.resolve(false),
+    notifyApplicationRejected: input => allowsGuild(input.guild?.id)
+      ? send(adminChatId, buildDecisionMessage('❌ Заявка отклонена', { ...input, status: 'rejected' }))
+      : Promise.resolve(false),
+    notifyTicketClosed: input => allowsGuild(input.guild?.id)
+      ? send(adminChatId, buildDecisionMessage('✅ Тикет закрыт', { ...input, status: input.status || 'closed' }))
+      : Promise.resolve(false),
     notifyTicketActivity(input) {
+      if (!allowsGuild(input.guildId)) return Promise.resolve(false);
       const url = discordTicketUrl(input.guildId, input.channelId);
       const text = input.count > 1
         ? `💬 В тикете #${input.application.id} есть новые сообщения: ${input.count}\n\nСсылка на тикет: ${url}`
@@ -185,6 +268,7 @@ export function createTelegramNotificationService(options: {
       return send(adminChatId, text);
     },
     notifyMemberJoined(input) {
+      if (!allowsGuild(input.guild?.id)) return Promise.resolve(false);
       const memberName = clean(input.member.globalName || input.member.username || input.member.tag, 'имя неизвестно', 100);
       const createdAt = input.member.createdAt instanceof Date
         ? input.member.createdAt.toLocaleString('ru-RU')
@@ -207,6 +291,7 @@ export function createTelegramNotificationService(options: {
       });
     },
     notifyScamBlocked(input) {
+      if (!allowsGuild(input.guild?.id)) return Promise.resolve(false);
       const guildName = clean(input.guild?.name || input.guild?.id, 'сервер', 100);
       const userName = clean(input.user?.globalName || input.user?.username || input.user?.id, 'неизвестно', 100);
       const channelId = clean(input.channel?.id, 'unknown', 32);
@@ -227,6 +312,7 @@ export function createTelegramNotificationService(options: {
       ].join('\n'));
     },
     notifySecurityAlert(input) {
+      if (!allowsGuild(input.guild?.id)) return Promise.resolve(false);
       const title = clean(input.title, '🛡️ Security alert', 200);
       const guildName = clean(input.guild?.name || input.guild?.id, 'сервер', 100);
       const actorName = clean(input.actor?.globalName || input.actor?.username || input.actor?.id, 'неизвестно', 100);
@@ -240,6 +326,7 @@ export function createTelegramNotificationService(options: {
     },
     notifyAfkRequestCreated(input) {
       const request = input.request;
+      if (!allowsGuild(request.guildId)) return Promise.resolve(false);
       const url = request.guildId && request.channelId && request.messageId
         ? `https://discord.com/channels/${request.guildId}/${request.channelId}/${request.messageId}`
         : '';
@@ -261,7 +348,14 @@ export function createTelegramNotificationService(options: {
         `Discord: ${url || 'ссылка недоступна'}`
       ].join('\n'), { reply_markup: { inline_keyboard: buttons } });
     },
+    notifyUpdateAnnouncement(input) {
+      if (!allowsGuild(input.guildId)) return Promise.resolve(false);
+      return send(announcementsChatId, buildUpdateAnnouncementHtml(input), {
+        parse_mode: 'HTML'
+      });
+    },
     sendAnnouncement(input) {
+      if (!allowsGuild(input.guildId)) return Promise.resolve({ ok: false, messageId: '' });
       const title = input.type === 'event' ? '📅 Семейное событие' : '📢 Семейное объявление';
       return sendWithResult(announcementsChatId, [
         title,

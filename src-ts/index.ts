@@ -140,6 +140,7 @@ const telegramBot = createTelegramBot(config.telegramBotToken && config.telegram
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
   announcementsChatId: config.telegramAnnouncementsChatId,
+  allowedGuildId: config.guildId,
   sender: telegramBot?.telegram || null
 });
 const afkLeaveService = createAfkLeaveService({
@@ -367,7 +368,8 @@ const {
   deployBuildId: DEPLOY_BUILD_ID,
   deployCommitMessage: DEPLOY_COMMIT_MESSAGE,
   getUpdateChangeGroups,
-  getCurrentReleaseChangeGroups
+  getCurrentReleaseChangeGroups,
+  telegramNotifications
 });
 
 const {
