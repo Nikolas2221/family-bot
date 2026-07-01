@@ -196,13 +196,17 @@ export function createTelegramNotificationService(options: {
   adminChatId?: string;
   announcementsChatId?: string;
   allowedGuildId?: string;
+  allowedGuildIds?: string[];
   sender?: TelegramSenderLike | null;
   logger?: Pick<Console, 'warn'>;
 }): TelegramNotificationService {
   const token = String(options.token || '').trim();
   const adminChatId = String(options.adminChatId || '').trim();
   const announcementsChatId = String(options.announcementsChatId || adminChatId).trim();
-  const allowedGuildId = String(options.allowedGuildId || '').trim();
+  const allowedGuildIds = Array.from(new Set([
+    ...(Array.isArray(options.allowedGuildIds) ? options.allowedGuildIds : []),
+    options.allowedGuildId
+  ].map(value => String(value || '').trim()).filter(Boolean)));
   const enabled = Boolean(adminChatId && (options.sender || token));
   const sender = options.sender || (enabled ? new Telegraf(token).telegram : null);
   const logger = options.logger || console;
@@ -228,7 +232,7 @@ export function createTelegramNotificationService(options: {
 
   function allowsGuild(guildId?: string | null): boolean {
     const id = String(guildId || '').trim();
-    return !allowedGuildId || !id || id === allowedGuildId;
+    return !allowedGuildIds.length || !id || allowedGuildIds.includes(id);
   }
 
   return {

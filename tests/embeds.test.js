@@ -287,6 +287,7 @@ async function testEmbedsPublicApiStaysComplete() {
     'buildProfileEmbed',
     'buildRankButtons',
     'buildReactionRoleStatusEmbed',
+    'buildRejectModal',
     'buildRejectLogEmbed',
     'buildReportScheduleEmbed',
     'buildRoleMenuComponents',

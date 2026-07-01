@@ -140,7 +140,7 @@ const telegramBot = createTelegramBot(config.telegramBotToken && config.telegram
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
   announcementsChatId: config.telegramAnnouncementsChatId,
-  allowedGuildId: config.guildId,
+  allowedGuildIds: config.telegramAllowedGuildIds,
   sender: telegramBot?.telegram || null
 });
 const afkLeaveService = createAfkLeaveService({

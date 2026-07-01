@@ -423,7 +423,7 @@ export function createApplicationsService({
     return interaction.reply(ephemeral({ content: copy.applications.reviewReply }));
   }
 
-  async function reject(interaction: any, applicationId: string, userId: string) {
+  async function reject(interaction: any, applicationId: string, userId: string, details: { reason?: string; messageId?: string } = {}) {
     const application = storage.findApplication(applicationId);
     if (!application) {
       return interaction.reply(ephemeral({ content: copy.applications.notFound }));
@@ -431,6 +431,11 @@ export function createApplicationsService({
 
     if (isTerminalApplicationStatus(application.status)) {
       return interaction.reply(ephemeral({ content: copy.applications.closed(formatStatus(application.status)) }));
+    }
+
+    const reason = String(details.reason || '').trim().slice(0, 500);
+    if (reason.length < 3) {
+      return interaction.reply(ephemeral({ content: '❌ Укажи причину отказа.' }));
     }
 
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);
@@ -455,7 +460,13 @@ export function createApplicationsService({
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('rejected')))
       .setFooter({ text: copy.applications.rejectedFooter(interaction.user.username) });
 
-    await interaction.message.edit({ embeds: [rejected], components: [] });
+    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
+
+    if (!targetMessage) {
+      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
+    }
+
+    await targetMessage.edit({ embeds: [rejected], components: [] });
 
     const user = await client.users.fetch(userId).catch(() => null);
     if (user && logChannelId) {
@@ -466,7 +477,7 @@ export function createApplicationsService({
             embeds.buildRejectLogEmbed({
               user,
               moderatorUser: interaction.user,
-              reason: copy.applications.rejectReason
+              reason
             })
           ]
         });
@@ -480,7 +491,7 @@ export function createApplicationsService({
       candidate: user || { id: userId },
       moderator: interaction.user,
       ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null),
-      reason: copy.applications.rejectReason,
+      reason,
       status: 'rejected'
     }));
     return true;

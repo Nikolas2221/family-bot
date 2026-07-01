@@ -6,6 +6,7 @@ async function main() {
   const sent = [];
   const service = createTelegramNotificationService({
     adminChatId: '-1001234567890',
+    allowedGuildIds: ['987654321098765432'],
     sender: {
       async sendMessage(chatId, text, options) {
         sent.push({ chatId, text, options });
@@ -55,6 +56,13 @@ async function main() {
   assert.match(sent[1].text, /222222222222222222/u);
   assert.match(sent[1].text, /286/u);
   assert.equal(sent[1].options.reply_markup.inline_keyboard[0][0].callback_data, 'welcome_verify:987654321098765432:222222222222222222');
+
+  const blockedJoin = await service.notifyMemberJoined({
+    guild: { id: '111111111111111111', name: 'Other Guild', memberCount: 1 },
+    member: { id: '333333333333333333', username: 'other-member', createdAt: new Date('2026-06-23T12:00:00Z') }
+  });
+  assert.equal(blockedJoin, false);
+  assert.equal(sent.length, 2);
 
   const afkSent = await service.notifyAfkRequestCreated({
     request: {

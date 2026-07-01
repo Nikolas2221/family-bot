@@ -73,6 +73,7 @@ export interface AppConfig {
   telegramBotToken: string;
   telegramAdminChatId: string;
   telegramAnnouncementsChatId: string;
+  telegramAllowedGuildIds: string[];
   discordAnnouncementsChannelId: string;
   discordAnnouncerRoleIds: string[];
   discordOnlineGuildId: string;
@@ -229,7 +230,7 @@ export interface ApplicationsService {
   closeTicket(interaction: unknown, applicationId: string, details?: { reason?: string }): Promise<unknown>;
   getCooldownSecondsLeft(userId: string, cooldownMs: number): number;
   moveToReview(interaction: unknown, applicationId: string, userId: string): Promise<unknown>;
-  reject(interaction: unknown, applicationId: string, userId: string): Promise<unknown>;
+  reject(interaction: unknown, applicationId: string, userId: string, details?: { reason?: string; messageId?: string }): Promise<unknown>;
   sendApplyPanel(interaction: unknown): Promise<unknown>;
   submitApplication(interaction: unknown): Promise<unknown>;
 }

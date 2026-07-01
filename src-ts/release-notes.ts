@@ -5,17 +5,20 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
     added: [
       'Telegram-дубль карточки обновления бота с HTML-разметкой, версией, build id, коммитом и группами changelog',
       'фильтр Telegram-уведомлений по основному GUILD_ID, чтобы события чужих Discord-серверов не приходили в админ-чат',
+      'переменная TELEGRAM_ALLOWED_GUILD_IDS для явного выбора Discord-серверов, которым разрешено отправлять уведомления в Telegram',
       'runtime-lockdown для новых каналов: при активном /security lockdown новые каналы автоматически закрываются для отправки'
     ],
     updated: [
       'Telegram-кнопки и команды админки теперь требуют статус administrator или creator в Telegram-чате',
+      'отказ заявки в семью теперь открывает modal с обязательной причиной вместо автоматического текста',
       '/serverbackup теперь доступен только security-админам, а restore требует подтверждение RESTORE-backup_id',
       'channel/security bypass больше не доверяет ManageGuild или ManageChannels без Administrator или явной allow-роли',
       'webhook guard проверяет create/update/delete audit log и сообщает о неизвестном target вместо тихого пропуска'
     ],
     fixed: [
       'undici закреплён на безопасной 6.27.0 через npm overrides без downgrade discord.js',
-      'restore backup отклоняет backup от другого guild и не восстанавливает опасные role permissions автоматически'
+      'restore backup отклоняет backup от другого guild и не восстанавливает опасные role permissions автоматически',
+      'причина отказа теперь одинаково попадает в Discord-лог отказа и Telegram-уведомление'
     ]
   },
   '1.0.47': {

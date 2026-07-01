@@ -62,6 +62,7 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     telegramBotToken: trim(env.TELEGRAM_BOT_TOKEN),
     telegramAdminChatId: trim(env.TELEGRAM_ADMIN_CHAT_ID),
     telegramAnnouncementsChatId: trim(env.TELEGRAM_ANNOUNCEMENTS_CHAT_ID) || trim(env.TELEGRAM_ADMIN_CHAT_ID),
+    telegramAllowedGuildIds: parseCsv(env.TELEGRAM_ALLOWED_GUILD_IDS || env.GUILD_ID),
     discordAnnouncementsChannelId: trim(env.DISCORD_ANNOUNCEMENTS_CHANNEL_ID),
     discordAnnouncerRoleIds: parseCsv(env.DISCORD_ANNOUNCER_ROLE_IDS),
     discordOnlineGuildId: trim(env.DISCORD_ONLINE_GUILD_ID) || trim(env.GUILD_ID),
@@ -175,6 +176,9 @@ export function validateConfig(config: AppConfig): ValidationResult {
   }
 
   validateDiscordId('GUILD_ID', config.guildId, errors, warnings, { required: true });
+  for (const guildId of config.telegramAllowedGuildIds) {
+    validateDiscordId('TELEGRAM_ALLOWED_GUILD_IDS', guildId, errors, warnings);
+  }
   validateDiscordId('DISCORD_ONLINE_GUILD_ID', config.discordOnlineGuildId, errors, warnings);
   validateDiscordId('CHANNEL_ID', config.channelId, errors, warnings, { required: true });
   validateDiscordId('APPLICATIONS_CHANNEL_ID', config.applicationsChannelId, errors, warnings);
@@ -309,6 +313,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- rank managers: ${rankManagers}`,
     `- bot owners: ${ownersSummary}`,
     `- Telegram notifications: ${config.telegramBotToken && config.telegramAdminChatId ? 'enabled' : 'disabled'}`,
+    `- Telegram guild filter: ${config.telegramAllowedGuildIds.length ? config.telegramAllowedGuildIds.join(', ') : 'disabled'}`,
     `- announcements bridge: ${config.telegramAnnouncementsChatId && config.discordAnnouncementsChannelId ? 'enabled' : 'disabled'}`,
     `- support tickets: ${config.supportTickets.categoryId && config.supportTickets.supportRoleId ? 'configured' : 'not configured'}`,
     `- AFK leave: ${config.afkLeave.channelId ? 'configured' : 'not configured'}`,

@@ -832,7 +832,7 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
     }
 
     const [, applicationId, userId] = interaction.customId.split(':');
-    await applicationsService.reject(interaction, applicationId, userId);
+    await interaction.showModal(options.embeds.buildRejectModal(applicationId, userId, interaction.message.id));
     return true;
   }
 
@@ -900,6 +900,21 @@ async function handleFamilyAndAdminModals(interaction: any, options: Interaction
     await options.getApplicationsService(guildId).accept(interaction, applicationId, userId, {
       reason: interaction.fields.getTextInputValue('accept_reason'),
       rankName: interaction.fields.getTextInputValue('accept_rank'),
+      messageId
+    });
+    await options.doPanelUpdate(guildId, false);
+    return true;
+  }
+
+  if (interaction.customId.startsWith('app_reject_modal:')) {
+    if (!options.canApplications(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [, applicationId, userId, messageId] = interaction.customId.split(':');
+    await options.getApplicationsService(guildId).reject(interaction, applicationId, userId, {
+      reason: interaction.fields.getTextInputValue('reject_reason'),
       messageId
     });
     await options.doPanelUpdate(guildId, false);

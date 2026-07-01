@@ -656,12 +656,14 @@ async function testRejectApplication() {
     }
   };
 
-  await service.reject(interaction, applicationId, 'user-3');
+  await service.reject(interaction, applicationId, 'user-3', { reason: 'Не подходит по требованиям' });
 
   assert.equal(storage.findGuildApplication(guildId, applicationId).status, 'rejected');
   assert.equal(logChannel.sent.length, 1);
+  assert.equal(logChannel.sent[0].embeds[0].reason, 'Не подходит по требованиям');
   assert.equal(telegramRejected.application.id, applicationId);
   assert.equal(telegramRejected.candidate.id, 'user-3');
+  assert.equal(telegramRejected.reason, 'Не подходит по требованиям');
   assert.match(replies[0].content, /отклон/i);
 }
 

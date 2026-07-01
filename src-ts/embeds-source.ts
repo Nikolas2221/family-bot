@@ -294,6 +294,22 @@ export function buildAcceptModal(applicationId: string, userId: string, messageI
     );
 }
 
+export function buildRejectModal(applicationId: string, userId: string, messageId: string): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`app_reject_modal:${applicationId}:${userId}:${messageId}`)
+    .setTitle(text(copy.applications?.rejectModalTitle, 'Причина отказа').slice(0, 45))
+    .addComponents(
+      inputRow(
+        new TextInputBuilder()
+          .setCustomId('reject_reason')
+          .setLabel(text(copy.applications?.rejectModalReason, 'Причина отказа').slice(0, 45))
+          .setPlaceholder(text(copy.applications?.rejectModalReasonPlaceholder, 'Например: не подошёл по требованиям').slice(0, 100))
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+      )
+    );
+}
+
 export function buildVerificationModal(): ModalBuilder {
   return new ModalBuilder()
     .setCustomId('welcome_verification_modal')
@@ -1122,6 +1138,7 @@ export default {
   buildRoleMenuEmbed,
   buildRoleMenuStatusEmbed,
   buildReactionRoleStatusEmbed,
+  buildRejectModal,
   buildRejectLogEmbed,
   buildReportScheduleEmbed,
   buildUpdateAnnouncementEmbed,
