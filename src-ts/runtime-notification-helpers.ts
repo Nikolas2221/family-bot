@@ -1,6 +1,21 @@
+import crypto from 'node:crypto';
 import { EmbedBuilder, type Guild, type GuildMember, type User } from 'discord.js';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import type { CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
+
+const updateAnnouncementLocks = new Set<string>();
+
+function buildUpdateAnnouncementId(semver: string, commitMessage: string, changeLines: ReleaseNoteGroups): string {
+  const stablePayload = {
+    semver: String(semver || '').trim(),
+    commitMessage: String(commitMessage || '').trim(),
+    added: Array.isArray(changeLines.added) ? changeLines.added : [],
+    updated: Array.isArray(changeLines.updated) ? changeLines.updated : [],
+    fixed: Array.isArray(changeLines.fixed) ? changeLines.fixed : []
+  };
+  const hash = crypto.createHash('sha1').update(JSON.stringify(stablePayload)).digest('hex').slice(0, 16);
+  return `${stablePayload.semver || 'unknown'}:${hash}`;
+}
 
 interface TextChannelLike {
   send(payload: Record<string, unknown>): Promise<unknown>;
@@ -287,7 +302,15 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
 
   async function announceBuildUpdate(guild: Guild) {
     const record = database.getGuild(guild.id);
-    if (record.maintenance?.lastUpdateAnnouncementId === currentBuildSignature) {
+    const changeLines = getUpdateChangeGroups(deployCommitMessage, getCurrentReleaseChangeGroups);
+    const updateAnnouncementId = buildUpdateAnnouncementId(productVersionSemver, deployCommitMessage, changeLines);
+    const lockKey = `${guild.id}:${updateAnnouncementId}`;
+    const lastUpdateAnnouncementId = record.maintenance?.lastUpdateAnnouncementId || '';
+    if (
+      lastUpdateAnnouncementId === updateAnnouncementId ||
+      lastUpdateAnnouncementId === currentBuildSignature ||
+      updateAnnouncementLocks.has(lockKey)
+    ) {
       return;
     }
 
@@ -298,33 +321,34 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     const channel = await fetchTextChannel(guild, channelId);
     if (!channel) return;
 
-    const changeLines = getUpdateChangeGroups(deployCommitMessage, getCurrentReleaseChangeGroups);
-    const sentDiscord = await channel
-      .send({
-        embeds: [
-          embeds.buildUpdateAnnouncementEmbed({
-            versionLabel: productVersionLabel,
-            semver: productVersionSemver,
-            buildId: deployBuildId,
-            commitMessage: deployCommitMessage,
-            changeLines
-          })
-        ]
-      })
-      .then(() => true)
-      .catch(() => false);
-    const sentTelegram = await telegramNotifications?.notifyUpdateAnnouncement?.({
-      guildId: guild.id,
-      versionLabel: productVersionLabel,
-      semver: productVersionSemver,
-      buildId: deployBuildId,
-      commitMessage: deployCommitMessage,
-      changeLines,
-      createdAt: new Date()
-    }).catch(() => false);
+    updateAnnouncementLocks.add(lockKey);
+    database.updateGuildMaintenance(guild.id, { lastUpdateAnnouncementId: updateAnnouncementId });
 
-    if (sentDiscord || sentTelegram) {
-      database.updateGuildMaintenance(guild.id, { lastUpdateAnnouncementId: currentBuildSignature });
+    try {
+      await channel
+        .send({
+          embeds: [
+            embeds.buildUpdateAnnouncementEmbed({
+              versionLabel: productVersionLabel,
+              semver: productVersionSemver,
+              buildId: deployBuildId,
+              commitMessage: deployCommitMessage,
+              changeLines
+            })
+          ]
+        })
+        .catch(() => false);
+      await telegramNotifications?.notifyUpdateAnnouncement?.({
+        guildId: guild.id,
+        versionLabel: productVersionLabel,
+        semver: productVersionSemver,
+        buildId: deployBuildId,
+        commitMessage: deployCommitMessage,
+        changeLines,
+        createdAt: new Date()
+      }).catch(() => false);
+    } finally {
+      updateAnnouncementLocks.delete(lockKey);
     }
   }
 

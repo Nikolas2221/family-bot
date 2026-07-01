@@ -24,7 +24,8 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
       'причина отказа теперь одинаково попадает в Discord-лог отказа и Telegram-уведомление',
       'пользовательский текст в объявлениях, Telegram-reply, custom commands и scam/automod notice больше не может массово пинговать everyone/roles',
       '/applications теперь требует права работы с заявками и больше не показывает список заявок обычным участникам',
-      'Telegram guild-фильтр работает fail-closed: при настроенном allowlist уведомления без guildId не отправляются'
+      'Telegram guild-фильтр работает fail-closed: при настроенном allowlist уведомления без guildId не отправляются',
+      'карточка обновления больше не дублируется при повторных стартах с тем же changelog: dedupe теперь считается по содержимому, а не по build id'
     ]
   },
   '1.0.47': {
