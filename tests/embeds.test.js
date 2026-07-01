@@ -1,7 +1,8 @@
 const assert = require('node:assert/strict');
 
-const { createConfig, summarizeConfig, validateConfig } = require('../config');
-const copy = require('../copy');
+const { createConfig, summarizeConfig, validateConfig } = require('../dist-ts/config');
+const copy = require('../dist-ts/copy').default;
+const { embeds } = require('../dist-ts/embeds');
 const {
   buildApplicationsPanelEmbed,
   buildDebugConfigEmbed,
@@ -10,8 +11,7 @@ const {
   buildUpdateAnnouncementEmbed,
   buildWelcomeEmbed,
   panelButtons
-} = require('../embeds');
-const embeds = require('../embeds');
+} = embeds;
 
 async function runTest(name, fn) {
   try {

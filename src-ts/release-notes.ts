@@ -1,6 +1,22 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.49': {
+    added: [
+      'карточка обновления получила отдельную версию 1.0.49 с описанием TS-переезда',
+      'тест миграции теперь проверяет, что корневые JS-обёртки удалены и allowJs выключен'
+    ],
+    updated: [
+      'runtime проекта переведён на прямой запуск и проверки через dist-ts без старых compatibility wrappers',
+      'тесты теперь импортируют собранные TypeScript-модули из dist-ts напрямую',
+      'scripts/check.js проверяет dist-ts entrypoint и основные compiled-модули после сборки'
+    ],
+    fixed: [
+      'tsconfig больше не разрешает allowJs, чтобы JS runtime не вернулся незаметно',
+      'удалены корневые JS-обёртки ai/config/commands/index и остальные legacy-файлы',
+      'снижен риск, что тесты пройдут через старый JS-слой вместо актуальной TypeScript-сборки'
+    ]
+  },
   '1.0.48': {
     added: [
       'Telegram-дубль карточки обновления бота с HTML-разметкой, версией, build id, коммитом и группами changelog',

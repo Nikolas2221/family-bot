@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-const { createRankService } = require('../ranks');
+const { createRankService } = require('../dist-ts/ranks');
 
 function createRoleCache(assignedRoleIds) {
   return {

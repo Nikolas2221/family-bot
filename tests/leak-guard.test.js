@@ -3,7 +3,7 @@ const { PermissionFlagsBits } = require('discord.js');
 
 const { createAccessApi } = require('../dist-ts/access');
 const { buildLeakScanText, registerEventRuntime } = require('../dist-ts/event-runtime');
-const { containsDiscordInvite, detectScamGift } = require('../security');
+const { containsDiscordInvite, detectScamGift } = require('../dist-ts/security');
 
 async function main() {
   assert.equal(containsDiscordInvite('https://discord.gg/family'), true);

@@ -5,7 +5,7 @@ const {
   evaluateAutomodMessage,
   evaluateSpamActivity,
   normalizeAutomodConfig
-} = require('../automod');
+} = require('../dist-ts/automod');
 
 async function runTest(name, fn) {
   try {

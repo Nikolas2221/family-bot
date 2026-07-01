@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-const { buildCommands, getCommandsSignature, registerCommands } = require('../commands');
+const { buildCommands, getCommandsSignature, registerCommands } = require('../dist-ts/commands');
 
 async function runTest(name, fn) {
   try {

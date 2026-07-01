@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { PermissionFlagsBits } = require('discord.js');
 
-const { explainKickFailure } = require('../security');
+const { explainKickFailure } = require('../dist-ts/security');
 
 function createActorMember({ canKick = true, highestPosition = 10 } = {}) {
   return {

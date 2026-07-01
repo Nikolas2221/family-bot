@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-const { createAIService } = require('../ai');
+const { createAIService } = require('../dist-ts/ai');
 
 async function runTest(name, fn) {
   try {

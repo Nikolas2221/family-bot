@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { createStorage } = require('../storage');
+const { createStorage } = require('../dist-ts/storage');
 
 function createTempStorage() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-storage-'));

@@ -1,7 +1,7 @@
 const assert = require('assert');
 
 const packageMeta = require('../package.json');
-const { getReleaseNotes } = require('../release-notes');
+const { getReleaseNotes } = require('../dist-ts/release-notes');
 
 async function main() {
   const currentVersion = packageMeta.version;

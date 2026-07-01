@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-const { createConfig, summarizeConfig, validateConfig } = require('../config');
+const { createConfig, summarizeConfig, validateConfig } = require('../dist-ts/config');
 
 async function runTest(name, fn) {
   try {

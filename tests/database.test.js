@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { createDatabase } = require('../database');
+const { createDatabase } = require('../dist-ts/database');
 
 function createTempDatabase() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-db-'));
