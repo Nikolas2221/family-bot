@@ -6,19 +6,25 @@ export const releaseNotes: Record<string, ReleaseNoteGroups> = {
       'Telegram-дубль карточки обновления бота с HTML-разметкой, версией, build id, коммитом и группами changelog',
       'фильтр Telegram-уведомлений по основному GUILD_ID, чтобы события чужих Discord-серверов не приходили в админ-чат',
       'переменная TELEGRAM_ALLOWED_GUILD_IDS для явного выбора Discord-серверов, которым разрешено отправлять уведомления в Telegram',
-      'runtime-lockdown для новых каналов: при активном /security lockdown новые каналы автоматически закрываются для отправки'
+      'runtime-lockdown для новых каналов: при активном /security lockdown новые каналы автоматически закрываются для отправки',
+      'единая проверка безопасной выдачи ролей для заявок, autorole, verification, AFK, reaction roles, role menus и рангов'
     ],
     updated: [
       'Telegram-кнопки и команды админки теперь требуют статус administrator или creator в Telegram-чате',
       'отказ заявки в семью теперь открывает modal с обязательной причиной вместо автоматического текста',
       '/serverbackup теперь доступен только security-админам, а restore требует подтверждение RESTORE-backup_id',
       'channel/security bypass больше не доверяет ManageGuild или ManageChannels без Administrator или явной allow-роли',
-      'webhook guard проверяет create/update/delete audit log и сообщает о неизвестном target вместо тихого пропуска'
+      'webhook guard проверяет create/update/delete audit log и сообщает о неизвестном target вместо тихого пропуска',
+      'админские slash-команды скрываются от обычных участников через default_member_permissions, а debug/config доступен только owner/Administrator',
+      '/law получил cooldown 30 секунд на пользователя и общий лимит параллельных AI-запросов'
     ],
     fixed: [
       'undici закреплён на безопасной 6.27.0 через npm overrides без downgrade discord.js',
       'restore backup отклоняет backup от другого guild и не восстанавливает опасные role permissions автоматически',
-      'причина отказа теперь одинаково попадает в Discord-лог отказа и Telegram-уведомление'
+      'причина отказа теперь одинаково попадает в Discord-лог отказа и Telegram-уведомление',
+      'пользовательский текст в объявлениях, Telegram-reply, custom commands и scam/automod notice больше не может массово пинговать everyone/roles',
+      '/applications теперь требует права работы с заявками и больше не показывает список заявок обычным участникам',
+      'Telegram guild-фильтр работает fail-closed: при настроенном allowlist уведомления без guildId не отправляются'
     ]
   },
   '1.0.47': {

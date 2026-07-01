@@ -103,7 +103,8 @@ export function createAnnouncementService(options: {
         `Источник: ${source}`,
         `Автор: ${safeText(input.authorName, 100)}`,
         `Дата: ${new Date(createdAt).toLocaleString('ru-RU')}`
-      ].join('\n')
+      ].join('\n'),
+      allowedMentions: { parse: [] }
     });
     return String(message?.id || '');
   }

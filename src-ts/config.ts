@@ -257,6 +257,8 @@ export function validateConfig(config: AppConfig): ValidationResult {
     ].filter(([, value]) => !value).map(([name]) => name);
     if (missingBackupFields.length) {
       warnings.push(`SERVER_BACKUP_ENABLED=true, но не заданы GitHub backup переменные: ${missingBackupFields.join(', ')}`);
+    } else {
+      warnings.push('GitHub backup stores Discord channel/role structure. Use a private repository and a fine-grained token limited to Contents read/write for this repo.');
     }
   }
 

@@ -1,5 +1,6 @@
 import { AuditLogEvent, ChannelType, PermissionFlagsBits } from 'discord.js';
 import { getActiveLockdown } from './services/security-lockdown';
+import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 
 interface UserLike {
   id: string;
@@ -177,7 +178,8 @@ async function enforceScamGuard(
 
   const gifUrl = String(options.scamGuard.gifUrl || '').trim();
   const noticePayload: Record<string, unknown> = {
-    content: `😂 <@${message.author.id}>, ха-ха, попался. Scam-ссылка удалена, доступ к написанию временно ограничен. Ваше уголовное дело создано и отправлено в прокуратуру, ожидайте суда.`
+    content: `😂 <@${message.author.id}>, ха-ха, попался. Scam-ссылка удалена, доступ к написанию временно ограничен. Ваше уголовное дело создано и отправлено в прокуратуру, ожидайте суда.`,
+    allowedMentions: { parse: [], users: message.author?.id ? [message.author.id] : [] }
   };
   if (gifUrl) {
     noticePayload.embeds = [{ image: { url: gifUrl } }];
@@ -390,6 +392,12 @@ async function applyReactionRoleChange(
 
   if (action === 'remove') {
     await member.roles.remove(role, `Reaction role remove ${entry.emoji}`).catch(() => null);
+    return;
+  }
+
+  const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild });
+  if (unsafeReason) {
+    console.warn(`Reaction role assignment blocked for ${entry.roleId}: ${unsafeReason}`);
     return;
   }
 

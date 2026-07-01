@@ -129,7 +129,10 @@ export function createAutomationRuntimeHelpers(options: AutomationRuntimeOptions
     const match = getCustomCommands(guildId).find((command) => matchCustomCommand(command, message.content));
     if (!match) return false;
 
-    await message.channel.send({ content: match.response }).catch(() => {});
+    await message.channel.send({
+      content: match.response,
+      allowedMentions: { parse: [] }
+    }).catch(() => {});
     return true;
   }
 
@@ -218,7 +221,8 @@ export function createAutomationRuntimeHelpers(options: AutomationRuntimeOptions
 
     const notice = await message.channel
       .send({
-        content: copy.automod.notice(message.author.id, copy.automod.ruleLabel(triggered.rule), triggered.detail)
+        content: copy.automod.notice(message.author.id, copy.automod.ruleLabel(triggered.rule), triggered.detail),
+        allowedMentions: { parse: [], users: message.author?.id ? [message.author.id] : [] }
       })
       .catch(() => null);
 

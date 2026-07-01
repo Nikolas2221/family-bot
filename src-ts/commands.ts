@@ -1,7 +1,48 @@
 ﻿import crypto from 'node:crypto';
-import { ChannelType, SlashCommandBuilder } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import copy from './copy';
 import type { CommandGuildLike, CommandJson } from './types';
+
+const ADMIN_VISIBLE_COMMANDS = new Set([
+  'setup',
+  'adminpanel',
+  'serverbackup',
+  'setrole',
+  'setpanelroles',
+  'setchannel',
+  'setfamilytitle',
+  'setmode',
+  'setmodule',
+  'setart',
+  'automod',
+  'welcome',
+  'autorole',
+  'reactionrole',
+  'reportschedule',
+  'verification',
+  'rolemenu',
+  'customcommand',
+  'serverreport',
+  'activityreport',
+  'aiadvisor',
+  'subscription',
+  'security',
+  'blacklist',
+  'unbanid',
+  'banlist',
+  'blacklistlist',
+  'testaccept',
+  'debugconfig'
+]);
+
+function commandJsonWithDefaults(command: { toJSON(): unknown }): CommandJson {
+  const json = command.toJSON() as CommandJson;
+  json.dm_permission = false;
+  if (ADMIN_VISIBLE_COMMANDS.has(String(json.name))) {
+    json.default_member_permissions = PermissionFlagsBits.Administrator.toString();
+  }
+  return json;
+}
 
 
 export function buildCommands(): CommandJson[] {
@@ -858,7 +899,7 @@ export function buildCommands(): CommandJson[] {
       .addUserOption(option =>
         option.setName(copy.commands.userOptionName).setDescription(copy.commands.targetUserDescription).setRequired(true)
       )
-  ].map(command => command.toJSON() as CommandJson);
+  ].map(commandJsonWithDefaults);
 }
 
 export function getCommandsSignature(commands: CommandJson[] = buildCommands()): string {

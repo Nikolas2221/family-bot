@@ -1,4 +1,5 @@
 import { EmbedBuilder, type Guild, type GuildMember, type User } from 'discord.js';
+import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import type { CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
 
 interface TextChannelLike {
@@ -273,7 +274,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     if (!channels.logs) return;
     const channel = await fetchTextChannel(guild, channels.logs);
     if (!channel) return;
-    await channel.send({ content }).catch(() => {});
+    await channel.send({ content, allowedMentions: { parse: [] } }).catch(() => {});
   }
 
   async function sendServerLogEmbed(guild: Guild, embed: EmbedBuilder) {
@@ -384,6 +385,12 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       (await member.guild.roles.fetch(settings.autoroleRoleId).catch(() => null));
     if (!role) return false;
 
+    const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: member.guild });
+    if (unsafeReason) {
+      console.warn(`Autorole assignment blocked for ${settings.autoroleRoleId}: ${unsafeReason}`);
+      return false;
+    }
+
     return member.roles.add(role, `Autorole via bot for ${member.id}`).then(() => true).catch(() => false);
   }
 
@@ -401,6 +408,12 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
 
     const hasRole = member.roles.cache.has(role.id);
     if (hasRole) return { ok: true, roleId: role.id, already: true };
+
+    const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: member.guild });
+    if (unsafeReason) {
+      console.warn(`Verification role assignment blocked for ${role.id}: ${unsafeReason}`);
+      return { ok: false, roleId: role.id };
+    }
 
     const ok = await member.roles
       .add(role, `Verification via bot for ${member.id}`)

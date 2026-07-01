@@ -232,7 +232,7 @@ export function createTelegramNotificationService(options: {
 
   function allowsGuild(guildId?: string | null): boolean {
     const id = String(guildId || '').trim();
-    return !allowedGuildIds.length || !id || allowedGuildIds.includes(id);
+    return !allowedGuildIds.length || (Boolean(id) && allowedGuildIds.includes(id));
   }
 
   return {

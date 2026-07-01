@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { getUnsafeAssignableRoleReasonAsync } from '../role-safety';
 import type { AfkLeaveConfig, AfkPanelRecord, AfkRequestRecord, StorageApi } from '../types';
 import type { TelegramNotificationService } from '../telegram';
 import {
@@ -374,8 +375,20 @@ export function createAfkLeaveService(options: {
         if (!member) {
           console.warn(`AFK approved role was not assigned: member ${request.userId} not found`);
         } else {
-          await member.roles.add(config.approvedRoleId, `AFK request ${request.id} approved by ${actorName || actorId}`)
-            .catch((error: unknown) => console.warn('AFK approved role assignment failed:', error));
+          const canInspectRoles = Boolean(guild.roles?.cache || guild.roles?.fetch);
+          let role = guild.roles?.cache?.get?.(config.approvedRoleId) || null;
+          if (!role && typeof guild.roles?.fetch === 'function') {
+            role = await guild.roles.fetch(config.approvedRoleId).catch(() => null);
+          }
+          const unsafeReason = role ? await getUnsafeAssignableRoleReasonAsync(role, { guild }) : '';
+          if (canInspectRoles && !role) {
+            console.warn(`AFK approved role assignment blocked for ${config.approvedRoleId}: роль не найдена`);
+          } else if (unsafeReason) {
+            console.warn(`AFK approved role assignment blocked for ${config.approvedRoleId}: ${unsafeReason}`);
+          } else {
+            await member.roles.add(role || config.approvedRoleId, `AFK request ${request.id} approved by ${actorName || actorId}`)
+              .catch((error: unknown) => console.warn('AFK approved role assignment failed:', error));
+          }
         }
       }
 

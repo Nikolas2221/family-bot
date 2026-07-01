@@ -21,14 +21,11 @@ export function canManageNicknames(accessApi: any, member: any): boolean {
 }
 
 export function canDebugConfig(interaction: any): boolean {
+  if (interaction.guild?.ownerId && interaction.guild.ownerId === interaction.user?.id) return true;
   const memberPermissions = interaction.memberPermissions || interaction.member?.permissions;
   if (!memberPermissions) return false;
 
-  return (
-    memberPermissions.has(PermissionFlagsBits.Administrator) ||
-    memberPermissions.has(PermissionFlagsBits.ManageGuild) ||
-    memberPermissions.has(PermissionFlagsBits.ManageRoles)
-  );
+  return memberPermissions.has(PermissionFlagsBits.Administrator);
 }
 
 export function canUseSecurity(accessApi: any, member: any): boolean {

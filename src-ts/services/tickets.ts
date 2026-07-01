@@ -84,7 +84,10 @@ export function createTicketService(options: {
     application.ticketStatus = 'in_progress';
     application.handledBy = handler;
     storage.save();
-    await channel.send({ content: `👮 Заявку взял в работу: ${handler}` });
+    await channel.send({
+      content: `👮 Заявку взял в работу: ${handler}`,
+      allowedMentions: { parse: [] }
+    });
     return 'ok' as const;
   }
 
@@ -96,7 +99,8 @@ export function createTicketService(options: {
     if (!channel) return 'channel_missing' as const;
 
     await channel.send({
-      content: [`💬 Ответ от администрации Telegram: ${String(text).trim().slice(0, 1800)}`, '', `Отправил: ${authorName}`].join('\n')
+      content: [`💬 Ответ от администрации Telegram: ${String(text).trim().slice(0, 1800)}`, '', `Отправил: ${authorName}`].join('\n'),
+      allowedMentions: { parse: [] }
     });
     return 'ok' as const;
   }

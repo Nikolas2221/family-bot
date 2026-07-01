@@ -1,7 +1,9 @@
+import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import type { RankActionResult, RankDescription, RankService, RankSyncResult, RoleDefinition } from './types';
 
 interface MemberLike {
   id: string;
+  guild?: any;
   roles: {
     cache: {
       has(roleId: string): boolean;
@@ -91,6 +93,17 @@ export function createRankService(options: {
       .map(role => role.id!) as string[];
 
     if (targetRole.id && !member.roles.cache.has(targetRole.id)) {
+      let role = member.guild?.roles?.cache?.get?.(targetRole.id) || null;
+      if (!role && typeof member.guild?.roles?.fetch === 'function') {
+        role = await member.guild.roles.fetch(targetRole.id).catch(() => null);
+      }
+      if (role) {
+        const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: member.guild });
+        if (unsafeReason) {
+          throw new Error(`Unsafe rank role ${targetRole.id}: ${unsafeReason}`);
+        }
+      }
+
       await member.roles.add(targetRole.id);
     }
 

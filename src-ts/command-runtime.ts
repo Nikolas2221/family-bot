@@ -2,6 +2,7 @@
 import { canSendDiscordAnnouncement } from './services/announcements';
 import { buildDiscordOnlineMembersText } from './services/online-members';
 import { setActiveLockdown } from './services/security-lockdown';
+import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 
 function isRenderableArtUrl(value: string): boolean {
@@ -66,6 +67,19 @@ async function resolveRenderableArtUrl(value: string): Promise<string> {
 
 function parseRoleIds(value: string): string[] {
   return Array.from(new Set((value.match(/\d{16,20}/g) || []).map(String)));
+}
+
+const LAW_COOLDOWN_MS = 30_000;
+const LAW_MAX_IN_FLIGHT = 2;
+const lawCooldowns = new Map<string, number>();
+let lawInFlight = 0;
+
+function pruneLawCooldowns(now = Date.now()): void {
+  for (const [key, lastUsedAt] of lawCooldowns) {
+    if (now - lastUsedAt > LAW_COOLDOWN_MS * 4) {
+      lawCooldowns.delete(key);
+    }
+  }
 }
 
 function isLockdownTargetChannel(channel: any): boolean {
@@ -347,6 +361,11 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   }
 
   if (interaction.commandName === 'applications') {
+    if (!canApplications(interaction.member)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
     await interaction.reply(ephemeral({
       embeds: [embeds.buildApplicationsListEmbed(guildStorage.listRecentApplications(10))]
     }));
@@ -447,15 +466,37 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
   if (interaction.commandName === 'law') {
     const question = interaction.options.getString('question', true).trim();
-    await interaction.deferReply();
-    const answer = await lawService.answer(question);
-    const embed = new EmbedBuilderCtor()
-      .setColor(answer.found ? 0x94a39a : 0xf59e0b)
-      .setTitle(answer.title)
-      .setDescription(answer.description)
-      .setFooter({ text: `Majestic RP • ${lawService.stats().documents} документов в базе` })
-      .setTimestamp();
-    await interaction.editReply({ embeds: [embed] });
+    const nowMs = Date.now();
+    pruneLawCooldowns(nowMs);
+    const cooldownUserId = interaction.user?.id || 'anonymous';
+    const cooldownKey = `${guildId}:${cooldownUserId}`;
+    const lastUsedAt = lawCooldowns.get(cooldownKey) || 0;
+    const secondsLeft = Math.ceil((LAW_COOLDOWN_MS - (nowMs - lastUsedAt)) / 1000);
+    if (secondsLeft > 0) {
+      await interaction.reply(ephemeral({ content: copy.common.cooldown(secondsLeft) }));
+      return true;
+    }
+
+    if (lawInFlight >= LAW_MAX_IN_FLIGHT) {
+      await interaction.reply(ephemeral({ content: 'AI-ассистент уже обрабатывает несколько вопросов. Попробуй через пару секунд.' }));
+      return true;
+    }
+
+    lawCooldowns.set(cooldownKey, nowMs);
+    lawInFlight += 1;
+    try {
+      await interaction.deferReply();
+      const answer = await lawService.answer(question);
+      const embed = new EmbedBuilderCtor()
+        .setColor(answer.found ? 0x94a39a : 0xf59e0b)
+        .setTitle(answer.title)
+        .setDescription(answer.description)
+        .setFooter({ text: `Majestic RP • ${lawService.stats().documents} документов в базе` })
+        .setTimestamp();
+      await interaction.editReply({ embeds: [embed] });
+    } finally {
+      lawInFlight = Math.max(0, lawInFlight - 1);
+    }
     return true;
   }
 
@@ -509,6 +550,15 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
     const key = interaction.options.getString(copy.commands.roleTargetOptionName, true);
     const role = interaction.options.getRole(copy.commands.roleValueOptionName, true);
+    const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, {
+      guild: interaction.guild,
+      actor: interaction.member
+    });
+    if (unsafeReason) {
+      await interaction.reply(ephemeral({ content: formatUnsafeRoleMessage(unsafeReason) }));
+      return true;
+    }
+
     database.updateGuildSettings(guildId, { roles: { [key]: role.id } });
     const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
     await doPanelUpdate(guildId, true);

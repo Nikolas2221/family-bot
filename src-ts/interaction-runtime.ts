@@ -1,4 +1,5 @@
 import { PermissionFlagsBits } from 'discord.js';
+import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
 
 interface InteractionRuntimeOptions {
   client: {
@@ -233,6 +234,15 @@ async function handleReactionRoleCommands(interaction: any, options: Interaction
   if (subcommand === options.copy.commands.reactionRoleAddSubcommand) {
     const role = interaction.options.getRole(options.copy.commands.roleValueOptionName, true);
     const channel = interaction.options.getChannel(options.copy.commands.channelOptionName) || interaction.channel;
+    const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, {
+      guild: interaction.guild,
+      actor: interaction.member
+    });
+    if (unsafeReason) {
+      await interaction.reply(options.ephemeral({ content: formatUnsafeRoleMessage(unsafeReason) }));
+      return true;
+    }
+
     if (!channel?.isTextBased?.() || typeof channel.messages?.fetch !== 'function') {
       await interaction.reply(options.ephemeral({ content: options.copy.reactionRoles.messageMissing }));
       return true;
@@ -464,6 +474,15 @@ async function handleRoleMenuCommands(interaction: any, options: InteractionRunt
 
   if (subcommand === options.copy.commands.roleMenuAddSubcommand) {
     const role = interaction.options.getRole(options.copy.commands.roleValueOptionName, true);
+    const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, {
+      guild: interaction.guild,
+      actor: interaction.member
+    });
+    if (unsafeReason) {
+      await interaction.reply(options.ephemeral({ content: formatUnsafeRoleMessage(unsafeReason) }));
+      return true;
+    }
+
     const label = interaction.options.getString(options.copy.commands.titleOptionName, true).trim().slice(0, 80);
     const emoji = (interaction.options.getString(options.copy.commands.emojiOptionName) || '').trim().slice(0, 32);
     const description = (interaction.options.getString(options.copy.commands.descriptionOptionName) || '').trim().slice(0, 120);
@@ -1017,6 +1036,12 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
       if (member.roles.cache.has(role.id)) {
         await member.roles.remove(role, `Role menu ${menuId}`).catch(() => null);
         await interaction.reply(options.ephemeral({ content: options.copy.roleMenus.roleRemoved(role.id) }));
+        return true;
+      }
+
+      const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: interaction.guild });
+      if (unsafeReason) {
+        await interaction.reply(options.ephemeral({ content: formatUnsafeRoleMessage(unsafeReason) }));
         return true;
       }
 

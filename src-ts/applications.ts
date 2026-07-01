@@ -1,6 +1,7 @@
 import { MessageFlags } from 'discord.js';
 
 import copy from './copy';
+import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import type { ApplicationsService, EmbedsApi, RoleDefinition } from './types';
 import type { TelegramNotificationService } from './telegram';
 import type { TicketService } from './services/tickets';
@@ -312,8 +313,17 @@ export function createApplicationsService({
 
     const acceptedRoleId = resolveAcceptedRoleId(details.rankName);
     if (acceptedRoleId) {
-      const role = interaction.guild.roles.cache.get(acceptedRoleId);
+      const role = interaction.guild.roles.cache.get(acceptedRoleId)
+        || await interaction.guild.roles.fetch(acceptedRoleId).catch(() => null);
       if (role) {
+        const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: interaction.guild });
+        if (unsafeReason) {
+          return interaction.reply({
+            content: formatUnsafeRoleMessage(unsafeReason),
+            flags: MessageFlags.Ephemeral
+          });
+        }
+
         const added = await member.roles.add(role).then(() => true).catch(() => false);
         if (!added) {
           return interaction.reply({
