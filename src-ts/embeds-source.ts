@@ -401,6 +401,7 @@ export async function buildFamilyEmbeds(
   guild: AnyRecord,
   {
     roles = [],
+    showAllGuildRoles = false,
     familyTitle,
     updateIntervalMs = 60000,
     activityScore = () => 0,
@@ -408,8 +409,15 @@ export async function buildFamilyEmbeds(
     imageUrl
   }: AnyRecord = {}
 ): Promise<EmbedBuilder[]> {
-  const configuredRoles = (Array.isArray(roles) ? roles : [])
-    .map((item: AnyRecord) => ({ ...item, role: guild.roles?.cache?.get?.(item.id) }))
+  const guildRoleEntries = showAllGuildRoles
+    ? Array.from(guild.roles?.cache?.values?.() || [])
+      .filter((role: any) => role?.id && role.id !== guild.id && role.name !== '@everyone')
+      .map((role: any) => ({ id: role.id, name: role.name, role }))
+    : [];
+  const roleEntries = guildRoleEntries.length
+    ? guildRoleEntries
+    : (Array.isArray(roles) ? roles : []).map((item: AnyRecord) => ({ ...item, role: guild.roles?.cache?.get?.(item.id) }));
+  const configuredRoles = roleEntries
     .filter((item: AnyRecord) => item.role)
     .sort((a: AnyRecord, b: AnyRecord) => (b.role.position || 0) - (a.role.position || 0));
 

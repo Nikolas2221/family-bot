@@ -16,6 +16,7 @@ function createRuntime() {
     },
     storage: {},
     roleTemplates: [
+      { key: 'rank15', envKey: 'ROLE_RANK_15', id: 'old-rank15', name: '15 rank' },
       { key: 'leader', envKey: 'ROLE_LEADER', id: 'old-leader', name: 'Leader' },
       { key: 'member', envKey: 'ROLE_MEMBER', id: 'old-member', name: 'Member' }
     ],
@@ -56,6 +57,58 @@ async function main() {
   assert.equal(newSettings.channels.logs, '');
   assert.equal(newSettings.roles.find(role => role.key === 'leader').id, '');
   assert.equal(newSettings.applicationDefaultRole, '');
+
+  const configuredRuntime = createGuildRuntimeApi({
+    database: {
+      getGuild: () => ({
+        settings: {
+          roles: {
+            rank15: 'role-elite',
+            leader: 'role-leader',
+            member: 'role-member'
+          },
+          panelRoleIds: ['role-elite', 'role-main', 'role-family']
+        }
+      }),
+      getSubscription: () => 'free',
+      isPremium: () => false
+    },
+    storage: {},
+    roleTemplates: [
+      { key: 'rank15', envKey: 'ROLE_RANK_15', id: '', name: '15 rank' },
+      { key: 'leader', envKey: 'ROLE_LEADER', id: '', name: 'Leader' },
+      { key: 'member', envKey: 'ROLE_MEMBER', id: '', name: 'Member' }
+    ],
+    defaults: {
+      guildId: 'main-guild',
+      channelId: '',
+      applicationsChannelId: '',
+      logChannelId: '',
+      disciplineLogChannelId: '',
+      familyTitle: 'Phoenix',
+      accessApplications: [],
+      accessDiscipline: [],
+      accessRanks: [],
+      applicationDefaultRole: '',
+      features: {
+        aiEnabled: false,
+        autoRanksEnabled: false,
+        leakGuardEnabled: true,
+        channelGuardEnabled: true
+      },
+      normalizeAutomodConfig: () => ({})
+    }
+  });
+
+  const snapshot = configuredRuntime.buildGuildSettingsSnapshot({
+    id: 'configured-guild',
+    name: 'Configured Guild',
+    ownerId: 'owner-1'
+  });
+
+  assert.equal(snapshot.settings.roles.rank15, 'role-elite');
+  assert.equal(snapshot.settings.roles.leader, 'role-leader');
+  assert.deepEqual(snapshot.settings.panelRoleIds, ['role-elite', 'role-main', 'role-family']);
 }
 
 if (require.main === module) {

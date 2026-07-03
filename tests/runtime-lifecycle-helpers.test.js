@@ -8,6 +8,7 @@ async function main() {
   const sentRankDm = [];
   const sentMessages = [];
   const editedMessages = [];
+  const panelOptions = [];
   const persistedVoice = new Map();
   let nextPanelId = 1;
 
@@ -85,7 +86,10 @@ async function main() {
       }
     },
     embeds: {
-      buildFamilyEmbeds: async (_guild, options) => [{ title: 'panel', summary: options.summary }],
+      buildFamilyEmbeds: async (_guild, options) => {
+        panelOptions.push(options);
+        return [{ title: 'panel', summary: options.summary }];
+      },
       panelButtons: () => ['buttons']
     },
     voiceSessions,
@@ -134,6 +138,7 @@ async function main() {
   await helper.doPanelUpdate('guild-1', true);
   assert.equal(sentMessages.length, 1);
   assert.equal(panelIds.get('guild-1'), 'panel-1');
+  assert.equal(panelOptions[0].showAllGuildRoles, true);
 
   await helper.doPanelUpdate('guild-1', true);
   assert.equal(editedMessages.length, 1);

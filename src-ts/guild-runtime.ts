@@ -274,6 +274,9 @@ export function createGuildRuntimeApi(options: {
 
   function buildGuildSettingsSnapshot(guild: GuildLikeForSnapshot) {
     const settings = resolveGuildSettings(guild.id);
+    const roleSettings = Object.fromEntries(
+      settings.roles.map(role => [role.key, role.id || ''])
+    );
 
     return {
       guildName: guild.name,
@@ -293,11 +296,7 @@ export function createGuildRuntimeApi(options: {
           automod: settings.channels.automod
         },
         roles: {
-          leader: settings.roles.find(role => role.key === 'leader')?.id || '',
-          deputy: settings.roles.find(role => role.key === 'deputy')?.id || '',
-          elder: settings.roles.find(role => role.key === 'elder')?.id || '',
-          member: settings.roles.find(role => role.key === 'member')?.id || '',
-          newbie: settings.roles.find(role => role.key === 'newbie')?.id || '',
+          ...roleSettings,
           mute: settings.muteRoleId || '',
           autorole: settings.autoroleRoleId || '',
           verification: settings.verificationRoleId || ''

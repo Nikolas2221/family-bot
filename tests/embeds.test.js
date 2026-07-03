@@ -193,6 +193,100 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
   assert.match(serialized, /Premium/);
 }
 
+async function testFamilyPanelCanUseAllDiscordRoles() {
+  const eliteMember = {
+    id: 'user-elite',
+    displayName: 'Elite',
+    user: { bot: false },
+    presence: { status: 'online' }
+  };
+  const mainMember = {
+    id: 'user-main',
+    displayName: 'Main',
+    user: { bot: false },
+    presence: { status: 'online' }
+  };
+
+  const roles = new Map([
+    [
+      'guild-1',
+      {
+        id: 'guild-1',
+        name: '@everyone',
+        position: 0,
+        members: new Map([[eliteMember.id, eliteMember], [mainMember.id, mainMember]])
+      }
+    ],
+    [
+      'role-family',
+      {
+        id: 'role-family',
+        name: 'KLZ FAMQ',
+        position: 10,
+        members: new Map([[eliteMember.id, eliteMember], [mainMember.id, mainMember]])
+      }
+    ],
+    [
+      'role-main',
+      {
+        id: 'role-main',
+        name: 'KLAIZ Main',
+        position: 20,
+        members: new Map([[mainMember.id, mainMember]])
+      }
+    ],
+    [
+      'role-elite',
+      {
+        id: 'role-elite',
+        name: 'KLAIZ Elite',
+        position: 30,
+        members: new Map([[eliteMember.id, eliteMember]])
+      }
+    ]
+  ]);
+
+  const payload = (await buildFamilyEmbeds(
+    {
+      id: 'guild-1',
+      roles: {
+        cache: {
+          get(roleId) {
+            return roles.get(roleId);
+          },
+          values() {
+            return roles.values();
+          }
+        }
+      },
+      members: {
+        cache: new Map([
+          [eliteMember.id, eliteMember],
+          [mainMember.id, mainMember]
+        ])
+      }
+    },
+    {
+      roles: [{ id: 'role-family', name: 'KLZ FAMQ' }],
+      showAllGuildRoles: true,
+      familyTitle: 'Test Family',
+      activityScore() {
+        return 0;
+      }
+    }
+  )).map(embed => embed.toJSON());
+
+  const fields = payload.flatMap(embed => embed.fields || []);
+  const fieldNames = fields.map(field => field.name).join('\n');
+  const fieldValues = fields.map(field => field.value).join('\n');
+
+  assert.match(fieldNames, /KLAIZ Elite/);
+  assert.match(fieldNames, /KLAIZ Main/);
+  assert.doesNotMatch(fieldNames, /@everyone/);
+  assert.equal((fieldValues.match(/<@user-elite>/g) || []).length, 1);
+  assert.equal((fieldValues.match(/<@user-main>/g) || []).length, 1);
+}
+
 async function testMenuAndApplicationsEmbedsExposeConfiguredImages() {
   const familyEmbed = buildFamilyMenuEmbed({ imageUrl: 'https://example.com/family-banner.png' }).toJSON();
   const applicationsEmbed = buildApplicationsPanelEmbed({ imageUrl: 'https://example.com/apply-banner.png', familyTitle: 'Test Family' }).toJSON();
@@ -317,6 +411,7 @@ async function main() {
   await runTest('menu and applications embeds expose configured images', testMenuAndApplicationsEmbedsExposeConfiguredImages);
   await runTest('family menu summary and buttons render', testFamilyMenuSummaryAndButtons);
   await runTest('family panel shows member only in highest role', testFamilyPanelShowsMemberOnlyInHighestRole);
+  await runTest('family panel can use all Discord roles', testFamilyPanelCanUseAllDiscordRoles);
   await runTest('update announcement embed shows structured changes', testUpdateAnnouncementEmbedShowsStructuredChanges);
   await runTest('embeds public api stays complete', testEmbedsPublicApiStaysComplete);
   console.log('ALL EMBEDS TESTS PASSED');
