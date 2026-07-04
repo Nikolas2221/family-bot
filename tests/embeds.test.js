@@ -246,6 +246,34 @@ async function testFamilyPanelCanUseAllDiscordRoles() {
       }
     ],
     [
+      'role-guest',
+      {
+        id: 'role-guest',
+        name: 'Guest',
+        position: 21,
+        members: new Map([[mainMember.id, mainMember]])
+      }
+    ],
+    [
+      'role-booster',
+      {
+        id: 'role-booster',
+        name: 'Server Booster',
+        position: 22,
+        tags: { premiumSubscriberRole: true },
+        members: new Map([[eliteMember.id, eliteMember]])
+      }
+    ],
+    [
+      'role-bot',
+      {
+        id: 'role-bot',
+        name: 'KLAIZ BOT',
+        position: 23,
+        members: new Map([[mainMember.id, mainMember]])
+      }
+    ],
+    [
       'role-elite',
       {
         id: 'role-elite',
@@ -293,6 +321,9 @@ async function testFamilyPanelCanUseAllDiscordRoles() {
   assert.match(fieldNames, /KLAIZ Elite/);
   assert.match(fieldNames, /KLAIZ Main/);
   assert.doesNotMatch(fieldNames, /@everyone/);
+  assert.doesNotMatch(fieldNames, /Guest/);
+  assert.doesNotMatch(fieldNames, /Booster/);
+  assert.doesNotMatch(fieldNames, /BOT/);
   assert.equal((fieldValues.match(/<@user-elite>/g) || []).length, 1);
   assert.equal((fieldValues.match(/<@user-main>/g) || []).length, 1);
 }

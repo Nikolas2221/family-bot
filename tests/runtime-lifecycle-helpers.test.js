@@ -140,7 +140,7 @@ async function main() {
   await helper.doPanelUpdate('guild-1', true);
   assert.equal(sentMessages.length, 1);
   assert.equal(panelIds.get('guild-1'), 'panel-1');
-  assert.equal(panelOptions[0].showAllGuildRoles, false);
+  assert.equal(panelOptions[0].showAllGuildRoles, true);
   assert.equal(typeof panelOptions[0].pointsScore, 'function');
   assert.equal(typeof panelOptions[0].memberWarnings, 'function');
 

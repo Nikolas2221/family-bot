@@ -167,6 +167,29 @@ function sortMembers(members: AnyRecord[], activityScore: (memberId: string) => 
   });
 }
 
+function normalizeRoleName(value: unknown): string {
+  return text(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function isAutoFamilyPanelRole(role: AnyRecord, guild: AnyRecord): boolean {
+  if (!role?.id || role.id === guild?.id || role.name === '@everyone') return false;
+  if (role.managed || role.tags?.botId || role.tags?.premiumSubscriberRole) return false;
+
+  const normalized = normalizeRoleName(role.name);
+  if (!normalized) return false;
+
+  const blockedWords = [
+    'boost', 'booster', 'server booster', 'буст', 'бустер',
+    'guest', 'guests', 'гость', 'гости',
+    'bot', 'бот'
+  ];
+
+  return !blockedWords.some(word => normalized.includes(word));
+}
+
 function roleLine(label: string, roleId?: string): string {
   return `${label}: ${roleId ? `<@&${roleId}>` : 'не задана'}`;
 }
@@ -410,7 +433,7 @@ export async function buildFamilyEmbeds(
 ): Promise<EmbedBuilder[]> {
   const guildRoleEntries = showAllGuildRoles
     ? Array.from(guild.roles?.cache?.values?.() || [])
-      .filter((role: any) => role?.id && role.id !== guild.id && role.name !== '@everyone')
+      .filter((role: any) => isAutoFamilyPanelRole(role, guild))
       .map((role: any) => ({ id: role.id, name: role.name, role }))
     : [];
   const roleEntries = guildRoleEntries.length
@@ -453,8 +476,7 @@ export async function buildFamilyEmbeds(
     image: imageUrl
   });
   embed.setDescription([
-    `Всего выговоров: ${summary.totalWarnings ?? 0}`,
-    'Роли идут по иерархии. Участник показывается только в своей старшей семейной роли.'
+    `Всего выговоров: ${summary.totalWarnings ?? 0}`
   ].join('\n'));
 
   if (!activeRoles.length) {
