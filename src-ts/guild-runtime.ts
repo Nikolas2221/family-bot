@@ -237,6 +237,7 @@ export function createGuildRuntimeApi(options: {
           channelId: settings.reportSchedule?.monthly?.channelId || settings.channels?.reports || logs || ''
         }
       },
+      reportRequests: settings.reportRequests || {},
       customCommands: Array.isArray(settings.customCommands) ? settings.customCommands : [],
       automod: defaults.normalizeAutomodConfig(settings.automod as unknown as Record<string, unknown> | undefined),
       modules: {
@@ -316,6 +317,7 @@ export function createGuildRuntimeApi(options: {
         reactionRoles: settings.reactionRoles,
         roleMenus: settings.roleMenus,
         reportSchedule: settings.reportSchedule,
+        reportRequests: settings.reportRequests,
         customCommands: settings.customCommands,
         automod: settings.automod,
         modules: {

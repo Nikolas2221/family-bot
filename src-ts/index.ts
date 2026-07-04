@@ -25,6 +25,7 @@ const { createLawService } = require('./services/law');
 const { createDeepSeekService } = require('./services/deepseek');
 const { createSupportTicketService } = require('./services/support-tickets');
 const { createAfkLeaveService } = require('./services/afk-leave');
+const { createReportRequestService } = require('./services/report-requests');
 const { createServerBackupService } = require('./services/server-backups');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
@@ -136,6 +137,12 @@ const deepSeekService = createDeepSeekService({
 });
 const lawService = createLawService(deepSeekService.enabled ? deepSeekService : null);
 const supportTicketService = createSupportTicketService({ storage, client, config: config.supportTickets });
+const reportRequestService = createReportRequestService({
+  database,
+  fetchTextChannel,
+  resolveGuildSettings,
+  canManageReports: canDebugConfig
+});
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
@@ -1698,6 +1705,7 @@ registerInteractionRuntime({
   getHelpCatalog,
   supportTicketService,
   afkLeaveService,
+  reportRequestService,
   resolveMemberQuery,
   formatRankResult,
   syncAutoRanks,

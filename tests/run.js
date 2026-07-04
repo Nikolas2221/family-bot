@@ -18,6 +18,8 @@ async function main() {
   const { main: runLawTests } = require('./law.test');
   const { main: runMojibakeTests } = require('./mojibake.test');
   const { main: runReleaseNotesTests } = require('./release-notes.test');
+  const { main: runReportRequestsTests } = require('./report-requests.test');
+  const { main: runReportRequestsUiTests } = require('./report-requests-ui.test');
   const { main: runRanksTests } = require('./ranks.test');
   const { main: runRuntimeAccessHelpersTests } = require('./runtime-access-helpers.test');
   const { main: runRuntimeAutomationHelpersTests } = require('./runtime-automation-helpers.test');
@@ -55,6 +57,8 @@ async function main() {
   await runLawTests();
   await runMojibakeTests();
   await runReleaseNotesTests();
+  await runReportRequestsTests();
+  await runReportRequestsUiTests();
   await runRanksTests();
   await runRuntimeAccessHelpersTests();
   await runRuntimeAutomationHelpersTests();

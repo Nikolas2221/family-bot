@@ -19,6 +19,7 @@ const ADMIN_VISIBLE_COMMANDS = new Set([
   'autorole',
   'reactionrole',
   'reportschedule',
+  'reportform',
   'verification',
   'rolemenu',
   'customcommand',
@@ -99,6 +100,63 @@ export function buildCommands(): CommandJson[] {
       )
       .addSubcommand(subcommand => subcommand.setName('status').setDescription('Проверить свою текущую заявку'))
       .addSubcommand(subcommand => subcommand.setName('refresh').setDescription('Принудительно обновить панель')),
+    new SlashCommandBuilder()
+      .setName('reportform')
+      .setDescription('Настроить отдельные формы отчётов')
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('setup')
+          .setDescription('Создать или обновить карточку отчёта')
+          .addStringOption(option =>
+            option
+              .setName('type')
+              .setDescription('Тип отчёта')
+              .setRequired(true)
+              .addChoices(
+                { name: 'Отчёт на повышение', value: 'up_rank' },
+                { name: 'Отчёт о контрактах', value: 'contracts' },
+                { name: 'Отчёт о выплатах', value: 'payouts' }
+              )
+          )
+          .addChannelOption(option =>
+            option
+              .setName('panel_channel')
+              .setDescription('Канал, где будет висеть карточка')
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('target_channel')
+              .setDescription('Канал, куда отправлять заполненные отчёты')
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('log_channel')
+              .setDescription('Канал логов по этому типу отчёта')
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('refresh')
+          .setDescription('Обновить карточку отчёта')
+          .addStringOption(option =>
+            option
+              .setName('type')
+              .setDescription('Тип отчёта')
+              .setRequired(true)
+              .addChoices(
+                { name: 'Отчёт на повышение', value: 'up_rank' },
+                { name: 'Отчёт о контрактах', value: 'contracts' },
+                { name: 'Отчёт о выплатах', value: 'payouts' }
+              )
+          )
+      )
+      .addSubcommand(subcommand => subcommand.setName('status').setDescription('Показать настройки форм отчётов')),
     new SlashCommandBuilder()
       .setName('law')
       .setDescription('Разобрать ситуацию по законодательной базе Majestic RP')

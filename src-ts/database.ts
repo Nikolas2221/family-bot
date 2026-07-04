@@ -5,6 +5,7 @@ import type { BotMode, DatabaseApi, DatabaseState, GuildRecord, GuildSettings, M
 import { normalizeAutomodConfig } from './automod';
 
 const EXTENDED_FAMILY_ROLE_KEYS = Array.from({ length: 10 }, (_, index) => `rank${15 - index}`);
+const REPORT_REQUEST_TYPES = ['up_rank', 'contracts', 'payouts'] as const;
 
 function defaultDatabase(): DatabaseState {
   return {
@@ -113,6 +114,23 @@ function normalizeReportSchedule(schedule: Record<string, any> = {}) {
   };
 }
 
+function normalizeReportRequests(requests: Record<string, any> = {}) {
+  return Object.fromEntries(
+    REPORT_REQUEST_TYPES
+      .map(type => {
+        const entry = requests?.[type] || {};
+        return [type, {
+          panelChannelId: String(entry.panelChannelId || '').trim(),
+          targetChannelId: String(entry.targetChannelId || '').trim(),
+          logChannelId: String(entry.logChannelId || '').trim(),
+          panelMessageId: String(entry.panelMessageId || '').trim(),
+          updatedAt: String(entry.updatedAt || '').trim()
+        }];
+      })
+      .filter(([, entry]: any) => entry.panelChannelId || entry.targetChannelId || entry.logChannelId || entry.panelMessageId)
+  );
+}
+
 function normalizeRoleMenus(menus: unknown[] = []) {
   return (Array.isArray(menus) ? menus : [])
     .map((menu: any) => ({
@@ -205,6 +223,7 @@ function normalizeGuildRecord(guildId: string, guild: GuildRecordPatch = {}): Gu
       verification: normalizeVerificationConfig(guild.settings?.verification as unknown as Record<string, unknown>),
       reactionRoles: normalizeReactionRoles(guild.settings?.reactionRoles as unknown[]),
       reportSchedule: normalizeReportSchedule(guild.settings?.reportSchedule as Record<string, any>),
+      reportRequests: normalizeReportRequests(guild.settings?.reportRequests as Record<string, any>),
       roleMenus: normalizeRoleMenus(guild.settings?.roleMenus as unknown[]),
       customCommands: normalizeCustomCommands(guild.settings?.customCommands as unknown[]),
       automod: normalizeAutomodConfig(guild.settings?.automod as Record<string, unknown> | undefined),
@@ -351,6 +370,10 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
             ...(guild.settings?.reportSchedule?.monthly || {}),
             ...(patch?.reportSchedule?.monthly || {})
           }
+        },
+        reportRequests: {
+          ...(guild.settings?.reportRequests || {}),
+          ...(patch?.reportRequests || {})
         },
         automod: {
           ...(guild.settings?.automod || {}),

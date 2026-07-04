@@ -74,15 +74,40 @@ export function createApplicationsService({
     });
   }
 
-  async function notifyDiscordDm(task?: Promise<unknown>): Promise<void> {
-    if (!task) return;
-    await task.then(sent => {
+  async function notifyDiscordDm(task?: Promise<unknown>): Promise<boolean> {
+    if (!task) return false;
+    return task.then(sent => {
       if (sent === false) {
         console.warn('Discord application DM was not delivered.');
       }
+      return sent !== false;
     }).catch(error => {
       console.warn('Discord application DM failed:', error);
+      return false;
     });
+  }
+
+  async function notifyAcceptanceDm(interaction: any, member: any, userId: string, reason: string, rankName: string): Promise<void> {
+    const sent = await notifyDiscordDm(sendAcceptanceDm({
+      guild: interaction.guild,
+      member,
+      moderatorUser: interaction.user,
+      reason,
+      rankName
+    }));
+
+    if (sent) return;
+
+    const user = await client.users?.fetch?.(userId).catch(() => null);
+    if (!user) return;
+
+    await notifyDiscordDm(sendAcceptanceDm({
+      guild: interaction.guild,
+      member: { ...member, user },
+      moderatorUser: interaction.user,
+      reason,
+      rankName
+    }));
   }
 
   function formatStatus(status: string) {
@@ -387,13 +412,7 @@ export function createApplicationsService({
 
     await targetMessage.edit({ embeds: [accepted], components: [] });
     await sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName);
-    await notifyDiscordDm(sendAcceptanceDm({
-      guild: interaction.guild,
-      member,
-      moderatorUser: interaction.user,
-      reason,
-      rankName
-    }));
+    await notifyAcceptanceDm(interaction, member, userId, reason, rankName);
     await interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
     await notifyTelegram(telegramNotifications?.notifyApplicationAccepted({
       application,

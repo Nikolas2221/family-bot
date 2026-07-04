@@ -490,6 +490,89 @@ async function testAcceptApplicationAssignsResolvedFamilyRole() {
   assert.deepEqual(removedRoleIds, ['role-member', 'role-newbie']);
 }
 
+async function testAcceptApplicationDmFallbackFetchesUser() {
+  const storage = createTempStorage();
+  const guildId = 'guild-accept-dm-fallback';
+  const applicationId = storage.createGuildApplication({
+    guildId,
+    userId: 'user-33',
+    nickname: 'Applicant 3',
+    level: '20',
+    inviter: 'Friend',
+    discovery: 'Discord',
+    about: 'Р“РѕС‚РѕРІ РІСЃС‚СѓРїРёС‚СЊ Рё РїРѕР»СѓС‡РёС‚СЊ СЂРѕР»СЊ.'
+  });
+
+  const member = {
+    id: 'user-33',
+    displayName: 'Applicant 3',
+    roles: {
+      cache: new Map(),
+      async add() { return true; },
+      async remove() { return true; }
+    }
+  };
+
+  const dmPayloads = [];
+  let fetchedUserId = '';
+  const service = createApplicationsService({
+    storage: createGuildScopedStorage(storage, guildId),
+    fetchTextChannel: async () => null,
+    applicationsChannelId: 'applications',
+    applicationDefaultRole: 'role-newbie',
+    logChannelId: '',
+    familyRoles: buildFamilyRoles(),
+    client: {
+      users: {
+        async fetch(userId) {
+          fetchedUserId = userId;
+          return { id: userId, username: 'Fetched Applicant' };
+        }
+      }
+    },
+    embeds: createEmbedsStub(),
+    sendAcceptLog: async () => {},
+    sendAcceptanceDm: async payload => {
+      dmPayloads.push(payload);
+      return Boolean(payload.member.user);
+    }
+  });
+
+  const interaction = {
+    user: { id: 'moderator-1', username: 'Boss' },
+    guild: {
+      id: guildId,
+      members: {
+        async fetch() {
+          return member;
+        }
+      },
+      roles: {
+        cache: {
+          get(roleId) {
+            return { id: roleId };
+          }
+        }
+      }
+    },
+    message: {
+      async edit() {}
+    },
+    async reply(payload) {
+      return payload;
+    }
+  };
+
+  await service.accept(interaction, applicationId, 'user-33', {
+    reason: 'РћРґРѕР±СЂРµРЅ',
+    rankName: 'newbie'
+  });
+
+  assert.equal(fetchedUserId, 'user-33');
+  assert.equal(dmPayloads.length, 2);
+  assert.equal(dmPayloads[1].member.user.id, 'user-33');
+}
+
 async function testAcceptApplicationDeletesTicketAfterApproval() {
   const storage = createTempStorage();
   const guildId = 'guild-accept-ticket';
@@ -763,6 +846,7 @@ async function main() {
   await runTest('submitApplication survives Telegram notification failure', testSubmitApplicationSurvivesTelegramFailure);
   await runTest('accept updates status and logs admission', testAcceptApplication);
   await runTest('accept assigns resolved family role', testAcceptApplicationAssignsResolvedFamilyRole);
+  await runTest('accept retries Discord DM through fetched user', testAcceptApplicationDmFallbackFetchesUser);
   await runTest('accept deletes ticket after approval', testAcceptApplicationDeletesTicketAfterApproval);
   await runTest('reject updates status and sends reject log', testRejectApplication);
   await runTest('close ticket sends Telegram notification', testCloseTicketNotifiesTelegram);

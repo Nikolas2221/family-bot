@@ -365,6 +365,16 @@ export interface ReportScheduleSettings {
   monthly: ReportScheduleSlot;
 }
 
+export type ReportRequestType = 'up_rank' | 'contracts' | 'payouts';
+
+export interface ReportRequestConfig {
+  panelChannelId: string;
+  targetChannelId: string;
+  logChannelId: string;
+  panelMessageId: string;
+  updatedAt: string;
+}
+
 export interface RoleMenuItem {
   roleId: string;
   label: string;
@@ -443,6 +453,7 @@ export interface GuildSettings {
   verification: VerificationSettings;
   reactionRoles: ReactionRoleEntry[];
   reportSchedule: ReportScheduleSettings;
+  reportRequests: Partial<Record<ReportRequestType, ReportRequestConfig>>;
   roleMenus: RoleMenu[];
   customCommands: CustomCommandEntry[];
   automod: AutomodConfig;
