@@ -115,6 +115,10 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
       const data = guildStorage.ensureMemberRecord(member.id);
       return Date.now() - Number(data.lastSeenAt || 0) >= afkWarningThresholdMs;
     }).length;
+    const totalWarnings = familyMembers.reduce((sum, member) => {
+      const data = guildStorage.ensureMemberRecord(member.id);
+      return sum + Number(data.warns || 0);
+    }, 0);
 
     const topEntry = familyMembers
       .map((member) => ({
@@ -138,6 +142,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
       membersWithoutFamilyRoles: Math.max(0, allMembers.length - familyMembers.length),
       pendingApplications,
       afkRiskCount,
+      totalWarnings,
       planLabel: isPremiumGuild(guild.id) ? copy.admin.panelPremium : copy.admin.panelFree,
       onlineCount,
       idleCount,

@@ -131,6 +131,17 @@ function normalizeReportRequests(requests: Record<string, any> = {}) {
   );
 }
 
+function normalizeMediaShareConfig(config: Record<string, any> = {}) {
+  return {
+    panelChannelId: String(config?.panelChannelId || '').trim(),
+    targetChannelId: String(config?.targetChannelId || '').trim(),
+    logChannelId: String(config?.logChannelId || '').trim(),
+    minRoleId: String(config?.minRoleId || '').trim(),
+    panelMessageId: String(config?.panelMessageId || '').trim(),
+    updatedAt: String(config?.updatedAt || '').trim()
+  };
+}
+
 function normalizeRoleMenus(menus: unknown[] = []) {
   return (Array.isArray(menus) ? menus : [])
     .map((menu: any) => ({
@@ -224,6 +235,7 @@ function normalizeGuildRecord(guildId: string, guild: GuildRecordPatch = {}): Gu
       reactionRoles: normalizeReactionRoles(guild.settings?.reactionRoles as unknown[]),
       reportSchedule: normalizeReportSchedule(guild.settings?.reportSchedule as Record<string, any>),
       reportRequests: normalizeReportRequests(guild.settings?.reportRequests as Record<string, any>),
+      mediaShare: normalizeMediaShareConfig(guild.settings?.mediaShare as Record<string, any>),
       roleMenus: normalizeRoleMenus(guild.settings?.roleMenus as unknown[]),
       customCommands: normalizeCustomCommands(guild.settings?.customCommands as unknown[]),
       automod: normalizeAutomodConfig(guild.settings?.automod as Record<string, unknown> | undefined),
@@ -374,6 +386,10 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
         reportRequests: {
           ...(guild.settings?.reportRequests || {}),
           ...(patch?.reportRequests || {})
+        },
+        mediaShare: {
+          ...(guild.settings?.mediaShare || {}),
+          ...(patch?.mediaShare || {})
         },
         automod: {
           ...(guild.settings?.automod || {}),

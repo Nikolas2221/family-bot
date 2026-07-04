@@ -375,6 +375,15 @@ export interface ReportRequestConfig {
   updatedAt: string;
 }
 
+export interface MediaShareSettings {
+  panelChannelId: string;
+  targetChannelId: string;
+  logChannelId: string;
+  minRoleId: string;
+  panelMessageId: string;
+  updatedAt: string;
+}
+
 export interface RoleMenuItem {
   roleId: string;
   label: string;
@@ -454,6 +463,7 @@ export interface GuildSettings {
   reactionRoles: ReactionRoleEntry[];
   reportSchedule: ReportScheduleSettings;
   reportRequests: Partial<Record<ReportRequestType, ReportRequestConfig>>;
+  mediaShare: MediaShareSettings;
   roleMenus: RoleMenu[];
   customCommands: CustomCommandEntry[];
   automod: AutomodConfig;

@@ -197,10 +197,12 @@ export function createRuntimeLifecycleHelpers(options: LifecycleRuntimeHelpersOp
 
       const familyEmbeds = await embeds.buildFamilyEmbeds(guild, {
         roles: settings.panelDisplayRoles || settings.roles,
-        showAllGuildRoles: true,
+        showAllGuildRoles: false,
         familyTitle: settings.familyTitle,
         updateIntervalMs,
         activityScore: guildStorage.getActivityScore,
+        pointsScore: guildStorage.getPointsScore,
+        memberWarnings: (memberId: string) => guildStorage.ensureMemberRecord(memberId).warns || 0,
         summary,
         imageUrl: settings.visuals?.familyBanner
       });

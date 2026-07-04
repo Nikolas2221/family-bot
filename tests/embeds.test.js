@@ -172,10 +172,17 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
         dndCount: 0,
         offlineCount: 0,
         topMemberLine: '<@user-1> • Leader • 0 очк.',
-        lastUpdatedLabel: 'now'
+        lastUpdatedLabel: 'now',
+        totalWarnings: 2
       },
       activityScore() {
         return 0;
+      },
+      pointsScore() {
+        return 42;
+      },
+      memberWarnings(memberId) {
+        return memberId === 'user-1' ? 2 : 0;
       }
     }
   );
@@ -189,8 +196,11 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
     .match(/<@user-1>/g) || [];
 
   assert.equal(fieldMentions.length, 1);
-  assert.match(serialized, /1 \/ 1/);
-  assert.match(serialized, /Premium/);
+  assert.match(serialized, /Всего выговоров/u);
+  assert.match(serialized, /42/u);
+  assert.match(serialized, /2 выг/u);
+  assert.doesNotMatch(serialized, /Premium/);
+  assert.doesNotMatch(serialized, /1 \/ 1/);
 }
 
 async function testFamilyPanelCanUseAllDiscordRoles() {
@@ -329,8 +339,12 @@ async function testFamilyMenuSummaryAndButtons() {
   assert.match(familyEmbed.description, /Premium/);
   assert.match(familyEmbed.description, /12/);
   assert.equal(rows.length, 2);
-  assert.equal(rows[0].components.length, 5);
-  assert.equal(rows[1].components.length, 5);
+  assert.equal(rows[0].components.length, 4);
+  assert.equal(rows[1].components.length, 3);
+  const customIds = rows.flatMap(row => row.components.map(component => component.custom_id));
+  assert.equal(customIds.includes('family_apply'), false);
+  assert.equal(customIds.includes('admin_applications'), false);
+  assert.equal(customIds.includes('admin_blacklist'), false);
 }
 
 async function testUpdateAnnouncementEmbedShowsStructuredChanges() {

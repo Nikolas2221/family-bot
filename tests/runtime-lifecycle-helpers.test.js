@@ -14,6 +14,8 @@ async function main() {
 
   const guildStorage = {
     getActivityScore: () => 7,
+    getPointsScore: () => 77,
+    ensureMemberRecord: () => ({ warns: 2 }),
     addVoiceMinutesInChannel: (memberId, minutes, channelId) => {
       const key = `${memberId}:${channelId}`;
       const total = (persistedVoice.get(key) || 0) + minutes;
@@ -138,7 +140,9 @@ async function main() {
   await helper.doPanelUpdate('guild-1', true);
   assert.equal(sentMessages.length, 1);
   assert.equal(panelIds.get('guild-1'), 'panel-1');
-  assert.equal(panelOptions[0].showAllGuildRoles, true);
+  assert.equal(panelOptions[0].showAllGuildRoles, false);
+  assert.equal(typeof panelOptions[0].pointsScore, 'function');
+  assert.equal(typeof panelOptions[0].memberWarnings, 'function');
 
   await helper.doPanelUpdate('guild-1', true);
   assert.equal(editedMessages.length, 1);

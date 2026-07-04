@@ -16,6 +16,8 @@ async function main() {
   const { main: runGuildRuntimeTests } = require('./guild-runtime.test');
   const { main: runLeakGuardTests } = require('./leak-guard.test');
   const { main: runLawTests } = require('./law.test');
+  const { main: runMediaShareTests } = require('./media-share.test');
+  const { main: runMediaShareUiTests } = require('./media-share-ui.test');
   const { main: runMojibakeTests } = require('./mojibake.test');
   const { main: runReleaseNotesTests } = require('./release-notes.test');
   const { main: runReportRequestsTests } = require('./report-requests.test');
@@ -55,6 +57,8 @@ async function main() {
   await runGuildRuntimeTests();
   await runLeakGuardTests();
   await runLawTests();
+  await runMediaShareTests();
+  await runMediaShareUiTests();
   await runMojibakeTests();
   await runReleaseNotesTests();
   await runReportRequestsTests();

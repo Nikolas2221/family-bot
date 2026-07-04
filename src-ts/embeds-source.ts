@@ -228,14 +228,11 @@ export function panelButtons(): ButtonRow[] {
       new ButtonBuilder().setCustomId('family_refresh').setLabel('Обновить').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('family_profile').setLabel('Профиль').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('family_leaderboard').setLabel('Топ').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('family_voice').setLabel('Голос').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('family_apply').setLabel('Подать заявку').setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId('family_voice').setLabel('Голос').setStyle(ButtonStyle.Secondary)
     ),
     buttonRow(
-      new ButtonBuilder().setCustomId('admin_applications').setLabel('Заявки').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_aiadvisor').setLabel('AI-совет').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_panel').setLabel('Админка').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_blacklist').setLabel('ЧС').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('admin_activityreport').setLabel('Отчёт').setStyle(ButtonStyle.Secondary)
     )
   ];
@@ -405,6 +402,8 @@ export async function buildFamilyEmbeds(
     familyTitle,
     updateIntervalMs = 60000,
     activityScore = () => 0,
+    pointsScore = activityScore,
+    memberWarnings = () => 0,
     summary = {},
     imageUrl
   }: AnyRecord = {}
@@ -439,20 +438,12 @@ export async function buildFamilyEmbeds(
     };
   });
 
-  const allMembers = Array.from(guild.members?.cache?.values?.() || []).filter((member: any) => !member.user?.bot);
   const activeRoles = snapshots.filter((item: AnyRecord) => item.members.length > 0);
 
   const embed = card({
     title: text(familyTitle || guild.name || 'Phoenix'),
     color: THEME.brand,
     description: [
-      ...familySummaryLines({
-        ...summary,
-        totalMembers: allMembers.length,
-        membersWithFamilyRoles: familyMemberIds.size,
-        membersWithoutFamilyRoles: Math.max(0, allMembers.length - familyMemberIds.size)
-      }),
-      '',
       `Активных секций: ${activeRoles.length}`,
       `Обновление: каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
       '',
@@ -461,6 +452,10 @@ export async function buildFamilyEmbeds(
     footer: `${BRAND_FOOTER} • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`,
     image: imageUrl
   });
+  embed.setDescription([
+    `Всего выговоров: ${summary.totalWarnings ?? 0}`,
+    'Роли идут по иерархии. Участник показывается только в своей старшей семейной роли.'
+  ].join('\n'));
 
   if (!activeRoles.length) {
     embed.addFields(section('Состав', text(copy.family?.emptyMembers, 'Нет участников в выбранных ролях.')));
@@ -470,9 +465,14 @@ export async function buildFamilyEmbeds(
   const panelEmbeds = [embed];
   let currentEmbed = embed;
   let currentFieldCount = 0;
+  let inlinePairCount = 0;
 
   for (const item of activeRoles) {
-    const lines = item.members.map((member: AnyRecord) => `${statusEmoji(member)} <@${member.id}> • ${activityScore(member.id)} очк.`);
+    const lines = item.members.map((member: AnyRecord) => {
+      const points = Math.max(0, Number(pointsScore(member.id) || 0));
+      const warnings = Math.max(0, Number(memberWarnings(member.id) || 0));
+      return `${statusEmoji(member)} <@${member.id}> • ${points} б. • ${warnings} выг.`;
+    });
     const chunks: string[][] = [];
     let currentChunk: string[] = [];
     let currentLength = 0;
@@ -491,7 +491,7 @@ export async function buildFamilyEmbeds(
     if (currentChunk.length) chunks.push(currentChunk);
 
     chunks.forEach((chunk, index) => {
-      if (currentFieldCount >= 25) {
+      if (currentFieldCount >= 24) {
         currentEmbed = card({
           title: `${text(familyTitle || guild.name || 'Phoenix')} • продолжение`,
           color: THEME.brand,
@@ -499,13 +499,22 @@ export async function buildFamilyEmbeds(
         });
         panelEmbeds.push(currentEmbed);
         currentFieldCount = 0;
+        inlinePairCount = 0;
       }
 
       currentEmbed.addFields(section(
         index === 0 ? `${item.name} • ${item.members.length}` : `${item.name} • ${item.members.length} (${index + 1})`,
-        chunk.join('\n')
+        chunk.join('\n'),
+        true
       ));
       currentFieldCount += 1;
+      inlinePairCount += 1;
+
+      if (inlinePairCount === 2 && currentFieldCount < 25) {
+        currentEmbed.addFields(section('\u200b', '\u200b', true));
+        currentFieldCount += 1;
+        inlinePairCount = 0;
+      }
     });
   }
 

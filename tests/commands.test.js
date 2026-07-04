@@ -68,6 +68,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   const reactionRole = commands.find(command => command.name === 'reactionrole');
   const reportSchedule = commands.find(command => command.name === 'reportschedule');
   const reportForm = commands.find(command => command.name === 'reportform');
+  const mediaShare = commands.find(command => command.name === 'mediashare');
   const announce = commands.find(command => command.name === 'announce');
   const event = commands.find(command => command.name === 'event');
   const close = commands.find(command => command.name === 'close');
@@ -87,6 +88,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.ok(reactionRole);
   assert.ok(reportSchedule);
   assert.ok(reportForm);
+  assert.ok(mediaShare);
   assert.ok(announce);
   assert.ok(event);
   assert.ok(close);
@@ -99,6 +101,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.deepEqual(afk.options.map(option => option.name), ['setup', 'list', 'approve', 'decline', 'status', 'refresh']);
   assert.deepEqual(ticket.options.map(option => option.name), ['setup', 'info', 'close', 'claim', 'add', 'remove', 'list']);
   assert.deepEqual(reportForm.options.map(option => option.name), ['setup', 'refresh', 'status']);
+  assert.deepEqual(mediaShare.options.map(option => option.name), ['setup', 'refresh', 'status']);
   assert.deepEqual(serverBackup.options.map(option => option.name), ['create', 'list', 'restore']);
   assert.deepEqual(security.options.map(option => option.name), ['lockdown', 'unlock', 'check']);
   assert.equal(law.options[0].name, 'question');

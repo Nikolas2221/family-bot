@@ -26,6 +26,7 @@ const { createDeepSeekService } = require('./services/deepseek');
 const { createSupportTicketService } = require('./services/support-tickets');
 const { createAfkLeaveService } = require('./services/afk-leave');
 const { createReportRequestService } = require('./services/report-requests');
+const { createMediaShareService } = require('./services/media-share');
 const { createServerBackupService } = require('./services/server-backups');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
@@ -142,6 +143,12 @@ const reportRequestService = createReportRequestService({
   fetchTextChannel,
   resolveGuildSettings,
   canManageReports: canDebugConfig
+});
+const mediaShareService = createMediaShareService({
+  database,
+  fetchTextChannel,
+  resolveGuildSettings,
+  canManageMedia: canDebugConfig
 });
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
 const telegramNotifications = createTelegramNotificationService({
@@ -1706,6 +1713,7 @@ registerInteractionRuntime({
   supportTicketService,
   afkLeaveService,
   reportRequestService,
+  mediaShareService,
   resolveMemberQuery,
   formatRankResult,
   syncAutoRanks,

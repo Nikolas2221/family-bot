@@ -20,6 +20,7 @@ const ADMIN_VISIBLE_COMMANDS = new Set([
   'reactionrole',
   'reportschedule',
   'reportform',
+  'mediashare',
   'verification',
   'rolemenu',
   'customcommand',
@@ -157,6 +158,43 @@ export function buildCommands(): CommandJson[] {
           )
       )
       .addSubcommand(subcommand => subcommand.setName('status').setDescription('Показать настройки форм отчётов')),
+    new SlashCommandBuilder()
+      .setName('mediashare')
+      .setDescription('Настроить панель публикации видео и стримов')
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('setup')
+          .setDescription('Создать или обновить медиа-панель')
+          .addChannelOption(option =>
+            option
+              .setName('panel_channel')
+              .setDescription('Канал, где будет висеть карточка')
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('target_channel')
+              .setDescription('Канал, куда отправлять публикации')
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+          .addChannelOption(option =>
+            option
+              .setName('log_channel')
+              .setDescription('Канал логов публикаций')
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(true)
+          )
+          .addRoleOption(option =>
+            option
+              .setName('min_role')
+              .setDescription('Минимальная роль для отправки видео/стримов')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(subcommand => subcommand.setName('refresh').setDescription('Обновить медиа-панель'))
+      .addSubcommand(subcommand => subcommand.setName('status').setDescription('Показать настройки медиа-панели')),
     new SlashCommandBuilder()
       .setName('law')
       .setDescription('Разобрать ситуацию по законодательной базе Majestic RP')

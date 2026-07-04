@@ -54,6 +54,7 @@ interface InteractionRuntimeOptions {
   supportTicketService: { handleInteraction(interaction: any): Promise<boolean> };
   afkLeaveService: { handleInteraction(interaction: any): Promise<boolean> };
   reportRequestService: { handleInteraction(interaction: any): Promise<boolean> };
+  mediaShareService: { handleInteraction(interaction: any): Promise<boolean> };
 }
 
 async function handleWelcomeCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
@@ -1071,6 +1072,9 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
         return;
       }
       if (await options.reportRequestService.handleInteraction(interaction)) {
+        return;
+      }
+      if (await options.mediaShareService.handleInteraction(interaction)) {
         return;
       }
       if (interaction.isButton?.() && interaction.customId?.startsWith('help_page:')) {

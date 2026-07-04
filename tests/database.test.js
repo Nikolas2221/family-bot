@@ -48,6 +48,14 @@ async function testSetupCreatesGuildRecord() {
           panelMessageId: '10',
           updatedAt: '2026-07-04T00:00:00.000Z'
         }
+      },
+      mediaShare: {
+        panelChannelId: '31',
+        targetChannelId: '32',
+        logChannelId: '33',
+        minRoleId: '34',
+        panelMessageId: '35',
+        updatedAt: '2026-07-05T00:00:00.000Z'
       }
     }
   });
@@ -67,6 +75,7 @@ async function testSetupCreatesGuildRecord() {
   assert.equal(record.settings.reportSchedule.weekly.enabled, true);
   assert.equal(record.settings.reportSchedule.monthly.channelId, '6');
   assert.equal(record.settings.reportRequests.up_rank.targetChannelId, '8');
+  assert.equal(record.settings.mediaShare.minRoleId, '34');
 }
 
 async function testSubscriptionCanBeUpdated() {

@@ -238,6 +238,14 @@ export function createGuildRuntimeApi(options: {
         }
       },
       reportRequests: settings.reportRequests || {},
+      mediaShare: settings.mediaShare || {
+        panelChannelId: '',
+        targetChannelId: '',
+        logChannelId: '',
+        minRoleId: '',
+        panelMessageId: '',
+        updatedAt: ''
+      },
       customCommands: Array.isArray(settings.customCommands) ? settings.customCommands : [],
       automod: defaults.normalizeAutomodConfig(settings.automod as unknown as Record<string, unknown> | undefined),
       modules: {
@@ -318,6 +326,7 @@ export function createGuildRuntimeApi(options: {
         roleMenus: settings.roleMenus,
         reportSchedule: settings.reportSchedule,
         reportRequests: settings.reportRequests,
+        mediaShare: settings.mediaShare,
         customCommands: settings.customCommands,
         automod: settings.automod,
         modules: {
