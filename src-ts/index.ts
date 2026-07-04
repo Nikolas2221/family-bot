@@ -345,6 +345,7 @@ const {
   getVerificationRoleId,
   sendAcceptLog,
   sendAcceptanceDm,
+  sendRejectionDm,
   sendAfkWarningDm,
   sendAutomodLog,
   sendBlacklistDm,
@@ -1172,6 +1173,7 @@ function getApplicationsService(guildId: any) {
     embeds,
     sendAcceptLog,
     sendAcceptanceDm,
+    sendRejectionDm,
     telegramNotifications,
     ticketService,
     ticketDeleteDelayMs: config.applicationTicketDeleteDelaySeconds * 1000

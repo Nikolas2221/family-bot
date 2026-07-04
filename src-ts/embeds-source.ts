@@ -635,11 +635,12 @@ export function buildWelcomeEmbed(
 }
 
 export function buildApplicationsPanelEmbed({ imageUrl, familyTitle = 'Семья' }: AnyRecord = {}): EmbedBuilder {
+  const title = text(familyTitle, 'семью');
   return card({
-    title: `📝 Заявки в ${text(familyTitle, 'семью')}`,
+    title: `📝 Заявки в ${title}`,
     color: THEME.phoenix,
     description: [
-      `Подача заявки в ${text(familyTitle, 'семью')}.`,
+      `Подача заявки в ${title}.`,
       '',
       text(copy.applications?.panelDescription, 'Нажми кнопку ниже, чтобы подать заявку в семью.'),
       '',
@@ -648,7 +649,7 @@ export function buildApplicationsPanelEmbed({ imageUrl, familyTitle = 'Семь�
       '2. Заполни анкету кандидата',
       '3. Руководство получит карточку на рассмотрение'
     ].join('\n'),
-    footer: `${BRAND_FOOTER} • Applications`,
+    footer: `${title} • Applications`,
     image: imageUrl
   });
 }
@@ -670,12 +671,13 @@ export function buildApplicationEmbed({
   const normalizedAbout = about || legacyText || 'не указано';
   const sourceLabel = source || text(copy.applications?.source, 'Заявка');
   const status = text(copy.applications?.statusLabel?.('review'), 'На рассмотрении');
+  const title = text(familyTitle, 'семью');
 
   return card({
-    title: `📝 Заявка в ${text(familyTitle, 'семью')}`,
+    title: `📝 Заявка в ${title}`,
     color: THEME.phoenix,
     description: text(copy.applications?.description?.(sourceLabel, user.id, status), `> **${sourceLabel} от <@${user.id}>**\n> Статус: **${status}**`),
-    footer: `${BRAND_FOOTER} • Candidate Card`,
+    footer: `${title} • Candidate Card`,
     thumbnail: avatarUrl(user)
   }).addFields(
     section('Кандидат', [`Пользователь: <@${user.id}>`, `Ник в игре: ${text(nickname)}`, `Лвл: ${text(normalizedLevel)}`].join('\n'), true),

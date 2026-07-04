@@ -167,6 +167,35 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     );
   }
 
+  async function sendRejectionDm({
+    guild,
+    user,
+    moderatorUser,
+    reason
+  }: {
+    guild: Guild;
+    user: User;
+    moderatorUser: User;
+    reason: string;
+  }) {
+    const familyTitle = resolveGuildSettings(guild.id).familyTitle;
+    return sendDirectNotification(
+      user,
+      {
+        title: 'Заявка отклонена',
+        color: 0xef4444,
+        footer: `${familyTitle} - Applications`,
+        description: [
+          `Твоя заявка в семью **${familyTitle}** на сервере **${guild.name}** была отклонена.`,
+          '',
+          `Модератор: <@${moderatorUser.id}>`,
+          `Причина: ${reason || 'не указана'}`
+        ].join('\n')
+      },
+      EmbedBuilderCtor
+    );
+  }
+
   async function sendDisciplineDm(
     type: 'warn' | 'commend',
     guild: Guild,
@@ -454,6 +483,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     getVerificationRoleId,
     sendAcceptLog,
     sendAcceptanceDm,
+    sendRejectionDm,
     sendAfkWarningDm,
     sendAutomodLog,
     sendBlacklistDm,

@@ -112,6 +112,14 @@ async function main() {
   });
   assert.equal(accepted, true);
 
+  const rejected = await helpers.sendRejectionDm({
+    guild: member.guild,
+    user: member.user,
+    moderatorUser: { id: 'mod-1' },
+    reason: 'Не подходит'
+  });
+  assert.equal(rejected, true);
+
   await helpers.announceBuildUpdate(member.guild);
   assert.equal(maintenanceUpdates.length, 1);
   assert.equal(sentPayloads.length >= 2, true);

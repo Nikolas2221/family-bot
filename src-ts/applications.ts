@@ -41,6 +41,7 @@ interface ApplicationsOptions {
   embeds: EmbedsApi;
   sendAcceptLog: (...args: any[]) => Promise<unknown>;
   sendAcceptanceDm?: (...args: any[]) => Promise<unknown>;
+  sendRejectionDm?: (...args: any[]) => Promise<unknown>;
   telegramNotifications?: TelegramNotificationService;
   ticketService?: Pick<TicketService, 'registerTicket' | 'markDecision' | 'markClosed'>;
   ticketDeleteDelayMs?: number;
@@ -60,6 +61,7 @@ export function createApplicationsService({
   embeds,
   sendAcceptLog,
   sendAcceptanceDm = async () => {},
+  sendRejectionDm = async () => {},
   telegramNotifications,
   ticketService,
   ticketDeleteDelayMs = 5000
@@ -69,6 +71,17 @@ export function createApplicationsService({
     if (!task) return;
     await task.catch(error => {
       console.warn('Telegram application notification failed:', error);
+    });
+  }
+
+  async function notifyDiscordDm(task?: Promise<unknown>): Promise<void> {
+    if (!task) return;
+    await task.then(sent => {
+      if (sent === false) {
+        console.warn('Discord application DM was not delivered.');
+      }
+    }).catch(error => {
+      console.warn('Discord application DM failed:', error);
     });
   }
 
@@ -374,13 +387,13 @@ export function createApplicationsService({
 
     await targetMessage.edit({ embeds: [accepted], components: [] });
     await sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName);
-    await sendAcceptanceDm({
+    await notifyDiscordDm(sendAcceptanceDm({
       guild: interaction.guild,
       member,
       moderatorUser: interaction.user,
       reason,
       rankName
-    });
+    }));
     await interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
     await notifyTelegram(telegramNotifications?.notifyApplicationAccepted({
       application,
@@ -478,7 +491,7 @@ export function createApplicationsService({
 
     await targetMessage.edit({ embeds: [rejected], components: [] });
 
-    const user = await client.users.fetch(userId).catch(() => null);
+    const user = await client.users?.fetch?.(userId).catch(() => null);
     if (user && logChannelId) {
       const channel = await fetchTextChannel(interaction.guild, logChannelId);
       if (channel) {
@@ -494,6 +507,12 @@ export function createApplicationsService({
       }
     }
 
+    await notifyDiscordDm(sendRejectionDm({
+      guild: interaction.guild,
+      user: user || { id: userId },
+      moderatorUser: interaction.user,
+      reason
+    }));
     await interaction.reply(ephemeral({ content: copy.applications.rejectedReply(userId) }));
     await notifyTelegram(telegramNotifications?.notifyApplicationRejected({
       application,

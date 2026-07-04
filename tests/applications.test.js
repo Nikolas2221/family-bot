@@ -318,6 +318,7 @@ async function testAcceptApplication() {
   const edits = [];
   let acceptLogPayload = null;
   let telegramAccepted = null;
+  let acceptanceDm = null;
   let addedRoleId = null;
   let removedRoleIds = null;
   const member = {
@@ -347,6 +348,10 @@ async function testAcceptApplication() {
     embeds: createEmbedsStub(),
     sendAcceptLog: async (_guild, _member, _moderatorUser, reason, rankName) => {
       acceptLogPayload = { reason, rankName };
+    },
+    sendAcceptanceDm: async payload => {
+      acceptanceDm = payload;
+      return true;
     },
     telegramNotifications: {
       notifyApplicationAccepted: async payload => {
@@ -400,6 +405,8 @@ async function testAcceptApplication() {
   });
   assert.equal(telegramAccepted.application.id, applicationId);
   assert.equal(telegramAccepted.moderator.id, 'moderator-1');
+  assert.equal(acceptanceDm.member.id, 'user-2');
+  assert.equal(acceptanceDm.reason, 'Прошел собеседование');
   assert.match(replies[0].content, /принят в семью/i);
 }
 
@@ -618,6 +625,7 @@ async function testRejectApplication() {
     }
   };
   let telegramRejected = null;
+  let rejectionDm = null;
 
   const service = createApplicationsService({
     storage: createGuildScopedStorage(storage, guildId),
@@ -635,6 +643,10 @@ async function testRejectApplication() {
     },
     embeds: createEmbedsStub(),
     sendAcceptLog: async () => {},
+    sendRejectionDm: async payload => {
+      rejectionDm = payload;
+      return true;
+    },
     telegramNotifications: {
       notifyApplicationRejected: async payload => {
         telegramRejected = payload;
@@ -664,6 +676,8 @@ async function testRejectApplication() {
   assert.equal(telegramRejected.application.id, applicationId);
   assert.equal(telegramRejected.candidate.id, 'user-3');
   assert.equal(telegramRejected.reason, 'Не подходит по требованиям');
+  assert.equal(rejectionDm.user.id, 'user-3');
+  assert.equal(rejectionDm.reason, 'Не подходит по требованиям');
   assert.match(replies[0].content, /отклон/i);
 }
 

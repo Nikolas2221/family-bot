@@ -294,10 +294,14 @@ async function testMenuAndApplicationsEmbedsExposeConfiguredImages() {
   assert.equal(familyEmbed.image.url, 'https://example.com/family-banner.png');
   assert.equal(applicationsEmbed.image.url, 'https://example.com/apply-banner.png');
   assert.match(applicationsEmbed.title, /Test Family/u);
+  assert.match(applicationsEmbed.footer.text, /Test Family/u);
+  assert.doesNotMatch(applicationsEmbed.footer.text, /BRHD|Phoenix/u);
   const applicationEmbed = embeds.buildApplicationEmbed({
     user: { id: '123456789012345678' }, applicationId: 'app-1', familyTitle: 'Test Family'
   }).toJSON();
   assert.match(applicationEmbed.title, /Test Family/u);
+  assert.match(applicationEmbed.footer.text, /Test Family/u);
+  assert.doesNotMatch(applicationEmbed.footer.text, /BRHD|Phoenix/u);
   const applicationButtons = embeds.buildApplicationButtons('app-1', '123456789012345678')
     .flatMap(row => row.toJSON().components.map(component => component.custom_id));
   assert.equal(applicationButtons.some(customId => customId.startsWith('app_close:')), false);
