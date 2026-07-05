@@ -6,6 +6,7 @@ async function main() {
   const { main: runAutomodTests } = require('./automod.test');
   const { main: runApplicationsTests } = require('./applications.test');
   const { main: runCommandsTests } = require('./commands.test');
+  const { main: runAnnouncementCommandRuntimeTests } = require('./command-runtime-announcements.test');
   const { main: runLawCommandRuntimeTests } = require('./command-runtime-law.test');
   const { main: runClientReadyRuntimeTests } = require('./client-ready-runtime.test');
   const { main: runCopyRuntimeTests } = require('./copy-runtime.test');
@@ -47,6 +48,7 @@ async function main() {
   await runAutomodTests();
   await runApplicationsTests();
   await runCommandsTests();
+  await runAnnouncementCommandRuntimeTests();
   await runLawCommandRuntimeTests();
   await runClientReadyRuntimeTests();
   await runCopyRuntimeTests();

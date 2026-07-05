@@ -1,6 +1,10 @@
 const assert = require('node:assert/strict');
 
-const { canSendDiscordAnnouncement, createAnnouncementService } = require('../dist-ts/services/announcements');
+const {
+  canSendDiscordAnnouncement,
+  createAnnouncementService,
+  formatAnnouncementResultMessage
+} = require('../dist-ts/services/announcements');
 
 async function main() {
   const roleMember = { roles: { cache: { has: id => id === 'role-allowed' } } };
@@ -31,6 +35,7 @@ async function main() {
       }
     },
     telegramNotifications: {
+      enabled: true,
       sendAnnouncement: async payload => {
         telegramMessages.push(payload);
         return { ok: true, messageId: 'telegram-message-1' };
@@ -63,6 +68,108 @@ async function main() {
   assert.equal(store.announcements[0].discordMessageId, 'discord-message-2');
   assert.equal(store.announcements[0].telegramMessageId, 'telegram-message-1');
   assert.equal(store.announcements.length, 2);
+
+  const fallbackDiscordMessages = [];
+  const fallbackService = createAnnouncementService({
+    storage: {
+      getStore: () => ({ applications: [], announcements: [] }),
+      save() {}
+    },
+    client: {
+      channels: {
+        fetch: async id => id === 'current-channel'
+          ? {
+              async send(payload) {
+                fallbackDiscordMessages.push(payload);
+                return { id: 'fallback-discord-message' };
+              }
+            }
+          : null
+      }
+    },
+    telegramNotifications: {
+      enabled: true,
+      sendAnnouncement: async () => ({ ok: true, messageId: 'telegram-message-2' })
+    },
+    discordChannelId: '',
+    now: () => new Date('2026-06-20T12:00:00.000Z')
+  });
+  assert.deepEqual(await fallbackService.sendTelegramFromDiscord({
+    type: 'announcement',
+    text: 'Новость без настроенного канала',
+    authorId: 'discord-2',
+    authorName: 'Admin',
+    fallbackDiscordChannelId: 'current-channel'
+  }), { ok: true });
+  assert.equal(fallbackDiscordMessages.length, 1);
+
+  const missingDiscordService = createAnnouncementService({
+    storage: {
+      getStore: () => ({ applications: [], announcements: [] }),
+      save() {}
+    },
+    client: { channels: { fetch: async () => null } },
+    telegramNotifications: {
+      enabled: true,
+      sendAnnouncement: async () => ({ ok: true, messageId: 'telegram-message-unused' })
+    },
+    discordChannelId: '',
+    now: () => new Date('2026-06-20T12:00:00.000Z')
+  });
+  const missingDiscordResult = await missingDiscordService.sendDiscordFromTelegram({
+    type: 'announcement',
+    text: 'Сообщение из Telegram',
+    authorId: 'tg-2',
+    authorName: '@admin',
+    fallbackDiscordChannelId: 'missing-channel'
+  });
+  assert.deepEqual(missingDiscordResult, { ok: false, code: 'discord_channel_missing' });
+  assert.match(formatAnnouncementResultMessage(missingDiscordResult, 'discord'), /DISCORD_ANNOUNCEMENTS_CHANNEL_ID/u);
+
+  const telegramDisabledService = createAnnouncementService({
+    storage: {
+      getStore: () => ({ applications: [], announcements: [] }),
+      save() {}
+    },
+    client: { channels: { fetch: async () => null } },
+    telegramNotifications: {
+      enabled: false,
+      sendAnnouncement: async () => ({ ok: false, messageId: '' })
+    },
+    discordChannelId: '',
+    now: () => new Date('2026-06-20T12:00:00.000Z')
+  });
+  const disabledResult = await telegramDisabledService.sendTelegramFromDiscord({
+    type: 'event',
+    text: 'Telegram выключен',
+    authorId: 'discord-3',
+    authorName: 'Admin'
+  });
+  assert.deepEqual(disabledResult, { ok: false, code: 'telegram_disabled' });
+  assert.match(formatAnnouncementResultMessage(disabledResult, 'telegram'), /TELEGRAM_BOT_TOKEN/u);
+
+  const telegramFailService = createAnnouncementService({
+    storage: {
+      getStore: () => ({ applications: [], announcements: [] }),
+      save() {}
+    },
+    client: { channels: { fetch: async () => null } },
+    telegramNotifications: {
+      enabled: true,
+      sendAnnouncement: async () => ({ ok: false, messageId: '', error: 'chat not found' })
+    },
+    discordChannelId: '',
+    now: () => new Date('2026-06-20T12:00:00.000Z')
+  });
+  const failResult = await telegramFailService.sendTelegramFromDiscord({
+    type: 'announcement',
+    text: 'Telegram не принял',
+    authorId: 'discord-4',
+    authorName: 'Admin'
+  });
+  assert.deepEqual(failResult, { ok: false, code: 'telegram_send_failed', detail: 'chat not found' });
+  assert.match(formatAnnouncementResultMessage(failResult, 'telegram'), /TELEGRAM_ANNOUNCEMENTS_CHAT_ID/u);
+  assert.match(formatAnnouncementResultMessage(failResult, 'telegram'), /chat not found/u);
 }
 
 if (require.main === module) {

@@ -1,5 +1,5 @@
 ﻿import { createGuildStorageContext } from './guild-runtime';
-import { canSendDiscordAnnouncement } from './services/announcements';
+import { canSendDiscordAnnouncement, formatAnnouncementResultMessage } from './services/announcements';
 import { buildDiscordOnlineMembersText } from './services/online-members';
 import { setActiveLockdown } from './services/security-lockdown';
 import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
@@ -517,12 +517,11 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       type: interaction.commandName === 'event' ? 'event' : 'announcement',
       text,
       authorId: interaction.user.id,
-      authorName: interaction.user.globalName || interaction.user.username || interaction.user.tag || interaction.user.id
+      authorName: interaction.user.globalName || interaction.user.username || interaction.user.tag || interaction.user.id,
+      fallbackDiscordChannelId: interaction.channelId || interaction.channel?.id || ''
     });
     await interaction.reply(ephemeral({
-      content: result.ok
-        ? '✅ Отправлено в Telegram.'
-        : '❌ Не удалось отправить объявление в Telegram.'
+      content: formatAnnouncementResultMessage(result, 'telegram')
     }));
     return true;
   }

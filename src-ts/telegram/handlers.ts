@@ -1,4 +1,5 @@
 import type { Telegraf } from 'telegraf';
+import { formatAnnouncementResultMessage } from '../services/announcements';
 import type { AnnouncementService } from '../services/announcements';
 import type { TicketService } from '../services/tickets';
 import type { AfkLeaveService } from '../services/afk-leave';
@@ -192,7 +193,7 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
       authorId: author.id,
       authorName: author.name
     });
-    await ctx.reply(result.ok ? '✅ Отправлено в Discord.' : '❌ Не удалось отправить объявление в Discord.');
+    await ctx.reply(formatAnnouncementResultMessage(result, 'discord'));
   }
 
   bot.command('announce', (ctx: any) => handleAnnouncement(ctx, 'announcement'));

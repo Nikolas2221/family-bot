@@ -32,6 +32,9 @@ async function main() {
     announcements: {
       sendDiscordFromTelegram: async payload => {
         announcements.push(payload);
+        if (payload.text.includes('fail')) {
+          return { ok: false, code: 'discord_channel_missing' };
+        }
         return { ok: true };
       }
     },
@@ -65,6 +68,16 @@ async function main() {
     reply: async text => replies.push(text)
   });
   assert.equal(announcements.length, 1);
+
+  await commands.get('event')({
+    chat: { id: -1001 },
+    from: { id: 7, username: 'admin' },
+    getChatMember: adminChatMember,
+    message: { text: '/event fail' },
+    reply: async text => replies.push(text)
+  });
+  assert.match(replies.at(-1), /Причина:/u);
+  assert.match(replies.at(-1), /DISCORD_ANNOUNCEMENTS_CHANNEL_ID/u);
 
   await commands.get('event')({
     chat: { id: 999 },

@@ -67,7 +67,7 @@ export interface TelegramNotificationService {
     };
     createdAt?: Date;
   }): Promise<boolean>;
-  sendAnnouncement(input: { guildId?: string; type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string }>;
+  sendAnnouncement(input: { guildId?: string; type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string; error?: string }>;
 }
 
 function clean(value: unknown, fallback = 'не указано', maxLength = 1000): string {
@@ -211,8 +211,9 @@ export function createTelegramNotificationService(options: {
   const sender = options.sender || (enabled ? new Telegraf(token).telegram : null);
   const logger = options.logger || console;
 
-  async function sendWithResult(chatId: string, text: string, sendOptions: Record<string, unknown> = {}): Promise<{ ok: boolean; messageId: string }> {
-    if (!enabled || !sender || !chatId) return { ok: false, messageId: '' };
+  async function sendWithResult(chatId: string, text: string, sendOptions: Record<string, unknown> = {}): Promise<{ ok: boolean; messageId: string; error?: string }> {
+    if (!enabled || !sender) return { ok: false, messageId: '', error: 'Telegram notification service is disabled' };
+    if (!chatId) return { ok: false, messageId: '', error: 'Telegram chat id is empty' };
     try {
       const result: any = await sender.sendMessage(chatId, text.slice(0, 4000), {
         disable_web_page_preview: true,
@@ -222,7 +223,7 @@ export function createTelegramNotificationService(options: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`Telegram notification failed: ${message}`);
-      return { ok: false, messageId: '' };
+      return { ok: false, messageId: '', error: message };
     }
   }
 
@@ -359,7 +360,7 @@ export function createTelegramNotificationService(options: {
       });
     },
     sendAnnouncement(input) {
-      if (!allowsGuild(input.guildId)) return Promise.resolve({ ok: false, messageId: '' });
+      if (!allowsGuild(input.guildId)) return Promise.resolve({ ok: false, messageId: '', error: 'guild is not allowed by TELEGRAM_ALLOWED_GUILD_IDS' });
       const title = input.type === 'event' ? '📅 Семейное событие' : '📢 Семейное объявление';
       return sendWithResult(announcementsChatId, [
         title,

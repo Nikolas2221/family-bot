@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.55': {
+    added: [
+      'подробные причины ошибок для команд объявлений /announce и /event в Discord и Telegram'
+    ],
+    updated: [
+      'Discord → Telegram больше не зависит жёстко от DISCORD_ANNOUNCEMENTS_CHANNEL_ID: при необходимости публичная копия остаётся в текущем Discord-канале',
+      'Telegram → Discord теперь явно сообщает, если не найден Discord-канал объявлений или у бота нет доступа',
+      'ответы об ошибках показывают безопасную деталь от Telegram API, например chat not found или bot was blocked'
+    ],
+    fixed: [
+      'исправлен ложный ответ «не удалось отправить в Telegram», когда на самом деле ломалась Discord-копия объявления',
+      'ошибки Telegram-моста теперь различают выключенный Telegram, недоступный чат и отказ Telegram API'
+    ]
+  },
   '1.0.54': {
     added: [
       'авто-подбор ролей состава из Discord без необходимости вручную добавлять их через /setpanelroles'
