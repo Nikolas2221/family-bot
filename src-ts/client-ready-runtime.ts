@@ -62,6 +62,7 @@ interface ClientReadyRuntimeOptions {
   syncAutoRanksAll(reason: string): Promise<unknown>;
   doPanelUpdate(guildId: string, force: boolean): Promise<unknown>;
   doPanelUpdateAll(force: boolean): Promise<unknown>;
+  refreshLegacyBrandMessages(guild: GuildLike): Promise<unknown>;
   announceBuildUpdate(guild: GuildLike): Promise<unknown>;
   runRolelessCleanupDetailed(guildId: string, reason: string): Promise<unknown>;
   runAfkWarnings(guildId: string): Promise<unknown>;
@@ -105,6 +106,7 @@ async function warmGuildState(
     | 'startVoiceSession'
     | 'syncAutoRanks'
     | 'doPanelUpdate'
+    | 'refreshLegacyBrandMessages'
     | 'announceBuildUpdate'
     | 'runRolelessCleanupDetailed'
     | 'runAfkWarnings'
@@ -131,6 +133,10 @@ async function warmGuildState(
 
   await options.doPanelUpdate(guild.id, true).catch(error => {
     console.error(`Ошибка стартового обновления панели ${guild.id}:`, error);
+  });
+
+  await options.refreshLegacyBrandMessages(guild).catch(error => {
+    console.error(`Ошибка обновления старых брендовых подписей ${guild.id}:`, error);
   });
 
   await options.announceBuildUpdate(guild).catch(error => {

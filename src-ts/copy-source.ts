@@ -447,7 +447,7 @@ copy.stats = {
 copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
-copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
+copy.ai.advisorFooter = 'KLAIZ • AI Advisor';
 copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
 
 copy.security.banListTitle = '🔨 Список банов';
@@ -957,7 +957,7 @@ copy.stats = {
 copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
-copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
+copy.ai.advisorFooter = 'KLAIZ • AI Advisor';
 copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
 
 copy.admin.noOwnerAccess = 'Эта команда доступна только владельцам бота.';
@@ -1578,7 +1578,7 @@ copy.stats = {
 copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
-copy.ai.advisorFooter = 'BRHD • Phoenix • AI Advisor';
+copy.ai.advisorFooter = 'KLAIZ • AI Advisor';
 copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
 copy.ai.commandsOverviewTitle = 'Что тебе доступно сейчас';
 copy.ai.commandsOverviewEmpty = 'Не нашёл доступных команд для твоих прав.';
@@ -1699,7 +1699,7 @@ copy.profile = {
 copy.stats = {
   ...copy.stats,
   leaderboardTitle: '🏆 Таблица участников',
-  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardDescription: 'Премиальный срез репутации семьи KLAIZ.',
   leaderboardEmpty: 'Пока нет участников для таблицы.',
   voiceTitle: '🎙 Голосовая активность',
   voiceDescription: 'Топ участников по времени в голосовых каналах.',
@@ -1783,7 +1783,7 @@ copy.profile = {
 copy.stats = {
   ...copy.stats,
   leaderboardTitle: '🏆 Таблица участников',
-  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardDescription: 'Премиальный срез репутации семьи KLAIZ.',
   leaderboardEmpty: 'Пока нет участников для таблицы.',
   voiceTitle: '🎙 Голосовая активность',
   voiceDescription: 'Топ участников по времени в голосовых каналах.',
@@ -1875,7 +1875,7 @@ copy.admin = {
 copy.stats = {
   ...copy.stats,
   leaderboardTitle: '🏆 Таблица участников',
-  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardDescription: 'Премиальный срез репутации семьи KLAIZ.',
   leaderboardEmpty: 'Пока нет участников для таблицы.',
   voiceTitle: '🎙 Голосовая активность',
   voiceDescription: 'Топ участников по времени в голосовых каналах.',
@@ -2097,7 +2097,7 @@ copy.customCommands = {
 copy.stats = {
   ...copy.stats,
   leaderboardTitle: 'Таблица участников',
-  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardDescription: 'Премиальный срез репутации семьи KLAIZ.',
   leaderboardEmpty: 'Пока нет участников для таблицы.',
   voiceTitle: 'Голосовая активность',
   voiceDescription: 'Топ участников по времени в голосовых каналах.',
@@ -2116,7 +2116,7 @@ copy.stats = {
 copy.ai = {
   ...copy.ai,
   advisorTitle: (displayName: any) => `AI-советник: ${displayName}`,
-  advisorFooter: 'BRHD • Phoenix • AI Advisor',
+  advisorFooter: 'KLAIZ • AI Advisor',
   advisorUnavailable: 'AI-советник временно недоступен.',
   commandsOverviewTitle: 'Что тебе доступно сейчас',
   commandsOverviewEmpty: 'Не нашёл доступных команд для твоих прав.',
@@ -2396,7 +2396,7 @@ copy.customCommands.removed = function removed(name: any) {
 copy.stats = {
   ...copy.stats,
   leaderboardTitle: '🏆 Таблица участников',
-  leaderboardDescription: 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.',
+  leaderboardDescription: 'Премиальный срез репутации семьи KLAIZ.',
   leaderboardEmpty: 'Пока нет участников для таблицы.',
   voiceTitle: '🎙 Голосовая активность',
   voiceDescription: 'Топ участников по времени в голосовых каналах.',
@@ -2418,7 +2418,7 @@ copy.ai = copy.ai || {};
 copy.ai.advisorTitle = function advisorTitle(displayName: any) {
   return `🤖 AI-советник: ${displayName}`;
 };
-copy.ai.advisorFooter = 'BRHD / Phoenix / AI Advisor';
+copy.ai.advisorFooter = 'KLAIZ / AI Advisor';
 copy.ai.advisorUnavailable = 'AI-советник временно недоступен.';
 copy.ai.commandsOverviewTitle = 'Что тебе доступно сейчас';
 copy.ai.commandsOverviewEmpty = 'Не нашёл доступных команд для твоих прав.';

@@ -296,7 +296,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
             ].join('\n')
           }
         )
-        .setFooter({ text: 'BRHD - Phoenix - Activity Report' })
+        .setFooter({ text: 'KLAIZ - Activity Report' })
         .setTimestamp();
     }
 
@@ -320,7 +320,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
         name: 'Список',
         value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
       })
-      .setFooter({ text: 'BRHD - Phoenix - Activity Report' })
+      .setFooter({ text: 'KLAIZ - Activity Report' })
       .setTimestamp();
   }
 
@@ -372,7 +372,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
             ].join('\n')
           }
         )
-        .setFooter({ text: 'BRHD - Phoenix - Premium Activity' })
+        .setFooter({ text: 'KLAIZ - Premium Activity' })
         .setTimestamp();
 
       if (familyBanner) {
@@ -403,7 +403,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
 
     const embed = new EmbedBuilderCtor()
       .setColor(0x7c3aed)
-      .setTitle('Отчёт по активности семьи - Phoenix')
+      .setTitle('Отчёт по активности семьи - KLAIZ')
       .setDescription(
         [
           `Сервер: **${guild.name}**`,
@@ -426,7 +426,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
           value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
         }
       )
-      .setFooter({ text: 'BRHD - Phoenix - Premium Activity' })
+      .setFooter({ text: 'KLAIZ - Premium Activity' })
       .setTimestamp();
 
     if (familyBanner) {

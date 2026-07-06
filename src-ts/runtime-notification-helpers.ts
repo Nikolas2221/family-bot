@@ -93,7 +93,7 @@ async function sendDirectNotification(
     title,
     description,
     color = 0x7c3aed,
-    footer = 'BRHD - Phoenix - Notify'
+    footer = 'KLAIZ - Notify'
   }: {
     title: string;
     description: string;
@@ -154,7 +154,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       {
         title: 'Заявка принята',
         color: 0x10b981,
-        footer: 'BRHD - Phoenix - Family',
+        footer: 'KLAIZ - Family',
         description: [
           `Ты принят в семью **${resolveGuildSettings(guild.id).familyTitle}** на сервере **${guild.name}**.`,
           '',
@@ -209,7 +209,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       {
         title: isWarn ? 'Получен выговор' : 'Получена похвала',
         color: isWarn ? 0xf97316 : 0x2563eb,
-        footer: 'BRHD - Phoenix - Discipline',
+        footer: 'KLAIZ - Discipline',
         description: [
           `Сервер: **${guild.name}**`,
           `Модератор: <@${moderatorUser.id}>`,
@@ -235,7 +235,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       {
         title,
         color: isPromotion ? 0x10b981 : 0xe11d48,
-        footer: 'BRHD - Phoenix - Ranks',
+        footer: 'KLAIZ - Ranks',
         description: [
           `Сервер: **${guild.name}**`,
           `Было: ${result.fromRole?.name || '—'}`,
@@ -255,7 +255,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       {
         title: 'Чёрный список',
         color: 0xe11d48,
-        footer: 'BRHD - Phoenix - Security',
+        footer: 'KLAIZ - Security',
         description: [
           `Твой доступ на сервер **${guild.name}** ограничен.`,
           `Причина: ${reason}`,
@@ -273,7 +273,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       {
         title: 'Предупреждение об AFK',
         color: 0xf59e0b,
-        footer: 'BRHD - Phoenix - Activity',
+        footer: 'KLAIZ - Activity',
         description: [
           `На сервере **${member.guild.name}** от тебя не было активности уже 3 дня.`,
           'Если не проявишь активность, администрация может кикнуть тебя за AFK.',

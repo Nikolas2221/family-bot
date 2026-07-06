@@ -83,14 +83,14 @@ async function testWelcomeEmbedShowsJoinFlow() {
         }
       }
     },
-    'BRHD Family',
+    'KLAIZ Family',
     '',
     '',
     { memberCount: 286, verificationEnabled: true, applicationsChannelId: '987654321098765432' }
   ).toJSON();
 
-  assert.match(embed.title, /BRHD Family|Phoenix/);
-  assert.match(embed.description, /BRHD Family/);
+  assert.match(embed.title, /KLAIZ Family|KLAIZ/);
+  assert.match(embed.description, /KLAIZ Family/);
   assert.match(embed.description, /286-й участник/u);
   assert.match(embed.description, /подтверждения администратора/u);
   assert.match(embed.fields[0].value, /987654321098765432/u);

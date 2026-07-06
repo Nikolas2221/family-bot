@@ -26,7 +26,7 @@ const THEME = {
   slate: 0x334155
 } as const;
 
-const BRAND_FOOTER = 'BRHD • Phoenix';
+const BRAND_FOOTER = 'KLAIZ';
 const TEXT_REPAIRS: Array<[RegExp, string]> = [
   [new RegExp('\\u0420\\u00a7\\u0420\\u040e', 'g'), 'ЧС'],
   [new RegExp('\\u0420\\u201c\\u0420\\u0455\\u0420\\u00bb\\u0420\\u0455\\u0421\\u0192', 'g'), 'Голос'],
@@ -82,7 +82,7 @@ function card({
 }): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(color)
-    .setTitle(trimValue(title, 256, 'BRHD • Phoenix'))
+    .setTitle(trimValue(title, 256, 'KLAIZ'))
     .setTimestamp();
 
   const nextDescription = optionalText(description);
@@ -402,7 +402,7 @@ export function buildFamilyMenuEmbed({ imageUrl, summary }: AnyRecord = {}): Emb
     title: 'Панель семьи',
     color: THEME.brand,
     description: [
-      'Панель семьи в стиле BRHD / Phoenix.',
+      'Панель семьи KLAIZ.',
       '',
       ...familySummaryLines(summary),
       '',
@@ -464,7 +464,7 @@ export async function buildFamilyEmbeds(
   const activeRoles = snapshots.filter((item: AnyRecord) => item.members.length > 0);
 
   const embed = card({
-    title: text(familyTitle || guild.name || 'Phoenix'),
+    title: text(familyTitle || guild.name || 'KLAIZ'),
     color: THEME.brand,
     description: [
       `Активных секций: ${activeRoles.length}`,
@@ -515,7 +515,7 @@ export async function buildFamilyEmbeds(
     chunks.forEach((chunk, index) => {
       if (currentFieldCount >= 24) {
         currentEmbed = card({
-          title: `${text(familyTitle || guild.name || 'Phoenix')} • продолжение`,
+          title: `${text(familyTitle || guild.name || 'KLAIZ')} • продолжение`,
           color: THEME.brand,
           footer: `${BRAND_FOOTER} • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`
         });
@@ -588,10 +588,10 @@ export function buildProfileEmbed(
 export function buildLeaderboardEmbed(entries: unknown[] = [], summary: AnyRecord = {}): EmbedBuilder {
   const content = entries.length ? entries.map((entry) => text(entry)).join('\n') : text(copy.stats?.leaderboardEmpty, 'Рейтинг пока пуст.');
   return card({
-    title: `${text(copy.stats?.leaderboardTitle, 'Таблица участников')} • Phoenix`,
+    title: `${text(copy.stats?.leaderboardTitle, 'Таблица участников')} • KLAIZ`,
     color: THEME.gold,
     description: [
-      text(copy.stats?.leaderboardDescription, 'Премиальный срез репутации семьи в стиле BRHD / Phoenix.'),
+      text(copy.stats?.leaderboardDescription, 'Премиальный срез репутации семьи KLAIZ.'),
       '',
       `Участников в рейтинге: ${summary.memberCount ?? entries.length}`,
       `Тариф: ${summary.planLabel || 'Premium - 5$'}`,
@@ -612,7 +612,7 @@ export function buildLeaderboardEmbed(entries: unknown[] = [], summary: AnyRecor
 export function buildVoiceActivityEmbed(entries: unknown[] = [], summary: AnyRecord = {}): EmbedBuilder {
   const content = entries.length ? entries.map((entry) => text(entry)).join('\n') : text(copy.stats?.voiceEmpty, 'Голосовой рейтинг пока пуст.');
   return card({
-    title: `${text(copy.stats?.voiceTitle, 'Голосовая активность')} • Phoenix`,
+    title: `${text(copy.stats?.voiceTitle, 'Голосовая активность')} • KLAIZ`,
     color: THEME.royal,
     description: [
       text(copy.stats?.voiceDescription, 'Премиальный срез голосовой активности семьи.'),
@@ -641,12 +641,12 @@ export function buildWelcomeEmbed(
   extras: AnyRecord = {}
 ): EmbedBuilder {
   return card({
-    title: `Добро пожаловать в ${text(familyTitle || 'Phoenix')}`,
+    title: `Добро пожаловать в ${text(familyTitle || 'KLAIZ')}`,
     color: THEME.emerald,
     description: [
       customMessage
         ? text(customMessage)
-        : `Рады видеть тебя в семье **${text(familyTitle || 'Phoenix')}** на сервере **${text(member.guild?.name || 'Phoenix')}**.`,
+        : `Рады видеть тебя в семье **${text(familyTitle || 'KLAIZ')}** на сервере **${text(member.guild?.name || 'KLAIZ')}**.`,
       extras.memberCount ? `**Ты — наш ${Number(extras.memberCount)}-й участник!**` : '',
       '',
       extras.rulesChannelId ? `Правила: <#${extras.rulesChannelId}>` : '',

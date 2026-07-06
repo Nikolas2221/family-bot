@@ -67,6 +67,7 @@ async function main() {
     syncAutoRanksAll: async () => true,
     doPanelUpdate: async (guildId, force) => warmCalls.push(['doPanelUpdate', guildId, force]),
     doPanelUpdateAll: async () => true,
+    refreshLegacyBrandMessages: async (targetGuild) => warmCalls.push(['refreshLegacyBrandMessages', targetGuild.id]),
     announceBuildUpdate: async (targetGuild) => warmCalls.push(['announceBuildUpdate', targetGuild.id]),
     runRolelessCleanupDetailed: async (guildId, reason) => warmCalls.push(['runRolelessCleanupDetailed', guildId, reason]),
     runAfkWarnings: async (guildId) => warmCalls.push(['runAfkWarnings', guildId]),
@@ -86,6 +87,7 @@ async function main() {
   assert.equal(typeof maintenanceUpdates[0].patch.lastCommandSignature, 'string');
   assert.ok(warmCalls.some(call => call[0] === 'startVoiceSession'));
   assert.ok(warmCalls.some(call => call[0] === 'doPanelUpdate'));
+  assert.ok(warmCalls.some(call => call[0] === 'refreshLegacyBrandMessages'));
 }
 
 if (require.main === module) {

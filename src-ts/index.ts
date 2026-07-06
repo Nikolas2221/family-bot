@@ -28,6 +28,7 @@ const { createAfkLeaveService } = require('./services/afk-leave');
 const { createReportRequestService } = require('./services/report-requests');
 const { createMediaShareService } = require('./services/media-share');
 const { createServerBackupService } = require('./services/server-backups');
+const { refreshLegacyBrandMessages } = require('./services/brand-refresh');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
 const { registerEventRuntime } = require('./event-runtime');
@@ -628,7 +629,7 @@ function buildServerStatsReportEmbed(guild: any, period = 'weekly') {
         inline: true
       }
     )
-    .setFooter({ text: `BRHD - Phoenix - ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
+    .setFooter({ text: `KLAIZ - ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
     .setTimestamp();
 }
 
@@ -1288,7 +1289,7 @@ function buildMaintenanceEmbed({ title, description, color, fieldName, lines }: 
     .setColor(color)
     .setTitle(title)
     .setDescription(description)
-      .setFooter({ text: 'BRHD - Phoenix - Maintenance' })
+      .setFooter({ text: 'KLAIZ - Maintenance' })
     .setTimestamp();
 
   if (lines?.length) {
@@ -1484,6 +1485,7 @@ registerClientReadyRuntime({
   syncAutoRanksAll,
   doPanelUpdate,
   doPanelUpdateAll,
+  refreshLegacyBrandMessages,
   announceBuildUpdate,
   runRolelessCleanupDetailed,
   runAfkWarnings,

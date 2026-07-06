@@ -1,6 +1,19 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.56': {
+    added: [
+      'startup-refresh старых embed-сообщений бота: при деплое бот заменяет старые брендовые подписи на KLAIZ в последних 100 своих сообщениях каждого текстового/announcement-канала'
+    ],
+    updated: [
+      'все новые footer-подписи, AI-карточки, maintenance, moderation, activity и premium-отчёты используют KLAIZ вместо BRHD/Phoenix',
+      'семейная панель и welcome/family fallback-заголовки больше не используют старое название Phoenix'
+    ],
+    fixed: [
+      'старые подписи вида BRHD - Phoenix - Maintenance, BRHD • Phoenix • AI Advisor и BRHD / Phoenix / Moderation автоматически приводятся к KLAIZ',
+      'карточка состава обновляется на старте вместе с очисткой старых брендовых embed-подписей'
+    ]
+  },
   '1.0.55': {
     added: [
       'подробные причины ошибок для команд объявлений /announce и /event в Discord и Telegram'

@@ -1202,7 +1202,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
             .slice(0, 4000)
           : copy.moderation.warnHistoryEmpty
       )
-      .setFooter({ text: 'BRHD / Phoenix / Moderation' });
+      .setFooter({ text: 'KLAIZ / Moderation' });
 
     await replyAndAutoDelete(interaction, { embeds: [embed] });
     return true;
