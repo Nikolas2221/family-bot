@@ -76,6 +76,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   const ticket = commands.find(command => command.name === 'ticket');
   const afk = commands.find(command => command.name === 'afk');
   const online = commands.find(command => command.name === 'online');
+  const capabilities = commands.find(command => command.name === 'capabilities');
   const serverBackup = commands.find(command => command.name === 'serverbackup');
   const security = commands.find(command => command.name === 'security');
 
@@ -96,6 +97,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.ok(ticket);
   assert.ok(afk);
   assert.ok(online);
+  assert.ok(capabilities);
   assert.ok(serverBackup);
   assert.ok(security);
   assert.deepEqual(afk.options.map(option => option.name), ['setup', 'list', 'approve', 'decline', 'status', 'refresh']);

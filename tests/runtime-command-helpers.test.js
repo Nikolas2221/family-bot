@@ -13,6 +13,7 @@ const {
 
 async function main() {
   assert.equal(isAiCommandOverviewQuery('что я умею'), true);
+  assert.equal(isAiCommandOverviewQuery('что ты можешь'), true);
   assert.equal(isAiCommandOverviewQuery('мои команды'), true);
   assert.equal(isAiCommandOverviewQuery('просто текст'), false);
 
@@ -36,6 +37,9 @@ async function main() {
   });
 
   assert.match(overview, /Доступные команды/u);
+  assert.match(overview, /Что я могу/u);
+  assert.match(overview, /Telegram ↔ Discord/u);
+  assert.match(overview, /Backup Discord/u);
   assert.match(overview, /Premium/u);
   assert.match(overview, /\/family - Панель семьи/u);
   assert.match(overview, /\/adminpanel - Админка/u);

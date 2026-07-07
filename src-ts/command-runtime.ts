@@ -406,6 +406,11 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     return true;
   }
 
+  if (interaction.commandName === 'capabilities') {
+    await interaction.reply(ephemeral({ content: buildAiCommandsOverview(interaction) }));
+    return true;
+  }
+
   if (interaction.commandName === 'online') {
     await interaction.deferReply();
     const text = await buildDiscordOnlineMembersText(interaction.guild);

@@ -32,9 +32,12 @@ export function isAiCommandOverviewQuery(query: unknown): boolean {
   const value = String(query || '').toLowerCase();
   return (
     value.includes('что я умею') ||
+    value.includes('что ты умеешь') ||
     value.includes('что мне доступно') ||
     value.includes('какие команды') ||
     value.includes('что я могу') ||
+    value.includes('что ты можешь') ||
+    value.includes('что можешь') ||
     value.includes('мои команды')
   );
 }
@@ -64,10 +67,27 @@ export function buildAiCommandsOverview({
 
   const planLabel = isPremium ? 'Premium' : 'Free';
   return [
+    '🤖 Что я могу',
+    '',
     `${copy.ai.commandsOverviewTitle}:`,
     `План: **${planLabel}**`,
     `Пользователь: <@${userId}>`,
     '',
+    'Я могу вести семью и сервер: состав, заявки, роли, активность, отчёты, Telegram-связку, защиту, тикеты, AFK и AI-помощника.',
+    '',
+    '**Основные возможности**',
+    '• Состав семьи: роли, онлайн-статусы, баллы, выговоры, топ активности.',
+    '• Заявки: анкета, принятие/отказ, DM кандидату, логи и Telegram-дубляж.',
+    '• Telegram ↔ Discord: объявления, события, заявки, AFK, ответы в тикеты.',
+    '• Модерация: warn, commend, mute, purge, slowmode, blacklist и ban-list.',
+    '• Защита: anti-scam, leak/channel guard, emergency lockdown, отчёты в Discord и Telegram.',
+    '• Backup Discord: сохранение структуры сервера в GitHub и restore ролей/каналов.',
+    '• Тикеты: приватные обращения, закрытие, claim, add/remove участников и логи.',
+    '• AFK-отпуска: постоянная панель, заявки, одобрение/отказ в Discord и Telegram.',
+    '• Отчёты и медиа: отдельные формы отчётов, публикация видео/стримов, логи.',
+    '• AI и законка: /law по базе документов, AI-совет по участникам и командам.',
+    '',
+    '**Доступные тебе команды**',
     ...available.map((command) => `/${command.name} - ${command.description}`)
   ].join('\n').slice(0, 1900);
 }

@@ -773,6 +773,7 @@ function getHelpCatalog(interaction: any) {
     { name: 'law', description: 'Разобрать ситуацию по законодательной базе Majestic RP' },
     { name: 'ticket', description: 'Создать или управлять обращением в поддержку' },
     { name: 'afk', description: 'Подать или проверить заявку на АФК-отпуск' },
+    { name: 'capabilities', description: 'Показать полное описание возможностей бота' },
     { name: 'help', description: copy.commands.helpDescription }
   ];
 
@@ -1493,7 +1494,7 @@ registerClientReadyRuntime({
   startVoiceSession
 });
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   serverBackupService.startAutoBackups();
 });
 

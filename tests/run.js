@@ -32,6 +32,7 @@ async function main() {
   const { main: runRuntimeLifecycleHelpersTests } = require('./runtime-lifecycle-helpers.test');
   const { main: runRuntimeNotificationHelpersTests } = require('./runtime-notification-helpers.test');
   const { main: runSecurityTests } = require('./security.test');
+  const { main: runServerBackupsTests } = require('./server-backups.test');
   const { main: runStorageTests } = require('./storage.test');
   const { main: runSupportTicketTests } = require('./support-tickets.test');
   const { main: runSupportTicketUiTests } = require('./support-ticket-ui.test');
@@ -75,6 +76,7 @@ async function main() {
   await runRuntimeLifecycleHelpersTests();
   await runRuntimeNotificationHelpersTests();
   await runSecurityTests();
+  await runServerBackupsTests();
   await runStorageTests();
   await runSupportTicketTests();
   await runSupportTicketUiTests();

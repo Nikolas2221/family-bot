@@ -41,6 +41,7 @@ const files = [
   path.join('tests', 'runtime-family-helpers.test.js'),
   path.join('tests', 'runtime-lifecycle-helpers.test.js'),
   path.join('tests', 'runtime-notification-helpers.test.js'),
+  path.join('tests', 'server-backups.test.js'),
   path.join('tests', 'storage.test.js'),
   path.join('tests', 'ts-migration.test.js'),
   path.join('tests', 'run.js')

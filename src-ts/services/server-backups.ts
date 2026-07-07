@@ -16,6 +16,7 @@ type BackupResult = {
   path?: string;
   url?: string;
   error?: string;
+  skipped?: boolean;
 };
 
 function safeName(value: unknown): string {
@@ -110,7 +111,7 @@ function githubApiBase(config: BackupConfig): string {
 
 export function createServerBackupService({ client, config }: { client: any; config: BackupConfig }) {
   let autoTimer: NodeJS.Timeout | null = null;
-  let inProgress = false;
+  const inProgressGuilds = new Set<string>();
 
   function isConfigured() {
     return Boolean(config.githubToken && config.githubOwner && config.githubRepo);
@@ -189,9 +190,12 @@ export function createServerBackupService({ client, config }: { client: any; con
 
   async function createBackup(guild: any, reason = 'manual'): Promise<BackupResult> {
     if (!isConfigured()) return { ok: false, error: 'GitHub backup env is not configured.' };
-    if (inProgress) return { ok: false, error: 'Backup is already running.' };
+    const guildId = String(guild?.id || 'unknown');
+    if (inProgressGuilds.has(guildId)) {
+      return { ok: false, skipped: true, error: 'Backup is already running for this server.' };
+    }
 
-    inProgress = true;
+    inProgressGuilds.add(guildId);
     try {
       await guild.roles.fetch().catch(() => null);
       await guild.channels.fetch().catch(() => null);
@@ -208,7 +212,7 @@ export function createServerBackupService({ client, config }: { client: any; con
       console.error('Server backup failed:', error);
       return { ok: false, error: error?.message || 'Unknown backup error.' };
     } finally {
-      inProgress = false;
+      inProgressGuilds.delete(guildId);
     }
   }
 
@@ -333,11 +337,18 @@ export function createServerBackupService({ client, config }: { client: any; con
     const intervalMs = Math.max(1, Number(config.intervalHours) || 48) * 60 * 60 * 1000;
 
     const runAutoBackup = (reason: string) => {
-      for (const guild of client.guilds.cache.values()) {
-        void createBackup(guild, reason).then(result => {
-          if (!result.ok) console.error(`Auto server backup failed for ${guild.id}:`, result.error);
-        });
-      }
+      void (async () => {
+        for (const guild of client.guilds.cache.values()) {
+          const result = await createBackup(guild, reason);
+          if (!result.ok && result.skipped) {
+            console.warn(`Auto server backup skipped for ${guild.id}: ${result.error}`);
+          } else if (!result.ok) {
+            console.error(`Auto server backup failed for ${guild.id}:`, result.error);
+          }
+        }
+      })().catch(error => {
+        console.error('Auto server backup scheduler failed:', error);
+      });
     };
 
     runAutoBackup('startup-auto');

@@ -56,6 +56,7 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('setup').setDescription(copy.commands.setupDescription),
     new SlashCommandBuilder().setName('adminpanel').setDescription(copy.commands.adminPanelDescription),
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
+    new SlashCommandBuilder().setName('capabilities').setDescription('Что я могу делать на сервере'),
     new SlashCommandBuilder().setName('online').setDescription('Показать участников Discord в сети'),
     new SlashCommandBuilder()
       .setName('serverbackup')

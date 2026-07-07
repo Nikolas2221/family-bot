@@ -124,6 +124,39 @@ async function main() {
   assert.equal(maintenanceUpdates.length, 1);
   assert.equal(sentPayloads.length >= 2, true);
 
+  const telegramOnlyUpdates = [];
+  const telegramOnlyHelpers = createNotificationRuntimeHelpers({
+    copy: {},
+    embeds,
+    database: {
+      getGuild: () => ({ maintenance: {} }),
+      updateGuildMaintenance: (guildId, patch) => telegramOnlyUpdates.push({ guildId, patch })
+    },
+    EmbedBuilderCtor: require('discord.js').EmbedBuilder,
+    fetchTextChannel: async () => null,
+    isPremiumGuild: () => true,
+    resolveGuildSettings: () => ({
+      familyTitle: 'KLAIZ',
+      channels: {},
+      visuals: {},
+      welcome: { enabled: false, dmEnabled: false, message: '' },
+      verification: { enabled: false, roleId: '' }
+    }),
+    currentBuildSignature: '1.0.57:def5678',
+    productVersionLabel: 'KLAIZ BOT 1.0.57',
+    productVersionSemver: '1.0.57',
+    deployBuildId: 'def5678',
+    deployCommitMessage: 'capabilities update',
+    getUpdateChangeGroups: () => ({ added: ['capabilities'], updated: [], fixed: [] }),
+    getCurrentReleaseChangeGroups: () => ({ added: ['capabilities'], updated: [], fixed: [] }),
+    telegramNotifications: {
+      notifyUpdateAnnouncement: async () => true
+    }
+  });
+
+  await telegramOnlyHelpers.announceBuildUpdate(member.guild);
+  assert.equal(telegramOnlyUpdates.length, 1);
+
   await helpers.sendWelcomeInvite(member);
   const welcomePayload = sentPayloads.find(payload => payload.embeds?.[0]?.type === 'welcome' && payload.components);
   assert.equal(welcomePayload.content, '<@user-1>');
