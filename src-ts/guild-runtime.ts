@@ -29,6 +29,7 @@ interface GuildRuntimeDefaults {
   accessDiscipline: string[];
   accessRanks: string[];
   applicationDefaultRole: string;
+  guestRoleId: string;
   features: GuildFeatures;
   normalizeAutomodConfig(input: Record<string, unknown> | undefined): AutomodConfig;
 }
@@ -89,6 +90,12 @@ export function createGuildStorageContext(guildId: string, storage: StorageApi):
     },
     setCooldown(userId: string, value?: number) {
       return storage.setGuildCooldown(guildId, userId, value);
+    },
+    getVerificationConfirmation(userId: string, type: 'member' | 'guest' = 'member') {
+      return storage.getVerificationConfirmation(guildId, userId, type);
+    },
+    setVerificationConfirmation(input: Omit<Parameters<StorageApi['setVerificationConfirmation']>[0], 'guildId'>) {
+      return storage.setVerificationConfirmation({ guildId, ...input });
     },
     createApplication(payload: {
       userId: string;
@@ -211,6 +218,7 @@ export function createGuildRuntimeApi(options: {
       muteRoleId: settings.roles?.mute || '',
       autoroleRoleId: settings.roles?.autorole || '',
       verificationRoleId: settings.roles?.verification || '',
+      guestRoleId: settings.roles?.guest || (allowEnvDefaults ? defaults.guestRoleId : ''),
       visuals: {
         familyBanner: settings.visuals?.familyBanner || '',
         applicationsBanner: settings.visuals?.applicationsBanner || ''
@@ -223,7 +231,7 @@ export function createGuildRuntimeApi(options: {
       verification: {
         enabled: Boolean(settings.verification?.enabled),
         questionnaireEnabled: Boolean(settings.verification?.questionnaireEnabled),
-        roleId: String(settings.verification?.roleId || settings.roles?.verification || settings.roles?.autorole || '').trim()
+        roleId: String(defaults.applicationDefaultRole || settings.verification?.roleId || settings.roles?.verification || settings.roles?.autorole || '').trim()
       },
       reactionRoles: Array.isArray(settings.reactionRoles) ? settings.reactionRoles : [],
       roleMenus: Array.isArray(settings.roleMenus) ? settings.roleMenus : [],
@@ -243,8 +251,10 @@ export function createGuildRuntimeApi(options: {
         targetChannelId: '',
         logChannelId: '',
         minRoleId: '',
+        moderatorRoleId: '',
         panelMessageId: '',
-        updatedAt: ''
+        updatedAt: '',
+        pendingRequests: []
       },
       customCommands: Array.isArray(settings.customCommands) ? settings.customCommands : [],
       automod: defaults.normalizeAutomodConfig(settings.automod as unknown as Record<string, unknown> | undefined),
@@ -308,7 +318,8 @@ export function createGuildRuntimeApi(options: {
           ...roleSettings,
           mute: settings.muteRoleId || '',
           autorole: settings.autoroleRoleId || '',
-          verification: settings.verificationRoleId || ''
+          verification: settings.verificationRoleId || '',
+          guest: settings.guestRoleId || ''
         },
         panelRoleIds: settings.panelRoleIds,
         access: {

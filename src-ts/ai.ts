@@ -52,6 +52,8 @@ function buildRecommendation(score: number): string {
 
 function buildApplicationAnalysis(application: ApplicationAnalysisInput): string {
   const { score, positiveHits, negativeHits } = scoreApplication(application);
+  const candidateId = normalizeText(application.discordId || application.userId || application.id);
+  const candidate = /^\d{16,20}$/u.test(candidateId) ? `<@${candidateId}>` : (normalizeText(application.discordUsername) || 'кандидат не указан');
   const strengths: string[] = [];
   const weaknesses: string[] = [];
   const risks: string[] = [];
@@ -87,16 +89,39 @@ function buildApplicationAnalysis(application: ApplicationAnalysisInput): string
   }
 
   return [
-    '1. Сильные стороны',
+    'AI-анализ заявки',
+    '',
+    `Кандидат: ${candidate}`,
+    '',
+    'Оглавление:',
+    '',
+    '1. Общая информация',
+    '2. Сильные стороны кандидата',
+    '3. Возможные риски',
+    '4. Совпадение с ценностями семьи',
+    '5. Рекомендация по заявке',
+    '6. Итог',
+    '',
+    '1. Общая информация',
+    `- Ник: ${normalizeText(application.nickname) || 'не указан'}`,
+    `- Уровень: ${normalizeText(application.level || application.age) || 'не указан'}`,
+    `- Кто пригласил: ${normalizeText(application.inviter) || 'не указано'}`,
+    `- Откуда узнал: ${normalizeText(application.discovery) || 'не указано'}`,
+    '',
+    '2. Сильные стороны кандидата',
     `- ${strengths.join('\n- ')}`,
     '',
-    '2. Слабые стороны',
-    `- ${weaknesses.join('\n- ')}`,
-    '',
-    '3. Риск',
+    '3. Возможные риски',
     `- ${risks.join('\n- ')}`,
     '',
-    `4. Рекомендация: ${buildRecommendation(score)}`
+    '4. Совпадение с ценностями семьи',
+    `- ${weaknesses.join('\n- ')}`,
+    '',
+    '5. Рекомендация по заявке',
+    `- ${buildRecommendation(score)}`,
+    '',
+    '6. Итог',
+    '- Решение всё равно должен принять Старший состав после ручной проверки кандидата.'
   ].join('\n');
 }
 

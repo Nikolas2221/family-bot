@@ -280,13 +280,13 @@ export function buildAiAdvisorModal(): ModalBuilder {
 export function buildApplyModal({ familyTitle = 'Семья' }: AnyRecord = {}): ModalBuilder {
   return new ModalBuilder()
     .setCustomId('family_apply_modal')
-    .setTitle(`Заявка в ${text(familyTitle, 'семью')}`.slice(0, 45))
+    .setTitle(`Заявка в семью ${text(familyTitle, 'KLAIZ')}`.slice(0, 45))
     .addComponents(
-      inputRow(new TextInputBuilder().setCustomId('nickname').setLabel('Ник в игре').setStyle(TextInputStyle.Short).setRequired(true)),
-      inputRow(new TextInputBuilder().setCustomId('level').setLabel('Какой лвл?').setStyle(TextInputStyle.Short).setRequired(true)),
-      inputRow(new TextInputBuilder().setCustomId('inviter').setLabel('Кто дал инвайт?').setStyle(TextInputStyle.Short).setRequired(true)),
-      inputRow(new TextInputBuilder().setCustomId('discovery').setLabel('Откуда о нас узнали?').setStyle(TextInputStyle.Short).setRequired(true)),
-      inputRow(new TextInputBuilder().setCustomId('about').setLabel('О себе').setStyle(TextInputStyle.Paragraph).setRequired(true))
+      inputRow(new TextInputBuilder().setCustomId('nickname').setLabel('Игровой никнейм | STATIC ID').setPlaceholder('Пример: Ovik Klaiz | 218833').setStyle(TextInputStyle.Short).setRequired(true)),
+      inputRow(new TextInputBuilder().setCustomId('level').setLabel('Игровой уровень').setPlaceholder('Пример: 24').setStyle(TextInputStyle.Short).setRequired(true)),
+      inputRow(new TextInputBuilder().setCustomId('discovery').setLabel('Откуда вы узнали о нас?').setPlaceholder('Пример: Укажите информацию откуда узнали про нас.').setStyle(TextInputStyle.Short).setRequired(true)),
+      inputRow(new TextInputBuilder().setCustomId('inviter').setLabel('Кто вас пригласил?').setPlaceholder('Пример: игровой ник/статик или Discord-тег пригласившего').setStyle(TextInputStyle.Short).setRequired(true)),
+      inputRow(new TextInputBuilder().setCustomId('about').setLabel('Расскажите о себе').setPlaceholder('Пример: вводная информация, сильные черты, опыт и чем хотите заниматься.').setStyle(TextInputStyle.Paragraph).setRequired(true))
     );
 }
 
@@ -345,6 +345,7 @@ export function buildWelcomeButtons(userId = ''): ButtonRow[] {
   return [
     buttonRow(
       new ButtonBuilder().setCustomId(userId ? `welcome_verify:${userId}` : 'welcome_verify').setLabel(text(copy.verification?.verifyButton, 'Подтвердить')).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(userId ? `welcome_guest:${userId}` : 'welcome_guest').setLabel('Гость').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('welcome_rules').setLabel(text(copy.verification?.rulesButton, 'Правила')).setStyle(ButtonStyle.Secondary)
     )
   ];
@@ -668,17 +669,17 @@ export function buildWelcomeEmbed(
 export function buildApplicationsPanelEmbed({ imageUrl, familyTitle = 'Семья' }: AnyRecord = {}): EmbedBuilder {
   const title = text(familyTitle, 'семью');
   return card({
-    title: `📝 Заявки в ${title}`,
+    title: `📝 Заявка в семью ${title}`,
     color: THEME.phoenix,
     description: [
-      `Подача заявки в ${title}.`,
+      'Нажми кнопку ниже, чтобы подать заявку в семью.',
       '',
-      text(copy.applications?.panelDescription, 'Нажми кнопку ниже, чтобы подать заявку в семью.'),
+      '**Процесс подачи заявки:**',
       '',
-      'Как проходит подача:',
-      '1. Нажми кнопку ниже',
-      '2. Заполни анкету кандидата',
-      '3. Руководство получит карточку на рассмотрение'
+      '1. Нажать на кнопку подачи заявки ниже',
+      '2. Заполнить анкету кандидата',
+      '3. Заявка будет направлена на рассмотрение Старшим составом',
+      '4. Вердикт заявки будет оповещен в личных сообщениях'
     ].join('\n'),
     footer: `${title} • Applications`,
     image: imageUrl
@@ -694,6 +695,9 @@ export function buildApplicationEmbed({
   about = '',
   age = '',
   text: legacyText = '',
+  values = '',
+  development = '',
+  strengths = '',
   applicationId,
   source,
   familyTitle = 'Семья'
@@ -707,14 +711,22 @@ export function buildApplicationEmbed({
   return card({
     title: `📝 Заявка в ${title}`,
     color: THEME.phoenix,
-    description: text(copy.applications?.description?.(sourceLabel, user.id, status), `> **${sourceLabel} от <@${user.id}>**\n> Статус: **${status}**`),
+    description: [
+      `> **${sourceLabel} от <@${user.id}>**`,
+      `> Статус: **${status}**`
+    ].join('\n'),
     footer: `${title} • Candidate Card`,
     thumbnail: avatarUrl(user)
   }).addFields(
-    section('Кандидат', [`Пользователь: <@${user.id}>`, `Ник в игре: ${text(nickname)}`, `Лвл: ${text(normalizedLevel)}`].join('\n'), true),
-    section(text(copy.applications?.fieldInvite, 'Инвайт и источник'), [`Кто дал инвайт: ${text(inviter || 'не указано')}`, `Откуда узнали: ${text(discovery || 'не указано')}`].join('\n'), true),
-    section('ID анкеты', `\`${applicationId}\``, true),
-    section(text(copy.applications?.fieldText, 'О себе'), text(normalizedAbout))
+    section('👤 **Кандидат**', `<@${user.id}>`, false),
+    section('🎮 **Игровой никнейм | STATIC ID**', text(nickname), false),
+    section('📊 **Игровой уровень**', text(normalizedLevel), false),
+    section('📌 **Откуда вы узнали о нас?**', text(discovery || 'не указано'), false),
+    section('👤 **Кто вас пригласил?**', text(inviter || 'не указано'), false),
+    section('📝 **Расскажите о себе**', text(normalizedAbout), false),
+    section('💎 **Готовы ли вы ценить ценности семьи, поддерживать и развивать её?**', text(values || 'Не указано'), false),
+    section('🚀 **В каком направлении вы хотите развиваться?**', text(development || 'Не указано'), false),
+    section('⭐ **Какие сильные черты у вас имеются?**', text(strengths || 'Не указано'), false)
   );
 }
 

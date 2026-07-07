@@ -10,6 +10,7 @@ import {
 import type { MediaShareSettings } from './types';
 
 export type MediaShareKind = 'video' | 'stream';
+export const MEDIA_SHARE_NOTE_LIMIT = 100;
 
 export const MEDIA_SHARE_KINDS: Record<MediaShareKind, {
   label: string;
@@ -39,7 +40,11 @@ export function isMediaShareKind(value: unknown): value is MediaShareKind {
 }
 
 function timestampLabel(date = new Date()): string {
-  return date.toLocaleString('ru-RU');
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
 }
 
 function safe(value: unknown, fallback = 'Не указано', limit = 1024): string {
@@ -50,15 +55,14 @@ export function buildMediaSharePanel(config?: Partial<MediaShareSettings>) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x7c3aed)
-      .setTitle('🎞️ Медиа-публикации')
+      .setTitle(':neon_youtube_playbutton: Медиа-публикации')
       .setDescription([
-        'Есть запись заезда, семейного момента или прямой эфир? Отправь ссылку через кнопку ниже.',
+        'В данную категорию попадают видео от участников семьи, которые продвигают нашу идею.',
         '',
-        'Доступ к отправке получает роль с настроенного уровня и все роли выше неё.',
-        config?.minRoleId ? `Минимальная роль: <@&${config.minRoleId}>` : 'Минимальная роль ещё не настроена.',
-        config?.targetChannelId ? `Публикации уходят в: <#${config.targetChannelId}>` : 'Канал публикаций ещё не настроен.'
+        'Медиа сначала уходит на модерацию.',
+        'После одобрения оно публикуется в нужный канал, а модератор отображается в публикации.'
       ].join('\n'))
-      .setFooter({ text: `Медиа-панель • ${timestampLabel()}` })],
+      .setFooter({ text: `Медиа-панель • Время: ${timestampLabel()} МСК` })],
     components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId('media_share_open:video')
@@ -82,6 +86,15 @@ export function buildMediaShareModal(kind: MediaShareKind): ModalBuilder {
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
+          .setCustomId('title')
+          .setLabel('Название')
+          .setPlaceholder(kind === 'stream' ? 'Например: Семейный стрим' : 'Например: Видео семьи')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(80)
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
           .setCustomId('url')
           .setLabel('Ссылка на контент')
           .setPlaceholder(definition.placeholder)
@@ -93,37 +106,87 @@ export function buildMediaShareModal(kind: MediaShareKind): ModalBuilder {
         new TextInputBuilder()
           .setCustomId('note')
           .setLabel('Описание')
-          .setPlaceholder('Кратко напиши, что это за публикация')
+          .setPlaceholder('Кратко напиши, что это за публикация. До 100 символов.')
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(false)
-          .setMaxLength(700)
+          .setMaxLength(MEDIA_SHARE_NOTE_LIMIT)
       )
     );
 }
 
+function mediaLink(kind: MediaShareKind, url: string): string {
+  return `[${kind === 'stream' ? 'Посмотреть стрим' : 'Посмотреть видео'}](${url})`;
+}
+
+function isImageUrl(url: string): boolean {
+  return /\.(?:png|jpe?g|gif|webp)(?:[?#].*)?$/iu.test(url);
+}
+
 export function buildMediaSharePublicationEmbed(input: {
   kind: MediaShareKind;
+  title?: string;
   url: string;
   note?: string;
   author: { id: string; username?: string; globalName?: string; tag?: string };
   moderator?: string;
 }) {
   const definition = MEDIA_SHARE_KINDS[input.kind];
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(input.kind === 'stream' ? 0xe11d48 : 0x5865f2)
-    .setTitle(`${definition.emoji} ${definition.label} от участника`)
+    .setTitle(`${definition.emoji} ${safe(input.title, `${definition.label} от участника`, 120)}`)
     .addFields(
       { name: 'Автор публикации', value: `<@${input.author.id}>`, inline: true },
-      { name: 'Модератор', value: safe(input.moderator, 'Автопубликация'), inline: true },
-      { name: 'Контент', value: safe(input.url, 'Ссылка не указана', 300), inline: false },
-      { name: 'Описание', value: safe(input.note, 'Без описания', 700), inline: false }
+      { name: 'Модератор', value: safe(input.moderator, 'Ожидает проверки'), inline: true },
+      { name: 'Контент', value: mediaLink(input.kind, input.url), inline: false },
+      { name: 'Описание', value: safe(input.note, 'Без описания', MEDIA_SHARE_NOTE_LIMIT), inline: false }
     )
-    .setFooter({ text: `Медиа-публикация • ${timestampLabel()}` })
-    .setTimestamp();
+    .setFooter({ text: `Опубликовано: ${timestampLabel()} МСК` });
+
+  if (isImageUrl(input.url)) embed.setImage(input.url);
+  return embed;
+}
+
+export function buildMediaShareReviewEmbed(input: {
+  id: string;
+  kind: MediaShareKind;
+  title: string;
+  url: string;
+  note?: string;
+  author: { id: string; username?: string; globalName?: string; tag?: string };
+  moderator?: string;
+  status?: 'pending' | 'approved' | 'declined';
+  createdAt?: Date;
+}) {
+  const definition = MEDIA_SHARE_KINDS[input.kind];
+  const status = input.status === 'approved' ? 'Одобрено' : input.status === 'declined' ? 'Отклонено' : 'Ожидает проверки';
+  const embed = new EmbedBuilder()
+    .setColor(input.status === 'approved' ? 0x16a34a : input.status === 'declined' ? 0xef4444 : 0xf59e0b)
+    .setTitle(`🧾 Заявка на медиа: ${definition.label}`)
+    .addFields(
+      { name: 'Автор заявки', value: `<@${input.author.id}>`, inline: true },
+      { name: 'Тип контента', value: definition.label, inline: true },
+      { name: 'Название', value: safe(input.title, 'Не указано', 120), inline: false },
+      { name: 'Описание', value: safe(input.note, 'Без описания', MEDIA_SHARE_NOTE_LIMIT), inline: false },
+      { name: 'Ссылка на контент', value: mediaLink(input.kind, input.url), inline: false },
+      { name: 'Модератор', value: safe(input.moderator, 'Ожидает проверки'), inline: true },
+      { name: 'Статус', value: status, inline: true }
+    )
+    .setFooter({ text: `Отправлено: ${timestampLabel(input.createdAt)} МСК` });
+
+  if (isImageUrl(input.url)) embed.setImage(input.url);
+  return embed;
+}
+
+export function buildMediaShareReviewButtons(requestId: string, disabled = false) {
+  return [new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`media_share_approve:${requestId}`).setLabel('Одобрить').setStyle(ButtonStyle.Success).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(`media_share_decline:${requestId}`).setLabel('Отклонить').setStyle(ButtonStyle.Danger).setDisabled(disabled)
+  )];
 }
 
 export function buildMediaShareLogEmbed(input: {
   kind: MediaShareKind;
+  title?: string;
   url: string;
   note?: string;
   author: { id: string; username?: string; globalName?: string; tag?: string };
@@ -142,12 +205,11 @@ export function buildMediaShareLogEmbed(input: {
     .setTitle(`🧾 Лог медиа: ${definition.label}`)
     .addFields(
       { name: 'Автор публикации', value: `<@${input.author.id}>`, inline: true },
-      { name: 'Модератор', value: safe(input.moderator, 'Автопубликация'), inline: true },
-      { name: 'Контент', value: safe(input.url, 'Ссылка не указана', 300), inline: false },
+      { name: 'Модератор', value: safe(input.moderator, 'Ожидает проверки'), inline: true },
+      { name: 'Контент', value: mediaLink(input.kind, input.url), inline: false },
       { name: 'Канал', value: `<#${input.targetChannelId}>`, inline: true },
       { name: 'Сообщение', value: messageLink, inline: false },
-      { name: 'Описание', value: safe(input.note, 'Без описания', 700), inline: false }
+      { name: 'Описание', value: safe(input.note, 'Без описания', MEDIA_SHARE_NOTE_LIMIT), inline: false }
     )
-    .setFooter({ text: `Логи медиа • ${timestampLabel()}` })
-    .setTimestamp();
+    .setFooter({ text: `Логи медиа • Время: ${timestampLabel()} МСК` });
 }

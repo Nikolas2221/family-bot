@@ -98,6 +98,7 @@ const MESSAGE_ID = config.messageId;
 const UPDATE_INTERVAL_MS = config.updateIntervalMs;
 const APPLICATION_COOLDOWN_MS = config.applicationCooldownMs;
 const APPLICATION_DEFAULT_ROLE = config.applicationDefaultRole;
+const GUEST_ROLE_ID = config.guestRoleId;
 const FAMILY_TITLE = config.familyTitle;
 const ACCESS_APPLICATIONS = config.accessApplications;
 const ACCESS_DISCIPLINE = config.accessDiscipline;
@@ -220,6 +221,13 @@ async function verifyWelcomeMemberFromTelegram(guildId: string, userId: string, 
   if (member.roles.cache.has(roleId)) return 'already' as const;
   const result = await applyVerificationRole(member);
   if (!result.ok) return 'failed' as const;
+  getGuildStorage(guildId).setVerificationConfirmation?.({
+    userId,
+    roleId: result.roleId || roleId,
+    type: 'member',
+    confirmedBy: actorName,
+    confirmedAt: new Date().toISOString()
+  });
 
   const settings = resolveGuildSettings(guildId);
   const logChannel = await fetchTextChannel(guild, settings.channels.logs).catch(() => null);
@@ -246,6 +254,7 @@ const guildRuntime = createGuildRuntimeApi({
     accessDiscipline: ACCESS_DISCIPLINE,
     accessRanks: ACCESS_RANKS,
     applicationDefaultRole: APPLICATION_DEFAULT_ROLE,
+    guestRoleId: GUEST_ROLE_ID,
     features: {
       aiEnabled: AI_ENABLED,
       autoRanksEnabled: AUTO_RANKS.enabled,

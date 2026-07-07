@@ -89,6 +89,8 @@ export interface AppConfig {
   applicationCooldownMs: number;
   applicationTicketDeleteDelaySeconds: number;
   applicationDefaultRole: string;
+  guestRoleId: string;
+  mediaModeratorRoleId: string;
   familyTitle: string;
   accessApplications: string[];
   accessDiscipline: string[];
@@ -380,8 +382,29 @@ export interface MediaShareSettings {
   targetChannelId: string;
   logChannelId: string;
   minRoleId: string;
+  moderatorRoleId?: string;
   panelMessageId: string;
   updatedAt: string;
+  pendingRequests?: MediaShareRequestRecord[];
+}
+
+export interface MediaShareRequestRecord {
+  id: string;
+  guildId: string;
+  kind: 'video' | 'stream';
+  title: string;
+  url: string;
+  note: string;
+  authorId: string;
+  authorName: string;
+  status: 'pending' | 'approved' | 'declined';
+  createdAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  ticketChannelId?: string;
+  ticketMessageId?: string;
+  targetChannelId?: string;
+  targetMessageId?: string;
 }
 
 export interface RoleMenuItem {
@@ -642,8 +665,18 @@ export interface StoreState {
   warns: WarnEntry[];
   commends: CommendEntry[];
   blacklist: BlacklistEntry[];
+  verificationConfirmations: Record<string, VerificationConfirmationRecord>;
   panelMessageId: string;
   panelMessageIds: Record<string, string>;
+}
+
+export interface VerificationConfirmationRecord {
+  guildId: string;
+  userId: string;
+  roleId: string;
+  type: 'member' | 'guest';
+  confirmedBy: string;
+  confirmedAt: string;
 }
 
 export interface AfkPanelRecord {
@@ -743,6 +776,8 @@ export interface StorageApi {
   setGuildReportMarker(guildId: string, markerKey: string, value: string): void;
   getGuildCooldown(guildId: string, userId: string): number;
   setGuildCooldown(guildId: string, userId: string, value?: number): void;
+  getVerificationConfirmation(guildId: string, userId: string, type?: 'member' | 'guest'): VerificationConfirmationRecord | null;
+  setVerificationConfirmation(input: VerificationConfirmationRecord): VerificationConfirmationRecord;
   createGuildApplication(payload: { guildId: string; userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string; discordUsername?: string }): string;
   findGuildApplication(guildId: string, applicationId: string): ApplicationRecord | null;
   setApplicationTicketInfo(app: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>): ApplicationRecord | null;
@@ -772,6 +807,8 @@ export interface GuildStorageContext {
   addCommend(payload: { userId: string; moderatorId: string; reason: string }): void;
   getCooldown(userId: string): number;
   setCooldown(userId: string, value?: number): void;
+  getVerificationConfirmation(userId: string, type?: 'member' | 'guest'): VerificationConfirmationRecord | null;
+  setVerificationConfirmation(input: Omit<VerificationConfirmationRecord, 'guildId'>): VerificationConfirmationRecord;
   createApplication(payload: { userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string; discordUsername?: string }): string;
   findApplication(applicationId: string): ApplicationRecord | null;
   setApplicationTicketInfo(app: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>): ApplicationRecord | null;

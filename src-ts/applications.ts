@@ -87,13 +87,14 @@ export function createApplicationsService({
     });
   }
 
-  async function notifyAcceptanceDm(interaction: any, member: any, userId: string, reason: string, rankName: string): Promise<void> {
+  async function notifyAcceptanceDm(interaction: any, member: any, userId: string, reason: string, rankName: string, applicationUrl = ''): Promise<void> {
     const sent = await notifyDiscordDm(sendAcceptanceDm({
       guild: interaction.guild,
       member,
       moderatorUser: interaction.user,
       reason,
-      rankName
+      rankName,
+      applicationUrl
     }));
 
     if (sent) return;
@@ -106,8 +107,13 @@ export function createApplicationsService({
       member: { ...member, user },
       moderatorUser: interaction.user,
       reason,
-      rankName
+      rankName,
+      applicationUrl
     }));
+  }
+
+  function messageUrl(guildId: string, channelId?: string, messageId?: string): string {
+    return channelId && messageId ? `https://discord.com/channels/${guildId}/${channelId}/${messageId}` : '';
   }
 
   function formatStatus(status: string) {
@@ -321,7 +327,8 @@ export function createApplicationsService({
       return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
     }
 
-    await createApplicationReviewCard(channel, application, interaction.user);
+    const reviewMessage = await createApplicationReviewCard(channel, application, interaction.user);
+    const reviewUrl = messageUrl(interaction.guild.id, channel.id, reviewMessage?.id);
 
     await notifyTelegram(telegramNotifications?.notifyApplicationCreated({
       application,
@@ -331,7 +338,13 @@ export function createApplicationsService({
       ticketChannel: channel
     }));
 
-    return interaction.reply(ephemeral({ content: copy.applications.sent }));
+    return interaction.reply(ephemeral({
+      content: [
+        'Ваша заявка отправлена на рассмотрение Старшему составу семьи KLAIZ.',
+        'Вердикт по заявке будет отправлен вам в личные сообщения.',
+        reviewUrl ? `Посмотреть обращение можно здесь: ${reviewUrl}` : ''
+      ].filter(Boolean).join('\n')
+    }));
   }
 
   async function accept(interaction: any, applicationId: string, userId: string, details: Record<string, any> = {}) {
@@ -382,8 +395,15 @@ export function createApplicationsService({
     storage.setApplicationStatus(application, 'accepted', interaction.user.id);
     ticketService?.markDecision(application, 'approved', interaction.user.username || interaction.user.id);
 
+    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
+
+    if (!targetMessage) {
+      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
+    }
+
+    const applicationUrl = messageUrl(interaction.guild.id, targetMessage.channel?.id || interaction.channel?.id, targetMessage.id);
     const accepted = embeds.buildApplicationEmbed({
-      user: { id: userId },
+      user: member.user || { id: userId },
       nickname: application.nickname,
       level: application.level,
       inviter: application.inviter,
@@ -399,20 +419,14 @@ export function createApplicationsService({
     accepted
       .setColor(0x16a34a)
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('accepted')))
-      .setFooter({ text: copy.applications.acceptedFooter(interaction.user.username) });
+      .setFooter({ text: `Решение принял: <@${interaction.user.id}>` });
 
     const reason = String(details.reason || '').trim() || copy.applications.acceptReason;
     const rankName = String(details.rankName || '').trim() || copy.applications.acceptRank;
 
-    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
-
-    if (!targetMessage) {
-      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
-    }
-
     await targetMessage.edit({ embeds: [accepted], components: [] });
     await sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName);
-    await notifyAcceptanceDm(interaction, member, userId, reason, rankName);
+    await notifyAcceptanceDm(interaction, member, userId, reason, rankName, applicationUrl);
     await interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
     await notifyTelegram(telegramNotifications?.notifyApplicationAccepted({
       application,
@@ -459,7 +473,7 @@ export function createApplicationsService({
     review
       .setColor(0x64748b)
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('review')))
-      .setFooter({ text: copy.applications.reviewFooter(interaction.user.username) });
+      .setFooter({ text: `Заявку взял: <@${interaction.user.id}>` });
 
     await interaction.message.edit({ embeds: [review], components: interaction.message.components });
     return interaction.reply(ephemeral({ content: copy.applications.reviewReply }));
@@ -483,8 +497,16 @@ export function createApplicationsService({
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);
     ticketService?.markDecision(application, 'rejected', interaction.user.username || interaction.user.id);
 
+    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
+
+    if (!targetMessage) {
+      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
+    }
+
+    const user = await client.users?.fetch?.(userId).catch(() => null);
+    const applicationUrl = messageUrl(interaction.guild.id, targetMessage.channel?.id || interaction.channel?.id, targetMessage.id);
     const rejected = embeds.buildApplicationEmbed({
-      user: { id: userId },
+      user: user || { id: userId },
       nickname: application.nickname,
       level: application.level,
       inviter: application.inviter,
@@ -500,17 +522,10 @@ export function createApplicationsService({
     rejected
       .setColor(0xef4444)
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('rejected')))
-      .setFooter({ text: copy.applications.rejectedFooter(interaction.user.username) });
-
-    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
-
-    if (!targetMessage) {
-      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
-    }
+      .setFooter({ text: `Решение принял: <@${interaction.user.id}>` });
 
     await targetMessage.edit({ embeds: [rejected], components: [] });
 
-    const user = await client.users?.fetch?.(userId).catch(() => null);
     if (user && logChannelId) {
       const channel = await fetchTextChannel(interaction.guild, logChannelId);
       if (channel) {
@@ -530,7 +545,8 @@ export function createApplicationsService({
       guild: interaction.guild,
       user: user || { id: userId },
       moderatorUser: interaction.user,
-      reason
+      reason,
+      applicationUrl
     }));
     await interaction.reply(ephemeral({ content: copy.applications.rejectedReply(userId) }));
     await notifyTelegram(telegramNotifications?.notifyApplicationRejected({

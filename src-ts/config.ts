@@ -21,6 +21,8 @@ const FAMILY_ROLE_ENV_KEYS = [
 
 const AUTO_RANK_REQUIRED_KEYS = ['ROLE_ELDER', 'ROLE_MEMBER', 'ROLE_NEWBIE'] as const;
 const CORE_FAMILY_ROLE_ENV_KEYS = ['ROLE_LEADER', 'ROLE_DEPUTY', 'ROLE_ELDER', 'ROLE_MEMBER', 'ROLE_NEWBIE'] as const;
+const DEFAULT_FAMILY_MEMBER_ROLE_ID = '1522317438228627528';
+const DEFAULT_MEDIA_MODERATOR_ROLE_ID = '1522316775251775658';
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -53,6 +55,7 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
   const channelId = trim(env.CHANNEL_ID);
   const logChannelId = trim(env.LOG_CHANNEL_ID);
   const roleNewbie = trim(env.ROLE_NEWBIE);
+  const familyMemberRoleId = trim(env.APPLICATION_DEFAULT_ROLE) || roleNewbie || DEFAULT_FAMILY_MEMBER_ROLE_ID;
 
   return {
     raw: { ...env },
@@ -77,7 +80,9 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     updateIntervalMs: parseNumber(env.UPDATE_INTERVAL_MS, 60000, { min: 60000 }),
     applicationCooldownMs: parseNumber(env.APPLICATION_COOLDOWN_MS, 300000, { min: 10000 }),
     applicationTicketDeleteDelaySeconds: parseNumber(env.APPLICATION_TICKET_DELETE_DELAY_SECONDS, 5, { min: 1 }),
-    applicationDefaultRole: trim(env.APPLICATION_DEFAULT_ROLE) || roleNewbie,
+    applicationDefaultRole: familyMemberRoleId,
+    guestRoleId: trim(env.GUEST_ROLE_ID),
+    mediaModeratorRoleId: trim(env.MEDIA_MODERATOR_ROLE_ID) || DEFAULT_MEDIA_MODERATOR_ROLE_ID,
     familyTitle: trim(env.FAMILY_TITLE) || copy.defaults.familyTitle,
     accessApplications: parseCsv(env.ACCESS_APPLICATIONS),
     accessDiscipline: parseCsv(env.ACCESS_DISCIPLINE),
@@ -186,6 +191,8 @@ export function validateConfig(config: AppConfig): ValidationResult {
   validateDiscordId('DISCIPLINE_LOG_CHANNEL_ID', config.disciplineLogChannelId, errors, warnings);
   validateDiscordId('MESSAGE_ID', config.messageId, errors, warnings);
   validateDiscordId('APPLICATION_DEFAULT_ROLE', config.applicationDefaultRole, errors, warnings);
+  validateDiscordId('GUEST_ROLE_ID', config.guestRoleId, errors, warnings);
+  validateDiscordId('MEDIA_MODERATOR_ROLE_ID', config.mediaModeratorRoleId, errors, warnings);
   validateDiscordId('DISCORD_ANNOUNCEMENTS_CHANNEL_ID', config.discordAnnouncementsChannelId, errors, warnings);
   validateDiscordId('TICKET_CATEGORY_ID', config.supportTickets.categoryId, errors, warnings);
   validateDiscordId('TICKET_SUPPORT_ROLE_ID', config.supportTickets.supportRoleId, errors, warnings);

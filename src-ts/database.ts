@@ -137,8 +137,38 @@ function normalizeMediaShareConfig(config: Record<string, any> = {}) {
     targetChannelId: String(config?.targetChannelId || '').trim(),
     logChannelId: String(config?.logChannelId || '').trim(),
     minRoleId: String(config?.minRoleId || '').trim(),
+    moderatorRoleId: String(config?.moderatorRoleId || '').trim(),
     panelMessageId: String(config?.panelMessageId || '').trim(),
-    updatedAt: String(config?.updatedAt || '').trim()
+    updatedAt: String(config?.updatedAt || '').trim(),
+    pendingRequests: (Array.isArray(config?.pendingRequests) ? config.pendingRequests : [])
+      .map((request: any) => {
+        const kind = request?.kind === 'stream' ? 'stream' as const : 'video' as const;
+        const status = request?.status === 'approved'
+          ? 'approved' as const
+          : request?.status === 'declined'
+            ? 'declined' as const
+            : 'pending' as const;
+        return {
+        id: String(request?.id || '').trim(),
+        guildId: String(request?.guildId || '').trim(),
+        kind,
+        title: String(request?.title || '').trim().slice(0, 120),
+        url: String(request?.url || '').trim().slice(0, 300),
+        note: String(request?.note || '').trim().slice(0, 100),
+        authorId: String(request?.authorId || '').trim(),
+        authorName: String(request?.authorName || '').trim(),
+        status,
+        createdAt: String(request?.createdAt || '').trim(),
+        reviewedAt: String(request?.reviewedAt || '').trim(),
+        reviewedBy: String(request?.reviewedBy || '').trim(),
+        ticketChannelId: String(request?.ticketChannelId || '').trim(),
+        ticketMessageId: String(request?.ticketMessageId || '').trim(),
+        targetChannelId: String(request?.targetChannelId || '').trim(),
+        targetMessageId: String(request?.targetMessageId || '').trim()
+      };
+      })
+      .filter((request: any) => request.id && request.guildId && request.url && request.authorId)
+      .slice(0, 100)
   };
 }
 

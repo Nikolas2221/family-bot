@@ -10,6 +10,7 @@ import type {
   SanitizedApplicationInput,
   StorageApi,
   StoreState,
+  VerificationConfirmationRecord,
   WarnEntry
 } from './types';
 import copy from './copy';
@@ -31,6 +32,7 @@ function defaultStore(): StoreState {
     warns: [],
     commends: [],
     blacklist: [],
+    verificationConfirmations: {},
     panelMessageId: '',
     panelMessageIds: {}
   };
@@ -562,6 +564,34 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     save();
   }
 
+  function verificationConfirmationKey(guildId: string, userId: string, type = 'member'): string {
+    return `${guildId}:${userId}:${type}`;
+  }
+
+  function getVerificationConfirmation(
+    guildId: string,
+    userId: string,
+    type: 'member' | 'guest' = 'member'
+  ): VerificationConfirmationRecord | null {
+    const confirmations = store.verificationConfirmations || (store.verificationConfirmations = {});
+    return confirmations[verificationConfirmationKey(guildId, userId, type)] || null;
+  }
+
+  function setVerificationConfirmation(input: VerificationConfirmationRecord): VerificationConfirmationRecord {
+    const confirmations = store.verificationConfirmations || (store.verificationConfirmations = {});
+    const record: VerificationConfirmationRecord = {
+      guildId: String(input.guildId || ''),
+      userId: String(input.userId || ''),
+      roleId: String(input.roleId || ''),
+      type: input.type === 'guest' ? 'guest' : 'member',
+      confirmedBy: String(input.confirmedBy || ''),
+      confirmedAt: String(input.confirmedAt || new Date().toISOString())
+    };
+    confirmations[verificationConfirmationKey(record.guildId, record.userId, record.type)] = record;
+    save();
+    return record;
+  }
+
   function createGuildApplication(payload: {
     guildId: string;
     userId: string;
@@ -729,6 +759,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     setGuildReportMarker,
     getGuildCooldown,
     setGuildCooldown,
+    getVerificationConfirmation,
+    setVerificationConfirmation,
     createGuildApplication,
     findGuildApplication,
     setApplicationTicketInfo,
@@ -757,5 +789,6 @@ export type {
   SanitizedApplicationInput,
   StorageApi,
   StoreState,
+  VerificationConfirmationRecord,
   WarnEntry
 };

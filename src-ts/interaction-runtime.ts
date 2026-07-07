@@ -424,6 +424,11 @@ function getWelcomeTargetUserId(interaction: any): string {
   return String(interaction.message?.content || '').match(/<@!?(\d{16,20})>/u)?.[1] || '';
 }
 
+function formatVerificationConfirmer(value: unknown): string {
+  const id = String(value || '').trim();
+  return /^\d{16,20}$/u.test(id) ? `<@${id}>` : (id || 'неизвестный модератор');
+}
+
 async function handleRoleMenuCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'rolemenu') return false;
@@ -970,20 +975,35 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
       return true;
     }
 
-    if (interaction.customId === 'welcome_verify' || interaction.customId.startsWith('welcome_verify:')) {
+    if (
+      interaction.customId === 'welcome_verify' ||
+      interaction.customId.startsWith('welcome_verify:') ||
+      interaction.customId === 'welcome_guest' ||
+      interaction.customId.startsWith('welcome_guest:')
+    ) {
       if (!settings.verification.enabled) {
         await interaction.reply(options.ephemeral({ content: options.copy.verification.disabled }));
         return true;
       }
 
-      const targetRoleId = options.getVerificationRoleId(guildId);
+      const isGuestConfirmation = interaction.customId === 'welcome_guest' || interaction.customId.startsWith('welcome_guest:');
+      const targetRoleId = isGuestConfirmation ? String(settings.guestRoleId || '').trim() : options.getVerificationRoleId(guildId);
       if (!targetRoleId) {
-        await interaction.reply(options.ephemeral({ content: options.copy.verification.roleMissing }));
+        await interaction.reply(options.ephemeral({
+          content: isGuestConfirmation
+            ? 'Гостевая роль не настроена. Добавь GUEST_ROLE_ID в Railway и перезапусти бота.'
+            : options.copy.verification.roleMissing
+        }));
         return true;
       }
 
       const targetRole = interaction.guild.roles.cache.get(targetRoleId)
         || await interaction.guild.roles.fetch(targetRoleId).catch(() => null);
+      if (!targetRole) {
+        await interaction.reply(options.ephemeral({ content: `Роль ${targetRoleId} не найдена на сервере.` }));
+        return true;
+      }
+
       if (!canConfirmWelcome(interaction, targetRole)) {
         await interaction.reply(options.ephemeral({
           content: 'Подтверждать новичков могут только пользователи с разрешением Administrator.'
@@ -1002,16 +1022,56 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
         return true;
       }
 
+      const confirmationType = isGuestConfirmation ? 'guest' as const : 'member' as const;
+      const guildStorage = options.getGuildStorage(guildId);
       if (member.roles.cache.has(targetRoleId)) {
-        await interaction.reply(options.ephemeral({ content: options.copy.verification.alreadyVerified }));
+        const existing = guildStorage.getVerificationConfirmation?.(member.id, confirmationType)
+          || guildStorage.setVerificationConfirmation?.({
+            userId: member.id,
+            roleId: targetRoleId,
+            type: confirmationType,
+            confirmedBy: interaction.user.id,
+            confirmedAt: new Date().toISOString()
+        });
+        await interaction.reply(options.ephemeral({
+          content: `Участник уже прошел подтверждение. Его подтвердил ${formatVerificationConfirmer(existing?.confirmedBy || interaction.user.id)}`
+        }));
         return true;
       }
 
-      const result = await options.applyVerificationRole(member);
+      const unsafeReason = await getUnsafeAssignableRoleReasonAsync(targetRole, { guild: interaction.guild });
+      if (unsafeReason) {
+        await interaction.reply(options.ephemeral({ content: formatUnsafeRoleMessage(unsafeReason) }));
+        return true;
+      }
+
+      const added = await member.roles.add(targetRole, isGuestConfirmation
+        ? `Guest verification by ${interaction.user.id}`
+        : `Family verification by ${interaction.user.id}`
+      ).then(() => true).catch((error: unknown) => {
+        console.warn('Welcome verification role assign failed:', error);
+        return false;
+      });
+
+      if (!added) {
+        await interaction.reply(options.ephemeral({
+          content: 'Бот не смог выдать роль. Проверь Manage Roles и что роль бота выше роли, которую нужно выдать.'
+        }));
+        return true;
+      }
+
+      guildStorage.setVerificationConfirmation?.({
+        userId: member.id,
+        roleId: targetRoleId,
+        type: confirmationType,
+        confirmedBy: interaction.user.id,
+        confirmedAt: new Date().toISOString()
+      });
+
       await interaction.reply(options.ephemeral({
-        content: result.ok
-          ? `Участник <@${member.id}> подтверждён. Выдана стартовая роль <@&${result.roleId}>.`
-          : options.copy.verification.noPermission
+        content: isGuestConfirmation
+          ? `Участник <@${member.id}> подтверждён как гость. Выдана роль гостя <@&${targetRoleId}>.`
+          : `Участник <@${member.id}> подтверждён. Выдана роль члена семьи <@&${targetRoleId}>.`
       }));
       return true;
     }

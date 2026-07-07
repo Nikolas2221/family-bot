@@ -32,8 +32,10 @@ function createChannel(id) {
       sent.push(payload);
       const message = {
         id: `${id}-message-${sent.length}`,
+        channel: this,
         async edit(update) {
           sent.push(update);
+          this.lastEdit = update;
           return this;
         }
       };
@@ -125,13 +127,31 @@ async function main() {
   modal.customId = 'media_share_modal:stream';
   modal.fields = {
     getTextInputValue(id) {
-      return id === 'url' ? 'https://example.test/live' : 'Stream note';
+      if (id === 'title') return 'Семейный стрим';
+      if (id === 'url') return 'https://example.test/live';
+      return 'Stream note';
     }
   };
   await service.handleInteraction(modal);
-  assert.equal(targetChannel.sent.length, 1);
   assert.equal(logChannel.sent.length, 1);
-  assert.match(modal.replies[0].content, /Стрим отправлено/u);
+  assert.equal(targetChannel.sent.length, 0);
+  assert.match(modal.replies[0].content, /Стрим отправлено на модерацию/u);
+
+  const request = database.getGuild(guildId).settings.mediaShare.pendingRequests[0];
+  assert.equal(request.status, 'pending');
+
+  const approve = baseInteraction(guild, adminUser, adminMember);
+  approve.isButton = () => true;
+  approve.customId = `media_share_approve:${request.id}`;
+  approve.message = {
+    async edit(payload) {
+      this.lastEdit = payload;
+    }
+  };
+  await service.handleInteraction(approve);
+  assert.equal(targetChannel.sent.length, 1);
+  assert.equal(database.getGuild(guildId).settings.mediaShare.pendingRequests[0].status, 'approved');
+  assert.match(approve.replies[0].content, /Медиа одобрено/u);
 
   console.log('ALL MEDIA SHARE SERVICE TESTS PASSED');
 }

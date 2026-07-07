@@ -19,13 +19,16 @@ async function main() {
 
   const embed = buildMediaSharePublicationEmbed({
     kind: 'video',
+    title: 'Видео семьи',
     url: 'https://example.test/video',
     note: 'test',
     author: { id: '333333333333333333' },
-    moderator: 'Автопубликация'
+    moderator: '<@444444444444444444>'
   }).toJSON();
   const fieldNames = embed.fields.map(field => field.name);
   assert.deepEqual(fieldNames.slice(0, 3), ['Автор публикации', 'Модератор', 'Контент']);
+  assert.equal(embed.fields[2].value, '[Посмотреть видео](https://example.test/video)');
+  assert.match(embed.footer.text, /МСК/u);
 
   console.log('ALL MEDIA SHARE UI TESTS PASSED');
 }

@@ -48,6 +48,8 @@ interface GuildSettingsLike {
   };
   verificationRoleId?: string;
   autoroleRoleId?: string;
+  applicationDefaultRole?: string;
+  guestRoleId?: string;
 }
 
 interface DatabaseLike {
@@ -142,27 +144,32 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     member,
     moderatorUser,
     reason,
-    rankName
+    rankName,
+    applicationUrl
   }: {
     guild: Guild;
     member: GuildMember;
     moderatorUser: User;
     reason: string;
     rankName: string;
+    applicationUrl?: string;
   }) {
     return sendDirectNotification(
       member.user,
       {
-        title: 'Заявка принята',
+        title: 'Ваша заявка принята',
         color: 0x10b981,
         footer: 'KLAIZ - Family',
         description: [
-          `Ты принят в семью **${resolveGuildSettings(guild.id).familyTitle}** на сервере **${guild.name}**.`,
+          `Ваша заявка в семью **${resolveGuildSettings(guild.id).familyTitle}** была принята.`,
+          'Поздравляем, вы прошли этап рассмотрения заявки.',
           '',
           `Модератор: <@${moderatorUser.id}>`,
           `Причина: ${reason}`,
-          `Выданный ранг: ${rankName}`
-        ].join('\n')
+          `Выданный ранг: ${rankName}`,
+          applicationUrl ? '' : null,
+          applicationUrl ? `Ссылка на ваше обращение: [Открыть заявку](${applicationUrl})` : null
+        ].filter(value => value !== null).join('\n')
       },
       EmbedBuilderCtor
     );
@@ -172,26 +179,31 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     guild,
     user,
     moderatorUser,
-    reason
+    reason,
+    applicationUrl
   }: {
     guild: Guild;
     user: User;
     moderatorUser: User;
     reason: string;
+    applicationUrl?: string;
   }) {
     const familyTitle = resolveGuildSettings(guild.id).familyTitle;
     return sendDirectNotification(
       user,
       {
-        title: 'Заявка отклонена',
+        title: 'Ваша заявка отклонена',
         color: 0xef4444,
         footer: `${familyTitle} - Applications`,
         description: [
-          `Твоя заявка в семью **${familyTitle}** на сервере **${guild.name}** была отклонена.`,
+          `Ваша заявка в семью **${familyTitle}** была отклонена.`,
+          'Спасибо за проявленный интерес к нашей семье.',
           '',
           `Модератор: <@${moderatorUser.id}>`,
-          `Причина: ${reason || 'не указана'}`
-        ].join('\n')
+          `Причина: ${reason || 'не указана'}`,
+          applicationUrl ? '' : null,
+          applicationUrl ? `Ссылка на ваше обращение: [Открыть заявку](${applicationUrl})` : null
+        ].filter(Boolean).join('\n')
       },
       EmbedBuilderCtor
     );
@@ -488,7 +500,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
 
   function getVerificationRoleId(guildId: string) {
     const settings = resolveGuildSettings(guildId);
-    return settings.verification.roleId || settings.verificationRoleId || settings.autoroleRoleId || '';
+    return settings.applicationDefaultRole || settings.verification.roleId || settings.verificationRoleId || settings.autoroleRoleId || '';
   }
 
   async function applyVerificationRole(member: GuildMember) {
