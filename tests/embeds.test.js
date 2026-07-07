@@ -86,15 +86,24 @@ async function testWelcomeEmbedShowsJoinFlow() {
     'KLAIZ Family',
     '',
     '',
-    { memberCount: 286, verificationEnabled: true, applicationsChannelId: '987654321098765432' }
+    {
+      memberCount: 286,
+      verificationEnabled: true,
+      rulesChannelId: '1517564214968058002',
+      applicationsChannelId: '1517564215156805874',
+      chatChannelId: '1517564214968058003'
+    }
   ).toJSON();
 
-  assert.match(embed.title, /KLAIZ Family|KLAIZ/);
-  assert.match(embed.description, /KLAIZ Family/);
+  assert.equal(embed.title, 'Добро пожаловать в семью KLAIZ !');
   assert.match(embed.description, /286-й участник/u);
+  assert.match(embed.description, /1517564214968058002/u);
+  assert.match(embed.description, /1517564215156805874/u);
+  assert.match(embed.description, /1517564214968058003/u);
+  assert.match(embed.description, /обрабатывается до 12 часов/u);
   assert.match(embed.description, /подтверждения администратора/u);
-  assert.match(embed.fields[0].value, /987654321098765432/u);
-  assert.ok(embed.fields?.length);
+  assert.doesNotMatch(embed.description, /Привет ты попал/u);
+  assert.equal(embed.fields, undefined);
 }
 
 async function testWelcomeButtonsExcludeApplication() {

@@ -673,29 +673,28 @@ export function buildWelcomeEmbed(
   customMessage = '',
   extras: AnyRecord = {}
 ): EmbedBuilder {
+  const rulesChannelId = text(extras.rulesChannelId || '1517564214968058002');
+  const applicationsChannelId = text(extras.applicationsChannelId || '1517564215156805874');
+  const chatChannelId = text(extras.chatChannelId || '1517564214968058003');
+
   return card({
-    title: `Добро пожаловать в ${text(familyTitle || 'KLAIZ')}`,
+    title: 'Добро пожаловать в семью KLAIZ !',
     color: THEME.emerald,
     description: [
-      customMessage
-        ? text(customMessage)
-        : `Рады видеть тебя в семье **${text(familyTitle || 'KLAIZ')}** на сервере **${text(member.guild?.name || 'KLAIZ')}**.`,
+      customMessage ? text(customMessage) : '',
       extras.memberCount ? `**Ты — наш ${Number(extras.memberCount)}-й участник!**` : '',
       '',
-      extras.rulesChannelId ? `Правила: <#${extras.rulesChannelId}>` : '',
-      extras.applicationsChannelId ? `Подача заявки: <#${extras.applicationsChannelId}>` : '',
+      `1. Ознакомься с правилами в канале <#${rulesChannelId}>`,
+      `2. Ознакомься с нашей семьёй и подай заявку в канале <#${applicationsChannelId}>`,
+      `3. Общаться с другими участниками можно в канале <#${chatChannelId}>`,
+      '',
+      'Заявка в семью обрабатывается до 12 часов. Мы проинформируем после решения по заявке.',
       extras.verificationEnabled ? 'Дождись подтверждения администратора, чтобы получить стартовую роль.' : ''
     ].filter(Boolean).join('\n'),
     footer: `${BRAND_FOOTER} • Welcome`,
     thumbnail: avatarUrl(member.user),
     image: imageUrl
-  }).addFields(section('Старт', [
-    '1. Изучи правила сервера',
-    '2. Дождись подтверждения администратора или старшего состава',
-    extras.applicationsChannelId
-      ? `3. После получения стартовой роли перейди в <#${extras.applicationsChannelId}> и подай заявку`
-      : '3. После получения стартовой роли перейди в канал заявок и подай анкету'
-  ].join('\n')));
+  });
 }
 
 export function buildApplicationsPanelEmbed({ imageUrl }: AnyRecord = {}): EmbedBuilder {
