@@ -67,7 +67,10 @@ function createEmbedsStub() {
     buildApplicationsPanelButtons() {
       return [{ type: 'buttons' }];
     },
-    buildApplicationEmbed({ user, nickname, level, inviter, discovery, about, age, text, applicationId, source }) {
+    buildApplyDetailsModal() {
+      return { type: 'details-modal' };
+    },
+    buildApplicationEmbed({ user, nickname, level, inviter, discovery, about, values, development, strengths, age, text, applicationId, source }) {
       const embed = createFakeEmbed();
       embed.payload = {
         user,
@@ -76,6 +79,9 @@ function createEmbedsStub() {
         inviter,
         discovery,
         about,
+        values,
+        development,
+        strengths,
         age,
         text,
         applicationId,
@@ -162,6 +168,95 @@ async function testSubmitApplication() {
   assert.equal(storage.getGuildCooldown(guildId, 'user-1') > 0, true);
   assert.equal(channel.sent.length, 1);
   assert.match(replies[0].content, /заявка отправлена/i);
+}
+
+async function testApplicationTwoStepModalStoresAllVisibleFields() {
+  const storage = createTempStorage();
+  const guildId = 'guild-two-step';
+  const channel = {
+    sent: [],
+    async send(payload) {
+      this.sent.push(payload);
+      return { id: `application-${this.sent.length}` };
+    }
+  };
+
+  const service = createApplicationsService({
+    storage: createGuildScopedStorage(storage, guildId),
+    fetchTextChannel: async () => channel,
+    applicationsChannelId: 'applications',
+    applicationDefaultRole: '',
+    logChannelId: '',
+    familyRoles: buildFamilyRoles(),
+    client: {},
+    embeds: createEmbedsStub(),
+    sendAcceptLog: async () => {}
+  });
+
+  const shownModals = [];
+  const replies = [];
+  const baseInteraction = {
+    customId: 'family_apply_modal',
+    guild: { id: guildId },
+    user: { id: 'user-two-step', username: 'TwoStep' },
+    fields: {
+      getTextInputValue(field) {
+        return {
+          nickname: 'Ovik Klaiz | 218833',
+          level: '24',
+          inviter: 'Nik Klaiz',
+          discovery: 'YouTube',
+          about: 'Люблю лидершип и в целом животных'
+        }[field] || '';
+      }
+    },
+    async showModal(modal) {
+      shownModals.push(modal);
+      return modal;
+    },
+    async reply(payload) {
+      replies.push(payload);
+      return payload;
+    }
+  };
+
+  await service.continueApplication(baseInteraction);
+
+  assert.equal(shownModals.length, 1);
+  assert.equal(shownModals[0].type, 'details-modal');
+  assert.equal(storage.listGuildRecentApplications(guildId, 1).length, 0);
+
+  const detailsInteraction = {
+    customId: 'family_apply_details_modal',
+    guild: { id: guildId },
+    user: { id: 'user-two-step', username: 'TwoStep' },
+    fields: {
+      getTextInputValue(field) {
+        return {
+          values: 'Готов поддерживать и развивать семью.',
+          development: 'Развивать семью KLAIZ и помогать новичкам.',
+          strengths: 'Ответственность, активность, коммуникабельность'
+        }[field] || '';
+      }
+    },
+    async reply(payload) {
+      replies.push(payload);
+      return payload;
+    }
+  };
+
+  await service.submitApplication(detailsInteraction);
+
+  const saved = storage.listGuildRecentApplications(guildId, 1)[0];
+  const embedPayload = channel.sent[0].embeds[0].payload;
+
+  assert.equal(saved.values, 'Готов поддерживать и развивать семью.');
+  assert.equal(saved.development, 'Развивать семью KLAIZ и помогать новичкам.');
+  assert.equal(saved.strengths, 'Ответственность, активность, коммуникабельность');
+  assert.equal(embedPayload.values, saved.values);
+  assert.equal(embedPayload.development, saved.development);
+  assert.equal(embedPayload.strengths, saved.strengths);
+  assert.match(replies.at(-1).content, /заявка отправлена/i);
 }
 
 async function testSubmitApplicationCreatesReviewCardWithoutThread() {
@@ -842,6 +937,7 @@ async function testCloseTicketNotifiesTelegram() {
 
 async function main() {
   await runTest('submitApplication stores data and sends application message', testSubmitApplication);
+  await runTest('application two-step modal stores all visible fields', testApplicationTwoStepModalStoresAllVisibleFields);
   await runTest('submitApplication creates review card without a thread', testSubmitApplicationCreatesReviewCardWithoutThread);
   await runTest('submitApplication survives Telegram notification failure', testSubmitApplicationSurvivesTelegramFailure);
   await runTest('accept updates status and logs admission', testAcceptApplication);

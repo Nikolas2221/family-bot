@@ -234,6 +234,7 @@ export interface ApplicationsService {
   moveToReview(interaction: unknown, applicationId: string, userId: string): Promise<unknown>;
   reject(interaction: unknown, applicationId: string, userId: string, details?: { reason?: string; messageId?: string }): Promise<unknown>;
   sendApplyPanel(interaction: unknown): Promise<unknown>;
+  continueApplication(interaction: unknown): Promise<unknown>;
   submitApplication(interaction: unknown): Promise<unknown>;
 }
 
@@ -556,6 +557,9 @@ export interface ApplicationRecord {
   inviter: string;
   discovery: string;
   about: string;
+  values?: string;
+  development?: string;
+  strengths?: string;
   age: string;
   text: string;
   ticketThreadId: string;
@@ -730,6 +734,9 @@ export interface ApplicationFieldsInput {
   inviter?: string;
   discovery?: string;
   about?: string;
+  values?: string;
+  development?: string;
+  strengths?: string;
   age?: string;
   text?: string;
 }
@@ -742,6 +749,9 @@ export type SanitizedApplicationInput =
       inviter: string;
       discovery: string;
       about: string;
+      values: string;
+      development: string;
+      strengths: string;
       age: string;
       text: string;
     };
@@ -778,7 +788,7 @@ export interface StorageApi {
   setGuildCooldown(guildId: string, userId: string, value?: number): void;
   getVerificationConfirmation(guildId: string, userId: string, type?: 'member' | 'guest'): VerificationConfirmationRecord | null;
   setVerificationConfirmation(input: VerificationConfirmationRecord): VerificationConfirmationRecord;
-  createGuildApplication(payload: { guildId: string; userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string; discordUsername?: string }): string;
+  createGuildApplication(payload: { guildId: string; userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; values?: string; development?: string; strengths?: string; age?: string; text?: string; discordUsername?: string }): string;
   findGuildApplication(guildId: string, applicationId: string): ApplicationRecord | null;
   setApplicationTicketInfo(app: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>): ApplicationRecord | null;
   listGuildRecentApplications(guildId: string, limit?: number): ApplicationRecord[];
@@ -809,7 +819,7 @@ export interface GuildStorageContext {
   setCooldown(userId: string, value?: number): void;
   getVerificationConfirmation(userId: string, type?: 'member' | 'guest'): VerificationConfirmationRecord | null;
   setVerificationConfirmation(input: Omit<VerificationConfirmationRecord, 'guildId'>): VerificationConfirmationRecord;
-  createApplication(payload: { userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; age?: string; text?: string; discordUsername?: string }): string;
+  createApplication(payload: { userId: string; nickname: string; level?: string; inviter?: string; discovery?: string; about?: string; values?: string; development?: string; strengths?: string; age?: string; text?: string; discordUsername?: string }): string;
   findApplication(applicationId: string): ApplicationRecord | null;
   setApplicationTicketInfo(app: ApplicationRecord | null, ticketInfo?: Partial<Pick<ApplicationRecord, 'ticketThreadId' | 'ticketMessageId' | 'ticketStarterMessageId'>>): ApplicationRecord | null;
   listRecentApplications(limit?: number): ApplicationRecord[];

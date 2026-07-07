@@ -416,6 +416,7 @@ async function testEmbedsPublicApiStaysComplete() {
     'buildApplicationsListEmbed',
     'buildApplicationsPanelButtons',
     'buildApplicationsPanelEmbed',
+    'buildApplyDetailsModal',
     'buildApplyModal',
     'buildAutomodActionEmbed',
     'buildAutomodStatusEmbed',

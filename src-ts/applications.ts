@@ -47,6 +47,15 @@ interface ApplicationsOptions {
   ticketDeleteDelayMs?: number;
 }
 
+interface ApplicationDraft {
+  nickname: string;
+  level: string;
+  inviter: string;
+  discovery: string;
+  about: string;
+  createdAt: number;
+}
+
 export function createApplicationsService({
   storage,
   fetchTextChannel,
@@ -67,6 +76,38 @@ export function createApplicationsService({
   ticketDeleteDelayMs = 5000
 }: ApplicationsOptions): ApplicationsService {
   const closingTickets = new Set<string>();
+  const applicationDrafts = new Map<string, ApplicationDraft>();
+  const APPLICATION_DRAFT_TTL_MS = 10 * 60 * 1000;
+
+  function draftKey(interaction: any): string {
+    return `${interaction.guild?.id || 'dm'}:${interaction.user?.id || 'unknown'}`;
+  }
+
+  function readOptionalTextInput(interaction: any, fieldId: string): string {
+    try {
+      return String(interaction.fields.getTextInputValue(fieldId) || '').trim();
+    } catch {
+      return '';
+    }
+  }
+
+  function readApplicationDetails(interaction: any) {
+    return {
+      values: readOptionalTextInput(interaction, 'values'),
+      development: readOptionalTextInput(interaction, 'development'),
+      strengths: readOptionalTextInput(interaction, 'strengths')
+    };
+  }
+
+  function cleanupExpiredApplicationDrafts(): void {
+    const now = Date.now();
+    for (const [key, draft] of applicationDrafts.entries()) {
+      if (now - draft.createdAt > APPLICATION_DRAFT_TTL_MS) {
+        applicationDrafts.delete(key);
+      }
+    }
+  }
+
   async function notifyTelegram(task?: Promise<boolean>): Promise<void> {
     if (!task) return;
     await task.catch(error => {
@@ -150,6 +191,9 @@ export function createApplicationsService({
           inviter: application.inviter,
           discovery: application.discovery,
           about: application.about,
+          values: application.values,
+          development: application.development,
+          strengths: application.strengths,
           age: application.age,
           text: application.text,
           applicationId: application.id,
@@ -297,19 +341,42 @@ export function createApplicationsService({
   }
 
   async function submitApplication(interaction: any) {
-    const sanitized = storage.sanitizeApplicationInput({
+    cleanupExpiredApplicationDrafts();
+    const key = draftKey(interaction);
+    const isDetailsStep = interaction.customId === 'family_apply_details_modal';
+    const draft = isDetailsStep ? applicationDrafts.get(key) : null;
+    const baseFields = draft || {
       nickname: interaction.fields.getTextInputValue('nickname'),
       level: interaction.fields.getTextInputValue('level'),
       inviter: interaction.fields.getTextInputValue('inviter'),
       discovery: interaction.fields.getTextInputValue('discovery'),
       about: interaction.fields.getTextInputValue('about')
+    };
+    const details = readApplicationDetails(interaction);
+
+    if (isDetailsStep && !draft) {
+      return interaction.reply(ephemeral({
+        content: 'Черновик заявки устарел. Нажмите «Подать заявку» и заполните форму заново.'
+      }));
+    }
+
+    if (isDetailsStep && (!details.values || !details.development || !details.strengths)) {
+      return interaction.reply(ephemeral({
+        content: 'Заполните все поля второго шага заявки.'
+      }));
+    }
+
+    const sanitized = storage.sanitizeApplicationInput({
+      ...baseFields,
+      ...details
     });
 
     if (sanitized.error) {
       return interaction.reply(ephemeral({ content: sanitized.error }));
     }
 
-    const { nickname, level, inviter, discovery, about } = sanitized;
+    const { nickname, level, inviter, discovery, about, values, development, strengths } = sanitized;
+    applicationDrafts.delete(key);
     storage.setCooldown(interaction.user.id);
     const applicationId = storage.createApplication({
       userId: interaction.user.id,
@@ -318,7 +385,10 @@ export function createApplicationsService({
       level,
       inviter,
       discovery,
-      about
+      about,
+      values,
+      development,
+      strengths
     });
     const application = storage.findApplication(applicationId);
 
@@ -620,6 +690,33 @@ export function createApplicationsService({
     }
   }
 
+  async function continueApplication(interaction: any) {
+    cleanupExpiredApplicationDrafts();
+    const sanitized = storage.sanitizeApplicationInput({
+      nickname: interaction.fields.getTextInputValue('nickname'),
+      level: interaction.fields.getTextInputValue('level'),
+      inviter: interaction.fields.getTextInputValue('inviter'),
+      discovery: interaction.fields.getTextInputValue('discovery'),
+      about: interaction.fields.getTextInputValue('about')
+    });
+
+    if (sanitized.error) {
+      return interaction.reply(ephemeral({ content: sanitized.error }));
+    }
+
+    const { nickname, level, inviter, discovery, about } = sanitized;
+    applicationDrafts.set(draftKey(interaction), {
+      nickname,
+      level,
+      inviter,
+      discovery,
+      about,
+      createdAt: Date.now()
+    });
+
+    return interaction.showModal(embeds.buildApplyDetailsModal());
+  }
+
   return {
     accept,
     closeTicket,
@@ -627,6 +724,7 @@ export function createApplicationsService({
     moveToReview,
     reject,
     sendApplyPanel,
+    continueApplication,
     submitApplication
   };
 }

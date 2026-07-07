@@ -11,6 +11,9 @@ async function main() {
     minRoleId: '111111111111111111',
     targetChannelId: '222222222222222222'
   });
+  const panelEmbed = panel.embeds[0].toJSON();
+  assert.equal(panelEmbed.title, '▶️ Медиа-публикации');
+  assert.doesNotMatch(panelEmbed.title, /neon_youtube_playbutton/u);
   const buttons = panel.components[0].toJSON().components.map(component => component.custom_id);
   assert.deepEqual(buttons, ['media_share_open:video', 'media_share_open:stream']);
 

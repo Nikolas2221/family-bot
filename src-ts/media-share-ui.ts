@@ -55,7 +55,7 @@ export function buildMediaSharePanel(config?: Partial<MediaShareSettings>) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x7c3aed)
-      .setTitle(':neon_youtube_playbutton: Медиа-публикации')
+      .setTitle('▶️ Медиа-публикации')
       .setDescription([
         'В данную категорию попадают видео от участников семьи, которые продвигают нашу идею.',
         '',

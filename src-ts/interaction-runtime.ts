@@ -885,6 +885,11 @@ async function handleFamilyAndAdminModals(interaction: any, options: Interaction
   if (!guildId || !interaction.isModalSubmit?.()) return false;
 
   if (interaction.customId === 'family_apply_modal') {
+    await options.getApplicationsService(guildId).continueApplication(interaction);
+    return true;
+  }
+
+  if (interaction.customId === 'family_apply_details_modal') {
     await options.getApplicationsService(guildId).submitApplication(interaction);
     return true;
   }

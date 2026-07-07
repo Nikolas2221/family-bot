@@ -312,6 +312,9 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     const inviter = trimText(fields.inviter, 128);
     const discovery = trimText(fields.discovery, 128);
     const about = trimText(fields.about || fields.text, 1000);
+    const values = trimText(fields.values, 1000);
+    const development = trimText(fields.development, 1000);
+    const strengths = trimText(fields.strengths, 1000);
 
     if (!nickname || !level || !inviter || !discovery || !about) {
       return { error: copy.applications.invalidEmpty };
@@ -336,6 +339,9 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       inviter,
       discovery,
       about,
+      values,
+      development,
+      strengths,
       age: level,
       text: about
     };
@@ -600,6 +606,9 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     inviter?: string;
     discovery?: string;
     about?: string;
+    values?: string;
+    development?: string;
+    strengths?: string;
     age?: string;
     text?: string;
     discordUsername?: string;
@@ -612,6 +621,9 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       inviter = '',
       discovery = '',
       about = '',
+      values = '',
+      development = '',
+      strengths = '',
       age = '',
       text = '',
       discordUsername = ''
@@ -627,6 +639,9 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       inviter,
       discovery,
       about: about || text,
+      values,
+      development,
+      strengths,
       age: age || level,
       text: text || about,
       ticketThreadId: '',

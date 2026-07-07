@@ -290,6 +290,38 @@ export function buildApplyModal({ familyTitle = 'Семья' }: AnyRecord = {}):
     );
 }
 
+export function buildApplyDetailsModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId('family_apply_details_modal')
+    .setTitle('Заявка в семью KLAIZ • шаг 2')
+    .addComponents(
+      inputRow(
+        new TextInputBuilder()
+          .setCustomId('values')
+          .setLabel('Готовы поддерживать ценности семьи?')
+          .setPlaceholder('Пример: Да, готов ценить, поддерживать и развивать семью.')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+      ),
+      inputRow(
+        new TextInputBuilder()
+          .setCustomId('development')
+          .setLabel('В каком направлении развиваться?')
+          .setPlaceholder('Пример: Развивать семью KLAIZ / GOV / LSPD / EMS и другие варианты')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+      ),
+      inputRow(
+        new TextInputBuilder()
+          .setCustomId('strengths')
+          .setLabel('Какие сильные черты у вас есть?')
+          .setPlaceholder('Пример: Ответственность, активность, коммуникабельность')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+      )
+    );
+}
+
 export function buildAcceptModal(applicationId: string, userId: string, messageId: string): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(`app_accept_modal:${applicationId}:${userId}:${messageId}`)
