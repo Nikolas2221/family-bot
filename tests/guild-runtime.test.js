@@ -109,6 +109,38 @@ async function main() {
   assert.equal(snapshot.settings.roles.rank15, 'role-elite');
   assert.equal(snapshot.settings.roles.leader, 'role-leader');
   assert.deepEqual(snapshot.settings.panelRoleIds, ['role-elite', 'role-main', 'role-family']);
+
+  const overrideRuntime = createGuildRuntimeApi({
+    database: {
+      getGuild: () => ({ settings: { roles: { newbie: '1519857232345436220' } } }),
+      getSubscription: () => 'free',
+      isPremium: () => false
+    },
+    storage: {},
+    roleTemplates: [],
+    defaults: {
+      guildId: 'main-guild',
+      channelId: '',
+      applicationsChannelId: '',
+      logChannelId: '',
+      disciplineLogChannelId: '',
+      familyTitle: 'Phoenix',
+      accessApplications: [],
+      accessDiscipline: [],
+      accessRanks: [],
+      applicationDefaultRole: '1522317438228627528',
+      guestRoleId: '',
+      features: {
+        aiEnabled: false,
+        autoRanksEnabled: false,
+        leakGuardEnabled: true,
+        channelGuardEnabled: true
+      },
+      normalizeAutomodConfig: () => ({})
+    }
+  });
+
+  assert.equal(overrideRuntime.resolveGuildSettings('main-guild').applicationDefaultRole, '1522317438228627528');
 }
 
 if (require.main === module) {

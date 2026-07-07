@@ -1,6 +1,18 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.60': {
+    added: [
+      'тест на приоритет APPLICATION_DEFAULT_ROLE над старой ROLE_NEWBIE и сохранённой roles.newbie в базе'
+    ],
+    updated: [
+      'welcome-подтверждение теперь жёстко использует APPLICATION_DEFAULT_ROLE из Railway или fallback 1522317438228627528'
+    ],
+    fixed: [
+      'старая роль 1519857232345436220 больше не может перебить роль подтверждения из Railway',
+      'сохранённая в базе старая роль newbie больше не используется кнопкой «Подтвердить» вместо APPLICATION_DEFAULT_ROLE'
+    ]
+  },
   '1.0.59': {
     added: [
       'кнопка welcome «Гость» с выдачей GUEST_ROLE_ID и сохранением модератора подтверждения',

@@ -271,7 +271,7 @@ export function createGuildRuntimeApi(options: {
         customCommands: settings.modules?.customCommands ?? defaultModules.customCommands,
         music: settings.modules?.music ?? defaultModules.music
       },
-      applicationDefaultRole: settings.roles?.newbie || (allowEnvDefaults ? defaults.applicationDefaultRole : '')
+      applicationDefaultRole: (allowEnvDefaults ? defaults.applicationDefaultRole : '') || settings.roles?.newbie || ''
     };
   }
 

@@ -54,8 +54,7 @@ function isSnowflake(value: string): boolean {
 export function createConfig(env: EnvLike = process.env): AppConfig {
   const channelId = trim(env.CHANNEL_ID);
   const logChannelId = trim(env.LOG_CHANNEL_ID);
-  const roleNewbie = trim(env.ROLE_NEWBIE);
-  const familyMemberRoleId = trim(env.APPLICATION_DEFAULT_ROLE) || roleNewbie || DEFAULT_FAMILY_MEMBER_ROLE_ID;
+  const familyMemberRoleId = trim(env.APPLICATION_DEFAULT_ROLE) || DEFAULT_FAMILY_MEMBER_ROLE_ID;
 
   return {
     raw: { ...env },

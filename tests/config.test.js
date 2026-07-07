@@ -65,6 +65,18 @@ async function testStorageFileEnvIsReadFromConfig() {
   assert.equal(config.storageFile, '/data/storage.json');
 }
 
+async function testApplicationDefaultRoleIgnoresLegacyNewbieRole() {
+  const config = createConfig({
+    TOKEN: 'token',
+    GUILD_ID: '123456789012345678',
+    CHANNEL_ID: '123456789012345679',
+    ROLE_NEWBIE: '1519857232345436220',
+    APPLICATION_DEFAULT_ROLE: '1522317438228627528'
+  });
+
+  assert.equal(config.applicationDefaultRole, '1522317438228627528');
+}
+
 async function testDeepSeekConfigKeepsKeySecret() {
   const config = createConfig({
     TOKEN: 'token',
@@ -168,6 +180,7 @@ async function main() {
   await runTest('config validation allows offline AI without API key', testAiEnabledWorksInOfflineModeWithoutKey);
   await runTest('config summary stays safe and readable', testSummaryContainsSafeHumanReadableFields);
   await runTest('config reads storage file path from env', testStorageFileEnvIsReadFromConfig);
+  await runTest('application default role ignores legacy newbie role', testApplicationDefaultRoleIgnoresLegacyNewbieRole);
   await runTest('DeepSeek config keeps API key secret', testDeepSeekConfigKeepsKeySecret);
   await runTest('config validation catches invalid auto rank thresholds', testAutoRanksThresholdValidation);
   await runTest('Telegram config is paired and token stays secret', testTelegramConfigIsSafeAndRequiresBothValues);
