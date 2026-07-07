@@ -666,10 +666,9 @@ export function buildWelcomeEmbed(
   ].join('\n')));
 }
 
-export function buildApplicationsPanelEmbed({ imageUrl, familyTitle = 'Семья' }: AnyRecord = {}): EmbedBuilder {
-  const title = text(familyTitle, 'семью');
+export function buildApplicationsPanelEmbed({ imageUrl }: AnyRecord = {}): EmbedBuilder {
   return card({
-    title: `📝 Заявка в семью ${title}`,
+    title: 'Заявка в семью KLAIZ',
     color: THEME.phoenix,
     description: [
       'Нажми кнопку ниже, чтобы подать заявку в семью.',
@@ -681,7 +680,7 @@ export function buildApplicationsPanelEmbed({ imageUrl, familyTitle = 'Семь�
       '3. Заявка будет направлена на рассмотрение Старшим составом',
       '4. Вердикт заявки будет оповещен в личных сообщениях'
     ].join('\n'),
-    footer: `${title} • Applications`,
+    footer: `${BRAND_FOOTER} • Applications`,
     image: imageUrl
   });
 }

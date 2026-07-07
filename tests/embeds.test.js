@@ -334,8 +334,11 @@ async function testMenuAndApplicationsEmbedsExposeConfiguredImages() {
 
   assert.equal(familyEmbed.image.url, 'https://example.com/family-banner.png');
   assert.equal(applicationsEmbed.image.url, 'https://example.com/apply-banner.png');
-  assert.match(applicationsEmbed.title, /Test Family/u);
-  assert.match(applicationsEmbed.footer.text, /Test Family/u);
+  assert.equal(applicationsEmbed.title, 'Заявка в семью KLAIZ');
+  assert.match(applicationsEmbed.description, /Нажми кнопку ниже, чтобы подать заявку в семью/u);
+  assert.match(applicationsEmbed.description, /Процесс подачи заявки/u);
+  assert.match(applicationsEmbed.description, /Вердикт заявки будет оповещен в личных сообщениях/u);
+  assert.match(applicationsEmbed.footer.text, /KLAIZ/u);
   assert.doesNotMatch(applicationsEmbed.footer.text, /BRHD|Phoenix/u);
   const applicationEmbed = embeds.buildApplicationEmbed({
     user: { id: '123456789012345678' }, applicationId: 'app-1', familyTitle: 'Test Family'
