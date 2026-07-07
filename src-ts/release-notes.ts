@@ -1,6 +1,19 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.62': {
+    added: [
+      'автообновление двух voice-каналов статистики SERVER STATISTICS по фиксированным ID: Members и Online'
+    ],
+    updated: [
+      'Members теперь показывает всех участников с семейной ролью 1522317438228627528',
+      'Online теперь показывает только участников с этой ролью, которые сейчас online/idle/dnd'
+    ],
+    fixed: [
+      'счётчики Members/Online больше не остаются в состоянии --- после обновления панели',
+      'боты и участники без семейной роли не попадают в счётчики статистики'
+    ]
+  },
   '1.0.61': {
     added: [
       'точечный тест выбора роли welcome-подтверждения из APPLICATION_DEFAULT_ROLE'

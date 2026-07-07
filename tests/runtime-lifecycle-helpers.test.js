@@ -1,6 +1,10 @@
 const assert = require('node:assert/strict');
 
-const { createRuntimeLifecycleHelpers } = require('../dist-ts/runtime-lifecycle-helpers');
+const {
+  createRuntimeLifecycleHelpers,
+  FAMILY_STATS_MEMBERS_CHANNEL_ID,
+  FAMILY_STATS_ONLINE_CHANNEL_ID
+} = require('../dist-ts/runtime-lifecycle-helpers');
 
 async function main() {
   const voiceSessions = new Map();
@@ -10,6 +14,7 @@ async function main() {
   const editedMessages = [];
   const panelOptions = [];
   const persistedVoice = new Map();
+  const renamedChannels = [];
   let nextPanelId = 1;
 
   const guildStorage = {
@@ -27,12 +32,57 @@ async function main() {
   const member = {
     id: 'user-1',
     user: { bot: false },
+    presence: { status: 'online' },
+    roles: { cache: { has: (roleId) => roleId === '1522317438228627528' } },
     voice: { channelId: 'voice-1' },
     guild: { id: 'guild-1' }
   };
 
-  const membersCache = new Map([[member.id, member]]);
+  const offlineFamilyMember = {
+    id: 'user-2',
+    user: { bot: false },
+    presence: { status: 'offline' },
+    roles: { cache: { has: (roleId) => roleId === '1522317438228627528' } },
+    guild: { id: 'guild-1' }
+  };
+  const nonFamilyMember = {
+    id: 'user-3',
+    user: { bot: false },
+    presence: { status: 'online' },
+    roles: { cache: { has: () => false } },
+    guild: { id: 'guild-1' }
+  };
+  const familyBot = {
+    id: 'bot-1',
+    user: { bot: true },
+    presence: { status: 'online' },
+    roles: { cache: { has: (roleId) => roleId === '1522317438228627528' } },
+    guild: { id: 'guild-1' }
+  };
+
+  const membersCache = new Map([
+    [member.id, member],
+    [offlineFamilyMember.id, offlineFamilyMember],
+    [nonFamilyMember.id, nonFamilyMember],
+    [familyBot.id, familyBot]
+  ]);
   const messageStore = new Map();
+  function makeCounterChannel(id, name) {
+    const counterChannel = {
+      id,
+      name,
+      setName: async (nextName, reason) => {
+        renamedChannels.push({ id, from: counterChannel.name, to: nextName, reason });
+        counterChannel.name = nextName;
+        return true;
+      }
+    };
+    return counterChannel;
+  }
+  const counterChannels = new Map([
+    [FAMILY_STATS_MEMBERS_CHANNEL_ID, makeCounterChannel(FAMILY_STATS_MEMBERS_CHANNEL_ID, '🦇・Members: ---')],
+    [FAMILY_STATS_ONLINE_CHANNEL_ID, makeCounterChannel(FAMILY_STATS_ONLINE_CHANNEL_ID, '🍷・Online: ---')]
+  ]);
   const channel = {
     messages: {
       fetch: async (messageId) => {
@@ -66,7 +116,13 @@ async function main() {
         },
         get: (id) => membersCache.get(id)
       },
-      fetch: async (id) => membersCache.get(id) || null
+      fetch: async (id) => (id ? membersCache.get(id) || null : null)
+    },
+    channels: {
+      cache: {
+        get: (id) => counterChannels.get(id)
+      },
+      fetch: async (id) => counterChannels.get(id) || null
     }
   };
 
@@ -140,12 +196,16 @@ async function main() {
   await helper.doPanelUpdate('guild-1', true);
   assert.equal(sentMessages.length, 1);
   assert.equal(panelIds.get('guild-1'), 'panel-1');
+  assert.equal(counterChannels.get(FAMILY_STATS_MEMBERS_CHANNEL_ID).name, '🦇・Members: 2');
+  assert.equal(counterChannels.get(FAMILY_STATS_ONLINE_CHANNEL_ID).name, '🍷・Online: 1');
+  assert.equal(renamedChannels.length, 2);
   assert.equal(panelOptions[0].showAllGuildRoles, true);
   assert.equal(typeof panelOptions[0].pointsScore, 'function');
   assert.equal(typeof panelOptions[0].memberWarnings, 'function');
 
   await helper.doPanelUpdate('guild-1', true);
   assert.equal(editedMessages.length, 1);
+  assert.equal(renamedChannels.length, 2);
 
   await helper.syncAutoRanks('guild-1', 'test');
   assert.equal(sentRankDm.length, 1);

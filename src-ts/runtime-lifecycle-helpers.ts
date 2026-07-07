@@ -10,6 +10,14 @@ interface GuildMemberLike {
   user?: {
     bot?: boolean;
   } | null;
+  presence?: {
+    status?: string | null;
+  } | null;
+  roles?: {
+    cache?: {
+      has(roleId: string): boolean;
+    };
+  } | null;
   voice?: {
     channelId?: string | null;
   } | null;
@@ -25,8 +33,23 @@ interface GuildLike {
       values(): IterableIterator<GuildMemberLike>;
       get(id: string): GuildMemberLike | undefined;
     };
-    fetch(id: string): Promise<GuildMemberLike | null>;
+    fetch: {
+      (id: string): Promise<GuildMemberLike | null>;
+      (): Promise<unknown>;
+    };
   };
+  channels?: {
+    cache?: {
+      get(id: string): CounterChannelLike | undefined;
+    };
+    fetch?(id: string): Promise<CounterChannelLike | null>;
+  };
+}
+
+interface CounterChannelLike {
+  id: string;
+  name: string;
+  setName(name: string, reason?: string): Promise<unknown>;
 }
 
 interface ChannelMessageLike {
@@ -68,6 +91,61 @@ interface PanelState {
   inProgress: boolean;
   pending: boolean;
   lastUpdate: number;
+}
+
+export const FAMILY_STATS_ROLE_ID_FALLBACK = '1522317438228627528';
+export const FAMILY_STATS_MEMBERS_CHANNEL_ID = '1517564214968057997';
+export const FAMILY_STATS_ONLINE_CHANNEL_ID = '1517564214968058000';
+
+function getFamilyStatsRoleId(): string {
+  return (
+    (process.env.FAMILY_STATS_ROLE_ID || '').trim() ||
+    (process.env.APPLICATION_DEFAULT_ROLE || '').trim() ||
+    FAMILY_STATS_ROLE_ID_FALLBACK
+  );
+}
+
+export function formatCounterChannelName(currentName: string, label: 'Members' | 'Online', count: number): string {
+  const safeCount = Math.max(0, Math.floor(Number(count) || 0));
+  const pattern = new RegExp(`(${label}\\s*[:：]\\s*)(?:---|\\d+)`, 'i');
+
+  if (pattern.test(currentName)) {
+    return currentName.replace(pattern, `$1${safeCount}`);
+  }
+
+  return `${label}: ${safeCount}`;
+}
+
+function hasRole(member: GuildMemberLike, roleId: string): boolean {
+  return Boolean(member.roles?.cache?.has?.(roleId));
+}
+
+function isVisibleOnline(member: GuildMemberLike): boolean {
+  const status = member.presence?.status || 'offline';
+  return status === 'online' || status === 'idle' || status === 'dnd';
+}
+
+async function fetchCounterChannel(guild: GuildLike, channelId: string): Promise<CounterChannelLike | null> {
+  const cached = guild.channels?.cache?.get?.(channelId);
+  if (cached?.setName) return cached;
+
+  const fetched = await guild.channels?.fetch?.(channelId).catch(() => null);
+  return fetched?.setName ? fetched : null;
+}
+
+async function renameCounterChannel(
+  guild: GuildLike,
+  channelId: string,
+  label: 'Members' | 'Online',
+  count: number
+): Promise<void> {
+  const channel = await fetchCounterChannel(guild, channelId);
+  if (!channel) return;
+
+  const nextName = formatCounterChannelName(channel.name, label, count);
+  if (nextName === channel.name) return;
+
+  await channel.setName(nextName, 'KLAIZ stats counter update');
 }
 
 interface LifecycleRuntimeHelpersOptions {
@@ -189,6 +267,10 @@ export function createRuntimeLifecycleHelpers(options: LifecycleRuntimeHelpersOp
       const guild = client.guilds.cache.get(guildId);
       if (!guild) return;
 
+      await updateFamilyStatsChannels(guild).catch((error) => {
+        console.error(`Ошибка обновления статистики каналов ${guild.id}:`, error);
+      });
+
       const settings = resolveGuildSettings(guild.id);
       const guildStorage = getGuildStorage(guild.id);
       const channel = await fetchTextChannel(guild, settings.channels.panel);
@@ -236,6 +318,21 @@ export function createRuntimeLifecycleHelpers(options: LifecycleRuntimeHelpersOp
         }, 3000);
       }
     }
+  }
+
+  async function updateFamilyStatsChannels(guild: GuildLike): Promise<void> {
+    const roleId = getFamilyStatsRoleId();
+    if (!roleId) return;
+
+    await guild.members.fetch().catch(() => null);
+
+    const familyMembers = Array.from(guild.members.cache.values()).filter(
+      (member) => !member.user?.bot && hasRole(member, roleId)
+    );
+    const onlineMembers = familyMembers.filter(isVisibleOnline);
+
+    await renameCounterChannel(guild, FAMILY_STATS_MEMBERS_CHANNEL_ID, 'Members', familyMembers.length);
+    await renameCounterChannel(guild, FAMILY_STATS_ONLINE_CHANNEL_ID, 'Online', onlineMembers.length);
   }
 
   async function doPanelUpdateAll(force = false): Promise<void> {
