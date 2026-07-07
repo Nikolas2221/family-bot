@@ -14,7 +14,7 @@ const {
   formatModerationTimestamp,
   resolveTargetTextChannel
 } = require('../dist-ts/runtime-access-helpers');
-const { canConfirmWelcome } = require('../dist-ts/interaction-runtime');
+const { canConfirmWelcome, getMemberVerificationRoleIdFromEnv } = require('../dist-ts/interaction-runtime');
 
 async function main() {
   const accessApi = {
@@ -56,6 +56,15 @@ async function main() {
     guild: { ownerId: 'owner' },
     member: { id: 'senior', permissions: { has: () => false }, roles: { highest: { position: 99 } } }
   }, startRole), false);
+
+  const previousApplicationRole = process.env.APPLICATION_DEFAULT_ROLE;
+  process.env.APPLICATION_DEFAULT_ROLE = '1522317438228627528';
+  assert.equal(getMemberVerificationRoleIdFromEnv(), '1522317438228627528');
+  if (previousApplicationRole === undefined) {
+    delete process.env.APPLICATION_DEFAULT_ROLE;
+  } else {
+    process.env.APPLICATION_DEFAULT_ROLE = previousApplicationRole;
+  }
 
   const channel = { id: 'chan', type: 0 };
   assert.equal(

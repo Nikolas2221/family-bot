@@ -424,6 +424,10 @@ function getWelcomeTargetUserId(interaction: any): string {
   return String(interaction.message?.content || '').match(/<@!?(\d{16,20})>/u)?.[1] || '';
 }
 
+export function getMemberVerificationRoleIdFromEnv(): string {
+  return String(process.env.APPLICATION_DEFAULT_ROLE || '1522317438228627528').trim();
+}
+
 function formatVerificationConfirmer(value: unknown): string {
   const id = String(value || '').trim();
   return /^\d{16,20}$/u.test(id) ? `<@${id}>` : (id || 'неизвестный модератор');
@@ -987,7 +991,9 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
       }
 
       const isGuestConfirmation = interaction.customId === 'welcome_guest' || interaction.customId.startsWith('welcome_guest:');
-      const targetRoleId = isGuestConfirmation ? String(settings.guestRoleId || '').trim() : options.getVerificationRoleId(guildId);
+      const targetRoleId = isGuestConfirmation
+        ? String(process.env.GUEST_ROLE_ID || settings.guestRoleId || '').trim()
+        : getMemberVerificationRoleIdFromEnv();
       if (!targetRoleId) {
         await interaction.reply(options.ephemeral({
           content: isGuestConfirmation

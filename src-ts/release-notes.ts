@@ -1,6 +1,17 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.61': {
+    added: [
+      'точечный тест выбора роли welcome-подтверждения из APPLICATION_DEFAULT_ROLE'
+    ],
+    updated: [
+      'кнопка «Подтвердить» теперь читает APPLICATION_DEFAULT_ROLE напрямую из env в момент нажатия'
+    ],
+    fixed: [
+      'сохранённые runtime-настройки verification/newbie больше не могут подставить старую роль 1519857232345436220 в welcome-подтверждение'
+    ]
+  },
   '1.0.60': {
     added: [
       'тест на приоритет APPLICATION_DEFAULT_ROLE над старой ROLE_NEWBIE и сохранённой roles.newbie в базе'
