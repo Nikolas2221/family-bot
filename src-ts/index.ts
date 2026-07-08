@@ -28,6 +28,7 @@ const { createAfkLeaveService } = require('./services/afk-leave');
 const { createReportRequestService } = require('./services/report-requests');
 const { createMediaShareService } = require('./services/media-share');
 const { createServerBackupService } = require('./services/server-backups');
+const { createVoiceRoomsService } = require('./modules/voiceRooms');
 const { refreshLegacyBrandMessages } = require('./services/brand-refresh');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
@@ -175,6 +176,10 @@ const announcementService = createAnnouncementService({
 const serverBackupService = createServerBackupService({
   client,
   config: config.serverBackup
+});
+const voiceRoomsService = createVoiceRoomsService({
+  client,
+  config: config.voiceRooms
 });
 registerTelegramHandlers(telegramBot, {
   adminChatId: config.telegramAdminChatId,
@@ -1214,6 +1219,7 @@ function buildProfilePayload(member: any, allowRankButtons: any, content = '') {
   const guildStorage = getGuildStorage(member.guild.id);
   const rankService = getRankService(member.guild.id);
   const memberData = { ...guildStorage.ensureMemberRecord(member.id), voiceMinutes: getLiveVoiceMinutes(member) };
+  const weeklyStats = guildStorage.getPeriodAnalytics(7).members?.[member.id] || {};
   const rankInfo = {
     ...rankService.describeMember(member),
     autoEnabled: isPremiumGuild(member.guild.id) && AUTO_RANKS.enabled
@@ -1224,7 +1230,8 @@ function buildProfilePayload(member: any, allowRankButtons: any, content = '') {
         activityScore: guildStorage.getActivityScore,
         memberData,
         familyRoleIds: getRoleIds(member.guild.id),
-        rankInfo
+        rankInfo,
+        weeklyStats
       })
     ],
     components: allowRankButtons
@@ -1232,7 +1239,8 @@ function buildProfilePayload(member: any, allowRankButtons: any, content = '') {
           userId: member.id,
           canPromote: rankInfo.canPromote,
           canDemote: rankInfo.canDemote,
-          canAutoSync: rankInfo.canAutoSync && rankInfo.autoEnabled
+          canWarn: true,
+          canAddPoints: true
         })
       : []
   };
@@ -1505,6 +1513,9 @@ registerClientReadyRuntime({
 
 client.once('clientReady', () => {
   serverBackupService.startAutoBackups();
+  voiceRoomsService.reconcileAll().catch((error: unknown) => {
+    console.error('Voice Rooms startup reconciliation failed:', error);
+  });
 });
 
 registerEventRuntime({
@@ -1540,13 +1551,15 @@ registerEventRuntime({
   restoreDeletedChannel,
   doPanelUpdate,
   handleDiscordTicketMessage: ticketService.handleDiscordTicketMessage,
-  handleAfkMessage: afkLeaveService.handleMessage
+  handleAfkMessage: afkLeaveService.handleMessage,
+  handleVoiceRoomsVoiceStateUpdate: (oldState: any, newState: any) => voiceRoomsService.handleVoiceStateUpdate(oldState, newState)
 });
 
 process.on('SIGINT', () => {
   stopTelegramBot(telegramBot, 'SIGINT');
   ticketService.stop();
   serverBackupService.stopAutoBackups();
+  voiceRoomsService.stop();
   flushVoiceSessions();
   database.flush();
   storage.flush();
@@ -1557,6 +1570,7 @@ process.on('SIGTERM', () => {
   stopTelegramBot(telegramBot, 'SIGTERM');
   ticketService.stop();
   serverBackupService.stopAutoBackups();
+  voiceRoomsService.stop();
   flushVoiceSessions();
   database.flush();
   storage.flush();
@@ -1680,7 +1694,8 @@ registerInteractionRuntime({
     discordAnnouncerRoleIds: config.discordAnnouncerRoleIds,
     ticketService,
     lawService,
-    serverBackupService
+    serverBackupService,
+    voiceRoomsService
   });
   },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,
@@ -1726,6 +1741,7 @@ registerInteractionRuntime({
   afkLeaveService,
   reportRequestService,
   mediaShareService,
+  voiceRoomsService,
   resolveMemberQuery,
   formatRankResult,
   syncAutoRanks,

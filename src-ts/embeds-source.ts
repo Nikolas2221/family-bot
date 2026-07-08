@@ -1,4 +1,4 @@
-import {
+﻿import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -135,7 +135,7 @@ function statusEmoji(member: AnyRecord | null | undefined): string {
   const status = member?.presence?.status || 'offline';
   if (status === 'online') return '🟢';
   if (status === 'idle') return '🟡';
-  if (status === 'dnd') return '⛔';
+  if (status === 'dnd') return 'в›”';
   return '⚫';
 }
 
@@ -167,11 +167,122 @@ function sortMembers(members: AnyRecord[], activityScore: (memberId: string) => 
   });
 }
 
+function sortMembersByPoints(members: AnyRecord[], pointsScore: (memberId: string) => number): AnyRecord[] {
+  return [...members].sort((a, b) => {
+    const byPoints = Number(pointsScore(b.id) || 0) - Number(pointsScore(a.id) || 0);
+    if (byPoints !== 0) return byPoints;
+    return text(a.displayName || a.user?.username).localeCompare(text(b.displayName || b.user?.username), 'ru');
+  });
+}
+
 function normalizeRoleName(value: unknown): string {
   return text(value)
+    .normalize('NFKD')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
+}
+
+const FAMILY_PANEL_ROLE_NAMES = [
+  'рќ‘µрќ’†рќ’',
+  '𝑲𝑳𝑨𝑰𝒁',
+  '𝑲𝑳𝑨𝑰𝒁 𝑴𝒂𝒊𝒏',
+  '𝑲𝑳𝑨𝑰𝒁 𝑬𝒍𝒊𝒕𝒆',
+  '𝑲𝑳𝑨𝑰𝒁 𝑺𝒖𝒑𝒆𝒓𝒗𝒊𝒔𝒐𝒓',
+  '𝑲𝑳𝑨𝑰𝒁 𝑯𝒊𝒈𝒉',
+  '𝑫𝒆𝒑. 𝑳𝒆𝒂𝒅',
+  '𝑭𝑶𝑼𝑵𝑫𝑬𝑹𝑺'
+];
+
+const FAMILY_PANEL_ROLE_ICONS = new Map<string, string>([
+  ['рќ‘µрќ’†рќ’', 'рџЊ±'],
+  ['𝑲𝑳𝑨𝑰𝒁', '🥀'],
+  ['𝑲𝑳𝑨𝑰𝒁 𝑴𝒂𝒊𝒏', '🗡️'],
+  ['𝑲𝑳𝑨𝑰𝒁 𝑬𝒍𝒊𝒕𝒆', '💎'],
+  ['𝑲𝑳𝑨𝑰𝒁 𝑺𝒖𝒑𝒆𝒓𝒗𝒊𝒔𝒐𝒓', '🛡️'],
+  ['𝑲𝑳𝑨𝑰𝒁 𝑯𝒊𝒈𝒉', '👑'],
+  ['𝑫𝒆𝒑. 𝑳𝒆𝒂𝒅', '🔑'],
+  ['𝑭𝑶𝑼𝑵𝑫𝑬𝑹𝑺', '🏛️']
+]);
+
+const FAMILY_PANEL_ROLE_ALIASES = new Map<string, string>([
+  ['new', '𝑵𝒆𝒘'],
+  ['klaiz', '𝑲𝑳𝑨𝑰𝒁'],
+  ['klaiz main', '𝑲𝑳𝑨𝑰𝒁 𝑴𝒂𝒊𝒏'],
+  ['klaiz elite', '𝑲𝑳𝑨𝑰𝒁 𝑬𝒍𝒊𝒕𝒆'],
+  ['klaiz supervisor', '𝑲𝑳𝑨𝑰𝒁 𝑺𝒖𝒑𝒆𝒓𝒗𝒊𝒔𝒐𝒓'],
+  ['klaiz high', '𝑲𝑳𝑨𝑰𝒁 𝑯𝒊𝒈𝒉'],
+  ['dep lead', '𝑫𝒆𝒑. 𝑳𝒆𝒂𝒅'],
+  ['founders', '𝑭𝑶𝑼𝑵𝑫𝑬𝑹𝑺']
+]);
+
+function normalizeFamilyPanelRoleName(value: unknown): string {
+  return text(value).replace(/\s+/g, ' ').trim();
+}
+
+function selectedFamilyPanelRoleName(role: AnyRecord): string {
+  const normalized = normalizeFamilyPanelRoleName(role?.name);
+  const exact = FAMILY_PANEL_ROLE_NAMES.find(name => normalizeFamilyPanelRoleName(name) === normalized);
+  if (exact) return exact;
+  const ascii = normalizeRoleName(role?.name).replace(/\bfounder\b/u, 'founders');
+  return FAMILY_PANEL_ROLE_ALIASES.get(ascii) || '';
+}
+
+function isSelectedFamilyPanelRole(role: AnyRecord, guild: AnyRecord): boolean {
+  if (!role?.id || role.id === guild?.id || role.name === '@everyone') return false;
+  if (role.managed || role.tags?.botId || role.tags?.premiumSubscriberRole) return false;
+  return Boolean(selectedFamilyPanelRoleName(role));
+}
+
+function familyRoleIcon(name: string): string {
+  const normalized = normalizeFamilyPanelRoleName(name);
+  const ascii = normalizeRoleName(name);
+  const asciiIcons: Record<string, string> = {
+    new: '🌱',
+    klaiz: '🥀',
+    'klaiz main': '🗡️',
+    'klaiz elite': '💎',
+    'klaiz supervisor': '🛡️',
+    'klaiz high': '👑',
+    'dep lead': '🔑',
+    founders: '🏛️'
+  };
+  return FAMILY_PANEL_ROLE_ICONS.get(normalized) || asciiIcons[ascii] || '•';
+}
+
+function formatWarnings(value: unknown): string {
+  return `${Math.max(0, Number(value) || 0)}/6`;
+}
+
+function daysBetween(from: unknown, to = Date.now()): number {
+  const timestamp = Number(from) || 0;
+  if (!timestamp) return 0;
+  return Math.max(0, Math.floor((to - timestamp) / (24 * 60 * 60 * 1000)));
+}
+
+function formatDateTime(value: unknown): string {
+  const timestamp = Number(value) || 0;
+  if (!timestamp) return 'нет данных';
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(timestamp));
+}
+
+function formatRelativeTime(value: unknown): string {
+  const timestamp = Number(value) || 0;
+  if (!timestamp) return 'нет данных';
+  const diffMs = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'только что';
+  if (minutes < 60) return `${minutes} мин назад`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  const days = Math.floor(hours / 24);
+  return `${days} дн назад`;
 }
 
 function isAutoFamilyPanelRole(role: AnyRecord, guild: AnyRecord): boolean {
@@ -391,16 +502,50 @@ export function buildApplicationsPanelButtons(): ButtonRow[] {
   ];
 }
 
-export function buildRankButtons({ userId, canPromote, canDemote, canAutoSync }: AnyRecord): ButtonRow[] {
+export function buildRankButtons({ userId, canPromote, canDemote, canWarn = true, canAddPoints = true }: AnyRecord): ButtonRow[] {
   return [
     buttonRow(
       new ButtonBuilder().setCustomId(`rank_promote:${userId}`).setLabel(text(copy.ranks?.promoteButton, 'Повысить')).setStyle(ButtonStyle.Success).setDisabled(!canPromote),
-      new ButtonBuilder().setCustomId(`rank_demote:${userId}`).setLabel(text(copy.ranks?.demoteButton, 'Понизить')).setStyle(ButtonStyle.Danger).setDisabled(!canDemote),
-      new ButtonBuilder().setCustomId(`rank_autosync:${userId}`).setLabel(text(copy.ranks?.autoSyncButton, 'Авто-ранг')).setStyle(ButtonStyle.Secondary).setDisabled(!canAutoSync)
+      new ButtonBuilder().setCustomId(`rank_demote:${userId}`).setLabel(text(copy.ranks?.demoteButton, 'Понизить')).setStyle(ButtonStyle.Danger).setDisabled(!canDemote)
+    ),
+    buttonRow(
+      new ButtonBuilder().setCustomId(`profile_warn:${userId}`).setLabel('Выдать выговор').setStyle(ButtonStyle.Secondary).setDisabled(!canWarn),
+      new ButtonBuilder().setCustomId(`profile_points:${userId}`).setLabel('Добавить баллы').setStyle(ButtonStyle.Primary).setDisabled(!canAddPoints)
     )
   ];
 }
 
+export function buildProfileWarnModal(userId: string): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`profile_warn_modal:${userId}`)
+    .setTitle('Выдать выговор')
+    .addComponents(
+      inputRow(
+        new TextInputBuilder()
+          .setCustomId('reason')
+          .setLabel('Причина выговора')
+          .setPlaceholder('Например: нарушение правил, неуважительное поведение')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+      )
+    );
+}
+
+export function buildProfilePointsModal(userId: string): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`profile_points_modal:${userId}`)
+    .setTitle('Добавить баллы')
+    .addComponents(
+      inputRow(
+        new TextInputBuilder()
+          .setCustomId('reason')
+          .setLabel('За что добавить баллы')
+          .setPlaceholder('Например: активность, помощь семье, полезное действие')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+      )
+    );
+}
 export function buildRoleMenuComponents(menu: AnyRecord = {}): ButtonRow[] {
   const buttons = (Array.isArray(menu.items) ? menu.items : []).slice(0, 25).map((item: AnyRecord) => {
     const button = new ButtonBuilder()
@@ -466,14 +611,14 @@ export async function buildFamilyEmbeds(
 ): Promise<EmbedBuilder[]> {
   const guildRoleEntries = showAllGuildRoles
     ? Array.from(guild.roles?.cache?.values?.() || [])
-      .filter((role: any) => isAutoFamilyPanelRole(role, guild))
+      .filter((role: any) => isSelectedFamilyPanelRole(role, guild))
       .map((role: any) => ({ id: role.id, name: role.name, role }))
     : [];
   const roleEntries = guildRoleEntries.length
     ? guildRoleEntries
     : (Array.isArray(roles) ? roles : []).map((item: AnyRecord) => ({ ...item, role: guild.roles?.cache?.get?.(item.id) }));
   const configuredRoles = roleEntries
-    .filter((item: AnyRecord) => item.role)
+    .filter((item: AnyRecord) => item.role && isSelectedFamilyPanelRole(item.role, guild))
     .sort((a: AnyRecord, b: AnyRecord) => (b.role.position || 0) - (a.role.position || 0));
 
   const familyMemberIds = new Set<string>();
@@ -489,15 +634,15 @@ export async function buildFamilyEmbeds(
       });
 
     return {
-      name: text(item.role.name || item.name),
-      members: sortMembers(members as AnyRecord[], activityScore)
+      name: selectedFamilyPanelRoleName(item.role) || text(item.role.name || item.name),
+      members: sortMembersByPoints(members as AnyRecord[], pointsScore)
     };
   });
 
   const activeRoles = snapshots.filter((item: AnyRecord) => item.members.length > 0);
 
   const embed = card({
-    title: text(familyTitle || guild.name || 'KLAIZ'),
+    title: 'KLAIZ — Состав семьи',
     color: THEME.brand,
     description: [
       `Активных секций: ${activeRoles.length}`,
@@ -509,25 +654,26 @@ export async function buildFamilyEmbeds(
     image: imageUrl
   });
   embed.setDescription([
-    `Всего выговоров: ${summary.totalWarnings ?? 0}`
+    `Всего выговоров: ${summary.totalWarnings ?? 0}`,
+    `Всего участников: ${summary.membersWithFamilyRoles ?? familyMemberIds.size}`,
+    `Активных категорий: ${activeRoles.length}`
   ].join('\n'));
 
-  if (!activeRoles.length) {
-    embed.addFields(section('Состав', text(copy.family?.emptyMembers, 'Нет участников в выбранных ролях.')));
+  if (!snapshots.length) {
+    embed.addFields(section('Состав', 'Семейные роли не найдены. Проверь названия ролей на сервере.'));
     return [embed];
   }
 
   const panelEmbeds = [embed];
   let currentEmbed = embed;
   let currentFieldCount = 0;
-  let inlinePairCount = 0;
 
-  for (const item of activeRoles) {
-    const lines = item.members.map((member: AnyRecord) => {
+  for (const item of snapshots) {
+    const lines = item.members.map((member: AnyRecord, index: number) => {
       const points = Math.max(0, Number(pointsScore(member.id) || 0));
-      const warnings = Math.max(0, Number(memberWarnings(member.id) || 0));
-      return `${statusEmoji(member)} <@${member.id}> • ${points} б. • ${warnings} выг.`;
+      return `${index + 1}. <@${member.id}> — Баллы: ${points}`;
     });
+    if (!lines.length) lines.push('Нет участников в этой категории');
     const chunks: string[][] = [];
     let currentChunk: string[] = [];
     let currentLength = 0;
@@ -548,29 +694,44 @@ export async function buildFamilyEmbeds(
     chunks.forEach((chunk, index) => {
       if (currentFieldCount >= 24) {
         currentEmbed = card({
-          title: `${text(familyTitle || guild.name || 'KLAIZ')} • продолжение`,
+          title: 'KLAIZ — Состав семьи • продолжение',
           color: THEME.brand,
           footer: `${BRAND_FOOTER} • Обновление каждые ${Math.floor(updateIntervalMs / 1000)} сек.`
         });
         panelEmbeds.push(currentEmbed);
         currentFieldCount = 0;
-        inlinePairCount = 0;
       }
 
       currentEmbed.addFields(section(
-        index === 0 ? `${item.name} • ${item.members.length}` : `${item.name} • ${item.members.length} (${index + 1})`,
+        index === 0 ? `${familyRoleIcon(item.name)} ${item.name} -- ${item.members.length} чел.` : `${familyRoleIcon(item.name)} ${item.name} -- ${item.members.length} чел. (${index + 1})`,
         chunk.join('\n'),
         true
       ));
       currentFieldCount += 1;
-      inlinePairCount += 1;
-
-      if (inlinePairCount === 2 && currentFieldCount < 25) {
-        currentEmbed.addFields(section('\u200b', '\u200b', true));
-        currentFieldCount += 1;
-        inlinePairCount = 0;
-      }
     });
+  }
+
+  const warnedMembers = Array.from(displayedMemberIds)
+    .map((memberId) => ({
+      memberId,
+      warnings: Math.max(0, Number(memberWarnings(memberId) || 0)),
+      points: Math.max(0, Number(pointsScore(memberId) || 0))
+    }))
+    .filter(item => item.warnings > 0)
+    .sort((a, b) => b.warnings - a.warnings || b.points - a.points);
+
+  if (warnedMembers.length) {
+    const warningsEmbed = card({
+      title: 'KLAIZ — Выговоры',
+      color: THEME.warning,
+      description: 'Показаны только участники, у которых есть активные выговоры.',
+      footer: `${BRAND_FOOTER} • Warnings`
+    });
+    chunk(warnedMembers.map((item, index) => `${index + 1}. <@${item.memberId}> — ${formatWarnings(item.warnings)}`), 12)
+      .forEach((part, index) => {
+        warningsEmbed.addFields(section(index === 0 ? 'Список' : `Список (${index + 1})`, part.join('\n'), true));
+      });
+    panelEmbeds.push(warningsEmbed);
   }
 
   return panelEmbeds;
@@ -578,7 +739,7 @@ export async function buildFamilyEmbeds(
 
 export function buildProfileEmbed(
   member: AnyRecord,
-  { activityScore = () => 0, memberData = {}, familyRoleIds = [], rankInfo = null }: AnyRecord = {}
+  { activityScore = () => 0, memberData = {}, familyRoleIds = [], rankInfo = null, weeklyStats = {} }: AnyRecord = {}
 ): EmbedBuilder {
   const familyRoles = member.roles?.cache
     ?.filter?.((role: AnyRecord) => familyRoleIds.includes(role.id))
@@ -586,15 +747,15 @@ export function buildProfileEmbed(
     ?.join(', ') || text(copy.profile?.noRoles, 'Нет семейных ролей');
 
   const currentRoleName = text(rankInfo?.currentRole?.name || copy.profile?.noRoles || 'Без ранга');
-  const autoRankText = !rankInfo?.autoEnabled
-    ? text(copy.ranks?.autoDisabled, 'Авто-ранги выключены.')
-    : rankInfo?.manualOnly
-      ? text(copy.ranks?.manualOnly?.(currentRoleName), `Ранг управляется вручную: ${currentRoleName}`)
-      : rankInfo?.currentRole && rankInfo?.autoTargetRole && rankInfo.currentRole.id === rankInfo.autoTargetRole.id
-        ? text(copy.ranks?.alreadySynced?.(currentRoleName, rankInfo.score), `Ранг уже синхронизирован: ${currentRoleName}`)
-        : rankInfo?.currentRole && rankInfo?.autoTargetRole
-          ? text(copy.ranks?.autoStatus?.(text(rankInfo.autoTargetRole.name), rankInfo.score), `Цель авто-ранга: ${text(rankInfo.autoTargetRole.name)}`)
-          : text(copy.ranks?.autoUnavailable, 'Авто-ранг недоступен.');
+  const joinedTimestamp = Number(member.joinedTimestamp || member.joinedAt?.getTime?.() || 0);
+  const joinedLabel = joinedTimestamp ? `${formatDateTime(joinedTimestamp)} (${daysBetween(joinedTimestamp)} дн.)` : 'нет данных';
+  const lastActivity = memberData.lastSeenAt ? `сегодня ${formatDateTime(memberData.lastSeenAt)}` : 'нет данных';
+  const lastVoice = formatRelativeTime(memberData.lastVoiceAt || memberData.lastSeenAt);
+  const lastMessage = formatRelativeTime(memberData.lastMessageAt || memberData.lastSeenAt);
+  const weeklyMessages = Number(weeklyStats.messages || 0);
+  const weeklyVoiceMinutes = Number(weeklyStats.voiceMinutes || 0);
+  const weeklyActivePoints = weeklyMessages + Math.floor(weeklyVoiceMinutes / 30) + Number(weeklyStats.reactions || 0);
+  const weeklyCommends = Number(weeklyStats.commends || 0);
 
   return card({
     title: text(copy.profile?.title, 'Профиль участника'),
@@ -603,21 +764,37 @@ export function buildProfileEmbed(
     footer: `${BRAND_FOOTER} • Profile`,
     thumbnail: avatarUrl(member.user)
   }).addFields(
-    section('Основное', [`Ник: ${text(member.displayName || member.user?.username)}`, `Discord: <@${member.id}>`, `ID: \`${member.id}\``].join('\n')),
+    section('Основное', [`Ник: ${text(member.displayName || member.user?.username)}`, `Discord: <@${member.id}>`, `ID: \`${member.id}\``, `Дата присоединения: ${joinedLabel}`].join('\n')),
     section(text(copy.profile?.fieldRoles, 'Роли семьи'), familyRoles),
-    section('Активность', [
+    section('Баллы', [
       `Актив-очки: ${activityScore(member.id)}`,
       `Репутация: ${memberData.points || 0}/100`,
-      `Сообщения: ${memberData.messageCount || 0}`,
       `Похвалы: ${memberData.commends || 0}`,
-      `Выговоры: ${memberData.warns || 0}`
+      `Выговоры: ${formatWarnings(memberData.warns || 0)}`
     ].join('\n'), true),
-    section('Голосовые каналы', `Онлайн в голосе: ${hoursFromMinutes(memberData.voiceMinutes || 0)}`, true),
-    section('Статус и ранг', [`Статус: ${statusEmoji(member)} ${statusLabel(member)}`, `Ранг: ${currentRoleName}`].join('\n'), true),
-    section(text(copy.profile?.fieldAutoRank, 'Авто-ранг'), autoRankText)
+    section('Активность', [
+      `Сообщения: ${memberData.messageCount || 0}`,
+      `Голос: ${hoursFromMinutes(memberData.voiceMinutes || 0)}`,
+      `Ранг: ${currentRoleName}`
+    ].join('\n'), true),
+    section('Последняя активность', [
+      `Последняя активность: ${lastActivity}`,
+      `Последний голос: ${lastVoice}`,
+      `Последнее сообщение: ${lastMessage}`
+    ].join('\n'), true),
+    section('За последние 7 дней', [
+      `Сообщения: ${weeklyMessages}`,
+      `Голос: ${hoursFromMinutes(weeklyVoiceMinutes)}`,
+      `Актив-очки: +${weeklyActivePoints}`,
+      `Похвалы: +${weeklyCommends}`
+    ].join('\n'), true),
+    section('Что означают показатели', [
+      'Похвала — отметка от руководства за полезные действия.',
+      'Репутация — общий баланс баллов участника.',
+      'Актив-очки — вклад по сообщениям, голосу и действиям.'
+    ].join('\n'))
   );
 }
-
 export function buildLeaderboardEmbed(entries: unknown[] = [], summary: AnyRecord = {}): EmbedBuilder {
   const content = entries.length ? entries.map((entry) => text(entry)).join('\n') : text(copy.stats?.leaderboardEmpty, 'Рейтинг пока пуст.');
   return card({
@@ -1216,6 +1393,8 @@ export default {
   buildCustomCommandsEmbed,
   buildLeaderboardEmbed,
   buildProfileEmbed,
+  buildProfilePointsModal,
+  buildProfileWarnModal,
   buildRankButtons,
   buildRoleMenuComponents,
   buildRoleMenuEmbed,

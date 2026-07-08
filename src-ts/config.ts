@@ -123,6 +123,21 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
       githubBranch: trim(env.GITHUB_BACKUP_BRANCH) || 'main',
       githubBasePath: trim(env.GITHUB_BACKUP_BASE_PATH) || 'backups/server'
     },
+    voiceRooms: {
+      enabled: parseBoolean(env.VOICE_ROOMS_ENABLED) || Boolean(trim(env.VOICE_ROOMS_CATEGORY_ID)),
+      categoryId: trim(env.VOICE_ROOMS_CATEGORY_ID),
+      triggerChannelId: trim(env.VOICE_ROOMS_TRIGGER_CHANNEL_ID),
+      triggerChannelName: trim(env.VOICE_ROOMS_TRIGGER_CHANNEL_NAME) || '➕ Создать Voice Room',
+      logChannelId: trim(env.VOICE_ROOMS_LOG_CHANNEL_ID),
+      emptyRoomGraceMs: parseNumber(env.VOICE_ROOMS_EMPTY_GRACE_MS, 45000, { min: 5000 }),
+      createCooldownMs: parseNumber(env.VOICE_ROOMS_CREATE_COOLDOWN_MS, 15000, { min: 1000 }),
+      defaultUserLimit: parseNumber(env.VOICE_ROOMS_DEFAULT_LIMIT, 0, { min: 0 }),
+      defaultBitrate: parseNumber(env.VOICE_ROOMS_DEFAULT_BITRATE, 64000, { min: 8000 }),
+      maxBitrateCeiling: parseNumber(env.VOICE_ROOMS_MAX_BITRATE, 256000, { min: 8000 }),
+      maxRoomsInCategory: parseNumber(env.VOICE_ROOMS_MAX_IN_CATEGORY, 45, { min: 1 }),
+      staffOverrideRoleIds: parseCsv(env.VOICE_ROOMS_STAFF_ROLE_IDS),
+      dataFile: trim(env.VOICE_ROOMS_DATA_FILE) || 'data/voice-rooms.json'
+    },
     autoRanks: {
       enabled: parseBoolean(env.AUTO_RANKS_ENABLED),
       intervalMs: parseNumber(env.AUTO_RANKS_INTERVAL_MS, 300000, { min: 60000 }),
@@ -201,6 +216,16 @@ export function validateConfig(config: AppConfig): ValidationResult {
   validateDiscordId('AFK_LOG_CHANNEL_ID', config.afkLeave.logChannelId, errors, warnings);
   validateDiscordId('AFK_MANAGER_ROLE_ID', config.afkLeave.managerRoleId, errors, warnings);
   validateDiscordId('AFK_APPROVED_ROLE_ID', config.afkLeave.approvedRoleId, errors, warnings);
+  validateDiscordId('VOICE_ROOMS_CATEGORY_ID', config.voiceRooms.categoryId, errors, warnings);
+  validateDiscordId('VOICE_ROOMS_TRIGGER_CHANNEL_ID', config.voiceRooms.triggerChannelId, errors, warnings);
+  validateDiscordId('VOICE_ROOMS_LOG_CHANNEL_ID', config.voiceRooms.logChannelId, errors, warnings);
+  for (const roleId of config.voiceRooms.staffOverrideRoleIds) {
+    validateDiscordId('VOICE_ROOMS_STAFF_ROLE_IDS', roleId, errors, warnings);
+  }
+
+  if (config.voiceRooms.enabled && !config.voiceRooms.categoryId) {
+    warnings.push('VOICE_ROOMS_ENABLED=true, но не задан VOICE_ROOMS_CATEGORY_ID. Voice Rooms будут отключены.');
+  }
 
   for (const role of config.roles) {
     validateDiscordId(role.key, role.value, errors, warnings);
@@ -325,6 +350,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- announcements bridge: ${config.telegramAnnouncementsChatId && config.discordAnnouncementsChannelId ? 'enabled' : 'disabled'}`,
     `- support tickets: ${config.supportTickets.categoryId && config.supportTickets.supportRoleId ? 'configured' : 'not configured'}`,
     `- AFK leave: ${config.afkLeave.channelId ? 'configured' : 'not configured'}`,
+    `- voice rooms: ${config.voiceRooms.enabled && config.voiceRooms.categoryId ? 'configured' : 'disabled'}`,
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,

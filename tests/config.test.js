@@ -175,6 +175,30 @@ async function testAfkLeaveConfig() {
   assert.match(summarizeConfig(config).join('\n'), /AFK leave: configured/);
 }
 
+async function testVoiceRoomsConfig() {
+  const config = createConfig({
+    TOKEN: 'token', GUILD_ID: '123456789012345678', CHANNEL_ID: '123456789012345679',
+    VOICE_ROOMS_CATEGORY_ID: '123456789012345680',
+    VOICE_ROOMS_TRIGGER_CHANNEL_ID: '123456789012345681',
+    VOICE_ROOMS_LOG_CHANNEL_ID: '123456789012345682',
+    VOICE_ROOMS_STAFF_ROLE_IDS: '123456789012345683,123456789012345684',
+    VOICE_ROOMS_EMPTY_GRACE_MS: '30000',
+    VOICE_ROOMS_CREATE_COOLDOWN_MS: '10000',
+    VOICE_ROOMS_DEFAULT_LIMIT: '5',
+    VOICE_ROOMS_DEFAULT_BITRATE: '96000',
+    VOICE_ROOMS_DATA_FILE: '/data/voice-rooms.json'
+  });
+
+  assert.equal(config.voiceRooms.enabled, true);
+  assert.equal(config.voiceRooms.categoryId, '123456789012345680');
+  assert.equal(config.voiceRooms.triggerChannelId, '123456789012345681');
+  assert.deepEqual(config.voiceRooms.staffOverrideRoleIds, ['123456789012345683', '123456789012345684']);
+  assert.equal(config.voiceRooms.defaultUserLimit, 5);
+  assert.equal(config.voiceRooms.defaultBitrate, 96000);
+  assert.equal(config.voiceRooms.dataFile, '/data/voice-rooms.json');
+  assert.match(summarizeConfig(config).join('\n'), /voice rooms: configured/);
+}
+
 async function main() {
   await runTest('config validation fails when required env is missing', testMissingRequiredEnv);
   await runTest('config validation allows offline AI without API key', testAiEnabledWorksInOfflineModeWithoutKey);
@@ -186,6 +210,7 @@ async function main() {
   await runTest('Telegram config is paired and token stays secret', testTelegramConfigIsSafeAndRequiresBothValues);
   await runTest('support ticket config is parsed', testSupportTicketConfig);
   await runTest('AFK leave config is parsed', testAfkLeaveConfig);
+  await runTest('Voice Rooms config is parsed', testVoiceRoomsConfig);
   console.log('ALL CONFIG TESTS PASSED');
 }
 

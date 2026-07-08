@@ -97,6 +97,8 @@ function createEmptyMemberRecord(guildId: string, memberId: string): MemberRecor
     userId: memberId,
     messageCount: 0,
     lastSeenAt: Date.now(),
+    lastMessageAt: 0,
+    lastVoiceAt: 0,
     warns: 0,
     commends: 0,
     points: 0,
@@ -261,6 +263,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       userId: memberId,
       messageCount: Math.max(Number(existingMember?.messageCount) || 0, Number(legacyMember.messageCount) || 0),
       lastSeenAt: Math.max(Number(existingMember?.lastSeenAt) || 0, Number(legacyMember.lastSeenAt) || 0, Date.now()),
+      lastMessageAt: Math.max(Number(existingMember?.lastMessageAt) || 0, Number(legacyMember.lastMessageAt) || 0),
+      lastVoiceAt: Math.max(Number(existingMember?.lastVoiceAt) || 0, Number(legacyMember.lastVoiceAt) || 0),
       warns: Math.max(Number(existingMember?.warns) || 0, Number(legacyMember.warns) || 0),
       commends: Math.max(Number(existingMember?.commends) || 0, Number(legacyMember.commends) || 0),
       points: clampPoints(Math.max(Number(existingMember?.points) || 0, Number(legacyMember.points) || 0)),
@@ -283,6 +287,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     store.members[key] = migrateLegacyMemberIfNeeded(guildId, memberId, store.members[key]) || store.members[key];
     store.members[key].points = clampPoints(store.members[key].points);
     store.members[key].voiceMinutes = Math.max(0, Number(store.members[key].voiceMinutes) || 0);
+    store.members[key].lastMessageAt = Math.max(0, Number(store.members[key].lastMessageAt) || 0);
+    store.members[key].lastVoiceAt = Math.max(0, Number(store.members[key].lastVoiceAt) || 0);
     store.members[key].afkWarningSentAt = store.members[key].afkWarningSentAt || '';
     return store.members[key];
   }
@@ -369,6 +375,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     const member = ensureGuildMember(guildId, memberId);
     member.messageCount += 1;
     member.lastSeenAt = Date.now();
+    member.lastMessageAt = member.lastSeenAt;
     clearAfkWarning(member);
     save();
   }
@@ -432,6 +439,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     const member = ensureGuildMember(guildId, memberId);
     member.voiceMinutes = (member.voiceMinutes || 0) + safeMinutes;
     member.lastSeenAt = Date.now();
+    member.lastVoiceAt = member.lastSeenAt;
     clearAfkWarning(member);
 
     const day = ensureGuildAnalyticsDay(guildId);

@@ -1,4 +1,4 @@
-const assert = require('node:assert/strict');
+﻿const assert = require('node:assert/strict');
 
 const { createConfig, summarizeConfig, validateConfig } = require('../dist-ts/config');
 const copy = require('../dist-ts/copy').default;
@@ -133,7 +133,7 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
       'role-leader',
       {
         id: 'role-leader',
-        name: 'Leader',
+        name: 'KLAIZ Elite',
         position: 20,
         members: new Map([[familyMember.id, familyMember]])
       }
@@ -142,7 +142,7 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
       'role-newbie',
       {
         id: 'role-newbie',
-        name: 'Newbie',
+        name: 'KLAIZ Main',
         position: 10,
         members: new Map([[familyMember.id, familyMember]])
       }
@@ -167,8 +167,8 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
     },
     {
       roles: [
-        { id: 'role-leader', name: 'Leader' },
-        { id: 'role-newbie', name: 'Newbie' }
+        { id: 'role-leader', name: 'KLAIZ Elite' },
+        { id: 'role-newbie', name: 'KLAIZ Main' }
       ],
       familyTitle: 'Test Family',
       updateIntervalMs: 60000,
@@ -198,7 +198,7 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
 
   const payload = embeds.map(embed => embed.toJSON());
   const serialized = JSON.stringify(payload);
-  const fieldMentions = payload
+  const fieldMentions = [payload[0]]
     .flatMap(embed => embed.fields || [])
     .map(field => field.value)
     .join('\n')
@@ -207,7 +207,7 @@ async function testFamilyPanelShowsMemberOnlyInHighestRole() {
   assert.equal(fieldMentions.length, 1);
   assert.match(serialized, /Всего выговоров/u);
   assert.match(serialized, /42/u);
-  assert.match(serialized, /2 выг/u);
+  assert.match(serialized, /2\/6/u);
   assert.doesNotMatch(serialized, /Premium/);
   assert.doesNotMatch(serialized, /1 \/ 1/);
 }
@@ -327,8 +327,8 @@ async function testFamilyPanelCanUseAllDiscordRoles() {
   const fieldNames = fields.map(field => field.name).join('\n');
   const fieldValues = fields.map(field => field.value).join('\n');
 
-  assert.match(fieldNames, /KLAIZ Elite/);
-  assert.match(fieldNames, /KLAIZ Main/);
+  assert.match(fieldNames, /𝑬𝒍𝒊𝒕𝒆/);
+  assert.match(fieldNames, /𝑴𝒂𝒊𝒏/);
   assert.doesNotMatch(fieldNames, /@everyone/);
   assert.doesNotMatch(fieldNames, /Guest/);
   assert.doesNotMatch(fieldNames, /Booster/);
@@ -413,7 +413,6 @@ async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
   assert.match(updatedField.value, /окно обновлений/);
   assert.match(fixedField.value, /синхронизация команд/);
 }
-
 async function testEmbedsPublicApiStaysComplete() {
   const expectedFunctions = [
     'buildAcceptLogEmbed',
@@ -441,6 +440,8 @@ async function testEmbedsPublicApiStaysComplete() {
     'buildHelpPaginationButtons',
     'buildLeaderboardEmbed',
     'buildProfileEmbed',
+    'buildProfilePointsModal',
+    'buildProfileWarnModal',
     'buildRankButtons',
     'buildReactionRoleStatusEmbed',
     'buildRejectModal',

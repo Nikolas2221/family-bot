@@ -227,6 +227,7 @@ interface CommandRuntimeOptions {
     stats(): { documents: number };
   };
   serverBackupService: any;
+  voiceRoomsService?: any;
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {

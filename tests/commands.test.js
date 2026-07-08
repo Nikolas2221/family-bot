@@ -78,6 +78,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   const online = commands.find(command => command.name === 'online');
   const capabilities = commands.find(command => command.name === 'capabilities');
   const serverBackup = commands.find(command => command.name === 'serverbackup');
+  const voice = commands.find(command => command.name === 'voice');
   const security = commands.find(command => command.name === 'security');
 
   assert.ok(automod);
@@ -99,6 +100,22 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.ok(online);
   assert.ok(capabilities);
   assert.ok(serverBackup);
+  assert.ok(voice);
+  assert.deepEqual((voice.options || []).map(option => option.name), [
+    'name',
+    'limit',
+    'bitrate',
+    'lock',
+    'unlock',
+    'hide',
+    'show',
+    'allow',
+    'deny',
+    'kick',
+    'ban',
+    'transfer',
+    'delete'
+  ]);
   assert.ok(security);
   assert.deepEqual(afk.options.map(option => option.name), ['setup', 'list', 'approve', 'decline', 'status', 'refresh']);
   assert.deepEqual(ticket.options.map(option => option.name), ['setup', 'info', 'close', 'claim', 'add', 'remove', 'list']);

@@ -55,6 +55,7 @@ interface InteractionRuntimeOptions {
   afkLeaveService: { handleInteraction(interaction: any): Promise<boolean> };
   reportRequestService: { handleInteraction(interaction: any): Promise<boolean> };
   mediaShareService: { handleInteraction(interaction: any): Promise<boolean> };
+  voiceRoomsService?: { handleInteraction(interaction: any): Promise<boolean> };
 }
 
 async function handleWelcomeCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
@@ -755,6 +756,57 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
     return true;
   }
 
+  if (interaction.customId?.startsWith?.('profile_warn:') || interaction.customId?.startsWith?.('profile_points:')) {
+    if (!options.canManageRanks(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [action, userId] = interaction.customId.split(':');
+    const member = await options.fetchMemberFast(interaction.guild, userId);
+    if (!member) {
+      await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
+      return true;
+    }
+
+    await interaction.showModal(action === 'profile_warn'
+      ? options.embeds.buildProfileWarnModal(userId)
+      : options.embeds.buildProfilePointsModal(userId));
+    return true;
+  }
+
+  if (interaction.isModalSubmit?.() && (interaction.customId?.startsWith?.('profile_warn_modal:') || interaction.customId?.startsWith?.('profile_points_modal:'))) {
+    if (!options.canManageRanks(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [action, userId] = interaction.customId.split(':');
+    const member = await options.fetchMemberFast(interaction.guild, userId);
+    if (!member) {
+      await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
+      return true;
+    }
+
+    const reason = String(interaction.fields.getTextInputValue('reason') || '').trim() || 'Не указано';
+    if (action === 'profile_warn_modal') {
+      guildStorage.addWarn({ userId, moderatorId: interaction.user.id, reason });
+    } else {
+      guildStorage.addCommend({ userId, moderatorId: interaction.user.id, reason });
+    }
+
+    const refreshedMember = await options.refreshMember(member);
+    await interaction.reply(options.ephemeral(options.buildProfilePayload(
+      refreshedMember,
+      true,
+      action === 'profile_warn_modal'
+        ? `Выговор выдан <@${userId}>.`
+        : `Баллы добавлены <@${userId}>.`
+    )));
+    await options.doPanelUpdate(guildId, false);
+    return true;
+  }
+
   if (interaction.customId.startsWith('rank_')) {
     if (!options.canManageRanks(interaction.member)) {
       await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
@@ -1146,6 +1198,9 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
         return;
       }
       if (await options.mediaShareService.handleInteraction(interaction)) {
+        return;
+      }
+      if (await options.voiceRoomsService?.handleInteraction(interaction)) {
         return;
       }
       if (interaction.isButton?.() && interaction.customId?.startsWith('help_page:')) {

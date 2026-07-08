@@ -2,6 +2,7 @@
 import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import copy from './copy';
 import type { CommandGuildLike, CommandJson } from './types';
+import { buildVoiceRoomsCommandData } from './modules/voiceRooms';
 
 const ADMIN_VISIBLE_COMMANDS = new Set([
   'setup',
@@ -58,6 +59,7 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('help').setDescription(copy.commands.helpDescription),
     new SlashCommandBuilder().setName('capabilities').setDescription('Что я могу делать на сервере'),
     new SlashCommandBuilder().setName('online').setDescription('Показать участников Discord в сети'),
+    buildVoiceRoomsCommandData(),
     new SlashCommandBuilder()
       .setName('serverbackup')
       .setDescription('Создать или восстановить backup структуры Discord-сервера')

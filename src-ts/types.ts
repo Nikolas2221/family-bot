@@ -60,6 +60,22 @@ export interface ServerBackupConfig {
   githubBasePath: string;
 }
 
+export interface VoiceRoomsConfig {
+  enabled: boolean;
+  categoryId: string;
+  triggerChannelId: string;
+  triggerChannelName: string;
+  logChannelId: string;
+  emptyRoomGraceMs: number;
+  createCooldownMs: number;
+  defaultUserLimit: number;
+  defaultBitrate: number;
+  maxBitrateCeiling: number;
+  maxRoomsInCategory: number;
+  staffOverrideRoleIds: string[];
+  dataFile: string;
+}
+
 export interface RoleEnvEntry {
   key: string;
   value: string;
@@ -105,6 +121,7 @@ export interface AppConfig {
   supportTickets: SupportTicketConfig;
   afkLeave: AfkLeaveConfig;
   serverBackup: ServerBackupConfig;
+  voiceRooms: VoiceRoomsConfig;
   autoRanks: AutoRanksConfig;
   leakGuard: GuardConfig;
   scamGuard: ScamGuardConfig;
@@ -541,6 +558,8 @@ export interface MemberRecord {
   userId?: string;
   messageCount: number;
   lastSeenAt: number;
+  lastMessageAt?: number;
+  lastVoiceAt?: number;
   warns: number;
   commends: number;
   points: number;

@@ -341,6 +341,7 @@ interface EventRuntimeOptions {
   doPanelUpdate(guildId: string, force: boolean): Promise<unknown>;
   handleDiscordTicketMessage(message: MessageLike): Promise<boolean>;
   handleAfkMessage(message: MessageLike): Promise<boolean>;
+  handleVoiceRoomsVoiceStateUpdate?(oldState: VoiceStateLike, newState: VoiceStateLike): Promise<boolean>;
 }
 
 interface WelcomeInviteBatch {
@@ -634,7 +635,8 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     restoreDeletedChannel,
     doPanelUpdate,
     handleDiscordTicketMessage,
-    handleAfkMessage
+    handleAfkMessage,
+    handleVoiceRoomsVoiceStateUpdate
   } = options;
   const welcomeInviteBatches = new Map<string, WelcomeInviteBatch>();
 
@@ -785,6 +787,12 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   client.on('voiceStateUpdate', (oldState: VoiceStateLike, newState: VoiceStateLike) => {
     const member = newState.member || oldState.member;
     if (!member || member.user?.bot) return;
+
+    if (handleVoiceRoomsVoiceStateUpdate) {
+      void handleVoiceRoomsVoiceStateUpdate(oldState, newState).catch(error => {
+        console.warn('Voice Rooms handler failed:', error);
+      });
+    }
 
     const oldChannelId = oldState.channelId;
     const newChannelId = newState.channelId;
