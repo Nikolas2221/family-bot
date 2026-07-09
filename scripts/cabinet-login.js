@@ -140,6 +140,7 @@ async function main() {
   const headless = boolEnv('CABINET_LOGIN_HEADLESS', true);
   const manual = boolEnv('CABINET_LOGIN_MANUAL', false);
   const browserChannel = env('CABINET_LOGIN_BROWSER_CHANNEL');
+  const executablePath = env('CABINET_LOGIN_EXECUTABLE_PATH');
   const userDataDir = env('CABINET_LOGIN_USER_DATA_DIR');
   const timeoutMs = Number(env('CABINET_LOGIN_TIMEOUT_MS', '120000')) || 120000;
 
@@ -159,6 +160,7 @@ async function main() {
   console.log(`Headless: ${headless}`);
   console.log(`Manual mode: ${manual}`);
   console.log(`Browser channel: ${browserChannel || 'playwright chromium'}`);
+  console.log(`Executable path: ${executablePath || 'default'}`);
   console.log(`User data dir: ${userDataDir || 'temporary context'}`);
 
   let browser = null;
@@ -166,7 +168,8 @@ async function main() {
   let page = null;
   const launchOptions = {
     headless,
-    ...(browserChannel ? { channel: browserChannel } : {})
+    ...(browserChannel ? { channel: browserChannel } : {}),
+    ...(executablePath ? { executablePath } : {})
   };
 
   if (userDataDir) {

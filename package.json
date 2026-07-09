@@ -17,7 +17,9 @@
     "cabinet:login": "node scripts/cabinet-login.js",
     "cabinet:session:check": "node scripts/cabinet-session.js check",
     "cabinet:session:export": "node scripts/cabinet-session.js export",
-    "cabinet:session:import": "node scripts/cabinet-session.js import"
+    "cabinet:session:import": "node scripts/cabinet-session.js import",
+    "cabinet:session:cookies": "node scripts/cabinet-session.js cookies",
+    "cabinet:session:brave": "node scripts/cabinet-cdp-session.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
