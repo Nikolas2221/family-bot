@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.71': {
+    added: [
+      'добавлен Dockerfile для Railway с системными библиотеками Chromium/Playwright',
+      'добавлена установка Playwright через --with-deps, чтобы cabinet login не падал из-за отсутствующих Linux-библиотек'
+    ],
+    updated: [
+      'Family Cabinet login теперь готовится на этапе сборки контейнера, а не только при ручном запуске команды',
+      'версия обновления поднята до 1.0.71, чтобы карточка обновления пришла заново'
+    ],
+    fixed: [
+      'исправлен повторный краш Chromium на Railway после 1.0.70, когда Nixpacks не подтянул libglib/libgtk/libnss зависимости',
+      'снижена зависимость запуска кабинета от ручных команд в Railway Console'
+    ]
+  },
   '1.0.70': {
     added: [
       'добавлен nixpacks.toml для установки системных Linux-библиотек Chromium на Railway',
