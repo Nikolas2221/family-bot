@@ -138,6 +138,9 @@ async function main() {
   const familyUrl = env('MAJESTIC_FAMILY_URL');
   const sessionPath = env('SESSION_STORAGE_PATH', path.join(process.cwd(), 'data', '.browser-session'));
   const headless = boolEnv('CABINET_LOGIN_HEADLESS', true);
+  const manual = boolEnv('CABINET_LOGIN_MANUAL', false);
+  const browserChannel = env('CABINET_LOGIN_BROWSER_CHANNEL');
+  const userDataDir = env('CABINET_LOGIN_USER_DATA_DIR');
   const timeoutMs = Number(env('CABINET_LOGIN_TIMEOUT_MS', '120000')) || 120000;
 
   if (!email || !password) {
@@ -154,10 +157,27 @@ async function main() {
   console.log(`Family URL: ${familyUrl}`);
   console.log(`Session path: ${sessionPath}`);
   console.log(`Headless: ${headless}`);
+  console.log(`Manual mode: ${manual}`);
+  console.log(`Browser channel: ${browserChannel || 'playwright chromium'}`);
+  console.log(`User data dir: ${userDataDir || 'temporary context'}`);
 
-  const browser = await chromium.launch({ headless });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  let browser = null;
+  let context = null;
+  let page = null;
+  const launchOptions = {
+    headless,
+    ...(browserChannel ? { channel: browserChannel } : {})
+  };
+
+  if (userDataDir) {
+    fs.mkdirSync(userDataDir, { recursive: true });
+    context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+    page = context.pages()[0] || await context.newPage();
+  } else {
+    browser = await chromium.launch(launchOptions);
+    context = await browser.newContext();
+    page = await context.newPage();
+  }
 
   const emailSelectors = [
     'input[type="email"]',
@@ -188,6 +208,31 @@ async function main() {
   try {
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
+
+    if (manual) {
+      console.log('Manual mode enabled: finish login in the opened browser window.');
+      console.log(`Waiting up to ${Math.round(timeoutMs / 1000)} seconds...`);
+      const loggedIn = await waitForLoginResult(page, timeoutMs);
+      if (!loggedIn) {
+        console.log(`DEBUG: manual login timeout at ${page.url()}`);
+        await saveDebugFiles(page, sessionPath, [email, password]);
+        throw new Error('Manual login did not finish before timeout.');
+      }
+
+      await page.goto(familyUrl, { waitUntil: 'networkidle', timeout: 60000 }).catch(async () => {
+        await page.goto(familyUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      });
+      if (!looksLoggedIn(page.url())) {
+        console.log(`DEBUG: family page redirected to ${page.url()}`);
+        await saveDebugFiles(page, sessionPath, [email, password]);
+        throw new Error('Family page redirected back to login. Session is invalid.');
+      }
+
+      await context.storageState({ path: sessionPath });
+      console.log(`OK: session saved to ${sessionPath}`);
+      return;
+    }
+
     await waitForAnyVisible(page, [...emailSelectors, ...passwordSelectors], 15000);
 
     const emailOk = await fillFirst(page, emailSelectors, email, 'email/login');
@@ -231,8 +276,8 @@ async function main() {
     await context.storageState({ path: sessionPath });
     console.log(`OK: session saved to ${sessionPath}`);
   } finally {
-    await context.close().catch(() => null);
-    await browser.close().catch(() => null);
+    if (context) await context.close().catch(() => null);
+    if (browser) await browser.close().catch(() => null);
   }
 }
 
