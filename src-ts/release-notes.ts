@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.70': {
+    added: [
+      'добавлен nixpacks.toml для установки системных Linux-библиотек Chromium на Railway',
+      'Playwright cabinet login теперь получает нужные зависимости через деплой, а не ручной apt в контейнере'
+    ],
+    updated: [
+      'Family Cabinet подготовлен к запуску Chromium в Railway после redeploy',
+      'версия обновления поднята до 1.0.70, чтобы карточка обновления пришла заново'
+    ],
+    fixed: [
+      'исправлена ошибка запуска Chromium: libglib-2.0.so.0 cannot open shared object file',
+      'снижены риски похожих падений Playwright из-за отсутствующих libnss3, libgtk, libgbm и x11-библиотек'
+    ]
+  },
   '1.0.69': {
     added: [
       'добавлен npm run cabinet:login для создания Playwright-сессии Majestic кабинета через MAJESTIC_EMAIL/MAJESTIC_PASSWORD',
