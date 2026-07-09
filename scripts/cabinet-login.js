@@ -214,6 +214,8 @@ async function main() {
 
     const loggedIn = await waitForLoginResult(page, timeoutMs);
     if (!loggedIn) {
+      console.log(`DEBUG: login timeout at ${page.url()}`);
+      await saveDebugFiles(page, sessionPath, [email, password]);
       throw new Error('Login did not finish. Possible 2FA, captcha, wrong password or automated login block.');
     }
 
@@ -221,6 +223,8 @@ async function main() {
       await page.goto(familyUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     });
     if (!looksLoggedIn(page.url())) {
+      console.log(`DEBUG: family page redirected to ${page.url()}`);
+      await saveDebugFiles(page, sessionPath, [email, password]);
       throw new Error('Family page redirected back to login. Session is invalid.');
     }
 
