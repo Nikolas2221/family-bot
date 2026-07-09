@@ -14,28 +14,107 @@ function boolEnv(name, fallback = false) {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+function getFrames(page) {
+  return [page.mainFrame(), ...page.frames().filter(frame => frame !== page.mainFrame())];
+}
+
 async function fillFirst(page, selectors, value, label) {
-  for (const selector of selectors) {
-    const locator = page.locator(selector).first();
-    if (await locator.isVisible().catch(() => false)) {
-      await locator.fill(value);
-      console.log(`OK: ${label} filled by ${selector}`);
-      return true;
+  for (const frame of getFrames(page)) {
+    for (const selector of selectors) {
+      const locator = frame.locator(selector).first();
+      if (await locator.isVisible().catch(() => false)) {
+        await locator.fill(value);
+        console.log(`OK: ${label} filled by ${selector} (${frame.url() || 'main frame'})`);
+        return true;
+      }
     }
   }
   return false;
 }
 
 async function clickFirst(page, selectors, label) {
-  for (const selector of selectors) {
-    const locator = page.locator(selector).first();
-    if (await locator.isVisible().catch(() => false)) {
-      await locator.click();
-      console.log(`OK: ${label} clicked by ${selector}`);
-      return true;
+  for (const frame of getFrames(page)) {
+    for (const selector of selectors) {
+      const locator = frame.locator(selector).first();
+      if (await locator.isVisible().catch(() => false)) {
+        await locator.click();
+        console.log(`OK: ${label} clicked by ${selector} (${frame.url() || 'main frame'})`);
+        return true;
+      }
     }
   }
   return false;
+}
+
+async function waitForAnyVisible(page, selectors, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const frame of getFrames(page)) {
+      for (const selector of selectors) {
+        if (await frame.locator(selector).first().isVisible().catch(() => false)) {
+          return true;
+        }
+      }
+    }
+    await page.waitForTimeout(500);
+  }
+  return false;
+}
+
+function scrubSecrets(text, secrets) {
+  let result = String(text || '');
+  for (const secret of secrets) {
+    if (secret) result = result.split(secret).join('[redacted]');
+  }
+  return result;
+}
+
+async function collectPageDiagnostics(page) {
+  const frames = [];
+  for (const frame of getFrames(page)) {
+    const elements = await frame.locator('input, button, textarea, select, a').evaluateAll(nodes => nodes.slice(0, 80).map(node => ({
+      tag: node.tagName.toLowerCase(),
+      type: node.getAttribute('type') || '',
+      name: node.getAttribute('name') || '',
+      id: node.getAttribute('id') || '',
+      placeholder: node.getAttribute('placeholder') || '',
+      autocomplete: node.getAttribute('autocomplete') || '',
+      text: (node.textContent || '').trim().slice(0, 80),
+      visible: !!(node.offsetWidth || node.offsetHeight || node.getClientRects().length)
+    }))).catch(error => [{ error: error.message }]);
+
+    frames.push({
+      url: frame.url(),
+      name: frame.name(),
+      title: await frame.title().catch(() => ''),
+      elements
+    });
+  }
+
+  return {
+    url: page.url(),
+    title: await page.title().catch(() => ''),
+    frames
+  };
+}
+
+async function saveDebugFiles(page, sessionPath, secrets) {
+  const debugDir = path.join(path.dirname(sessionPath), 'cabinet-login-debug');
+  fs.mkdirSync(debugDir, { recursive: true });
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const diagnosticsPath = path.join(debugDir, `${stamp}-diagnostics.json`);
+  const htmlPath = path.join(debugDir, `${stamp}-page.html`);
+  const screenshotPath = path.join(debugDir, `${stamp}-page.png`);
+
+  const diagnostics = await collectPageDiagnostics(page);
+  fs.writeFileSync(diagnosticsPath, scrubSecrets(JSON.stringify(diagnostics, null, 2), secrets));
+  fs.writeFileSync(htmlPath, scrubSecrets(await page.content().catch(() => ''), secrets));
+  await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => null);
+
+  console.log(`DEBUG: diagnostics saved to ${diagnosticsPath}`);
+  console.log(`DEBUG: html saved to ${htmlPath}`);
+  console.log(`DEBUG: screenshot saved to ${screenshotPath}`);
 }
 
 function looksLoggedIn(url) {
@@ -62,10 +141,10 @@ async function main() {
   const timeoutMs = Number(env('CABINET_LOGIN_TIMEOUT_MS', '120000')) || 120000;
 
   if (!email || !password) {
-    throw new Error('MAJESTIC_EMAIL и MAJESTIC_PASSWORD должны быть заданы.');
+    throw new Error('MAJESTIC_EMAIL and MAJESTIC_PASSWORD must be set.');
   }
   if (!familyUrl) {
-    throw new Error('MAJESTIC_FAMILY_URL должен быть задан.');
+    throw new Error('MAJESTIC_FAMILY_URL must be set.');
   }
 
   fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
@@ -80,33 +159,54 @@ async function main() {
   const context = await browser.newContext();
   const page = await context.newPage();
 
+  const emailSelectors = [
+    'input[type="email"]',
+    'input[name="email"]',
+    'input[name="login"]',
+    'input[name="username"]',
+    'input[id*="email" i]',
+    'input[id*="login" i]',
+    'input[id*="username" i]',
+    'input[placeholder*="email" i]',
+    'input[placeholder*="mail" i]',
+    'input[placeholder*="login" i]',
+    'input[placeholder*="логин" i]',
+    'input[placeholder*="почт" i]',
+    'input[autocomplete="username"]',
+    'input[type="text"]'
+  ];
+
+  const passwordSelectors = [
+    'input[type="password"]',
+    'input[name="password"]',
+    'input[id*="password" i]',
+    'input[placeholder*="password" i]',
+    'input[placeholder*="парол" i]',
+    'input[autocomplete="current-password"]'
+  ];
+
   try {
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
+    await waitForAnyVisible(page, [...emailSelectors, ...passwordSelectors], 15000);
 
-    const emailOk = await fillFirst(page, [
-      'input[type="email"]',
-      'input[name="email"]',
-      'input[name="login"]',
-      'input[autocomplete="username"]',
-      'input[type="text"]'
-    ], email, 'email/login');
-
-    const passwordOk = await fillFirst(page, [
-      'input[type="password"]',
-      'input[name="password"]',
-      'input[autocomplete="current-password"]'
-    ], password, 'password');
+    const emailOk = await fillFirst(page, emailSelectors, email, 'email/login');
+    const passwordOk = await fillFirst(page, passwordSelectors, password, 'password');
 
     if (!emailOk || !passwordOk) {
-      throw new Error('Не нашёл поля email/password на странице входа. Возможно, изменилась форма или открылась капча.');
+      await saveDebugFiles(page, sessionPath, [email, password]);
+      throw new Error('Login fields were not found. The page may show captcha/protection or the markup changed. Debug files were saved near SESSION_STORAGE_PATH.');
     }
 
     const clicked = await clickFirst(page, [
       'button[type="submit"]',
       'button:has-text("Войти")',
       'button:has-text("Login")',
+      'button:has-text("Sign in")',
+      'button:has-text("Log in")',
       'input[type="submit"]'
     ], 'login button');
+
     if (!clicked) {
       await page.keyboard.press('Enter').catch(() => null);
       console.log('OK: login submitted by Enter');
@@ -114,14 +214,14 @@ async function main() {
 
     const loggedIn = await waitForLoginResult(page, timeoutMs);
     if (!loggedIn) {
-      throw new Error('Вход не завершился. Возможна 2FA, капча, неверный пароль или блокировка автоматического входа.');
+      throw new Error('Login did not finish. Possible 2FA, captcha, wrong password or automated login block.');
     }
 
     await page.goto(familyUrl, { waitUntil: 'networkidle', timeout: 60000 }).catch(async () => {
       await page.goto(familyUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     });
     if (!looksLoggedIn(page.url())) {
-      throw new Error('После входа страница семьи снова отправила на login. Сессия невалидна.');
+      throw new Error('Family page redirected back to login. Session is invalid.');
     }
 
     await context.storageState({ path: sessionPath });
