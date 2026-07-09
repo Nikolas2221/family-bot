@@ -145,7 +145,8 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
   try {
     context = await browser.newContext({ storageState: config.sessionStoragePath });
     const page = await context.newPage();
-    await page.goto(withTab(config.familyUrl, 'logs'), { waitUntil: 'networkidle', timeout: 60000 });
+    await page.goto(withTab(config.familyUrl, 'logs'), { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
     if (String(page.url()).includes('login')) {
       throw new Error('Сессия кабинета истекла. Нужно обновить SESSION_STORAGE_PATH.');
     }
