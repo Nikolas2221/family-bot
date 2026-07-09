@@ -1,6 +1,6 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "1.0.68",
+  "version": "1.0.69",
   "engines": {
     "node": ">=18"
   },
@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:ts": "tsc -p tsconfig.json",
     "start:ts": "node dist-ts/index.js",
-    "law:import": "node scripts/import-law.js"
+    "law:import": "node scripts/import-law.js",
+    "cabinet:install": "npx playwright install chromium",
+    "cabinet:login": "node scripts/cabinet-login.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",

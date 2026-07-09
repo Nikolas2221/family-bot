@@ -1,6 +1,21 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.69': {
+    added: [
+      'добавлен npm run cabinet:login для создания Playwright-сессии Majestic кабинета через MAJESTIC_EMAIL/MAJESTIC_PASSWORD',
+      'добавлен npm run cabinet:install для установки Chromium под Playwright',
+      'добавлены env CABINET_LOGIN_HEADLESS и CABINET_LOGIN_TIMEOUT_MS для настройки логина кабинета'
+    ],
+    updated: [
+      'скрипт логина сохраняет session storage в SESSION_STORAGE_PATH и сразу проверяет доступ к MAJESTIC_FAMILY_URL',
+      'ошибки логина кабинета теперь явно объясняют: нет email/password, нет family URL, капча/2FA или не найдена форма входа'
+    ],
+    fixed: [
+      'устранён ручной пробел в настройке Family Cabinet: сессию теперь можно создать отдельной npm-командой',
+      'после деплоя карточка обновления будет новой версии 1.0.69'
+    ]
+  },
   '1.0.68': {
     added: [
       'добавлен модуль официального Majestic API с командой /marketplace и rate-limit 5 запросов за 60 секунд',
