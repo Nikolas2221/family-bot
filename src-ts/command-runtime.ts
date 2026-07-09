@@ -4,6 +4,8 @@ import { buildDiscordOnlineMembersText } from './services/online-members';
 import { setActiveLockdown } from './services/security-lockdown';
 import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
+import { buildFamilyCabinetActionsEmbed } from './modules/familyCabinet';
+import type { MarketplaceCategory } from './modules/majesticApi';
 
 function isRenderableArtUrl(value: string): boolean {
   try {
@@ -228,6 +230,8 @@ interface CommandRuntimeOptions {
   };
   serverBackupService: any;
   voiceRoomsService?: any;
+  majesticApiService?: any;
+  familyCabinetService?: any;
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -313,7 +317,9 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     discordAnnouncerRoleIds,
     ticketService,
     lawService,
-    serverBackupService
+    serverBackupService,
+    majesticApiService,
+    familyCabinetService
   } = options;
 
   const ephemeral = typeof rawEphemeral === 'function' ? rawEphemeral : ((payload: Record<string, unknown> = {}) => payload);
@@ -417,6 +423,76 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     const text = await buildDiscordOnlineMembersText(interaction.guild);
     await interaction.editReply({ content: text, allowedMentions: { parse: [] } });
     return true;
+  }
+
+  if (interaction.commandName === 'marketplace') {
+    if (!majesticApiService?.canUse?.(interaction.member, interaction.memberPermissions)) {
+      await interaction.reply(ephemeral({ content: '❌ Недостаточно прав для Majestic API.' }));
+      return true;
+    }
+
+    const category = interaction.options.getString('category', true) as MarketplaceCategory;
+    const server = interaction.options.getString('server') || undefined;
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const result = await majesticApiService.marketplace(category, server);
+      await interaction.editReply({ embeds: [result.embed] });
+    } catch (error: any) {
+      await interaction.editReply({
+        content: `❌ Не удалось получить данные Majestic API.\nПричина: ${error?.message || String(error)}`
+      });
+    }
+    return true;
+  }
+
+  if (interaction.commandName === 'cabinet') {
+    if (!canDebugConfig(interaction)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    if (subcommand === 'status') {
+      await interaction.reply(ephemeral({
+        content: familyCabinetService?.statusLines?.().join('\n') || 'Family Cabinet service не подключён.'
+      }));
+      return true;
+    }
+
+    if (subcommand === 'sync') {
+      await interaction.deferReply({ flags: 64 });
+      try {
+        const result = await familyCabinetService.runSync('manual');
+        await interaction.editReply({
+          content: [
+            result.status === 'ok' ? '✅ Синхронизация кабинета завершена.' : '⚠️ Синхронизация кабинета не выполнена.',
+            `Получено: ${result.logsReceived}`,
+            `Новых: ${result.logsCreated}`,
+            `Пропущено: ${result.logsSkipped}`,
+            result.errorMessage ? `Причина: ${result.errorMessage}` : ''
+          ].filter(Boolean).join('\n')
+        });
+      } catch (error: any) {
+        await interaction.editReply({
+          content: `❌ Синхронизация кабинета не выполнена.\nПричина: ${error?.message || String(error)}`
+        });
+      }
+      return true;
+    }
+
+    if (subcommand === 'actions' || subcommand === 'unknown') {
+      const limit = interaction.options.getInteger('limit') || 10;
+      const actions = subcommand === 'unknown'
+        ? familyCabinetService.listUnknown(limit)
+        : familyCabinetService.listActions(limit);
+      await interaction.reply(ephemeral({
+        embeds: [buildFamilyCabinetActionsEmbed(
+          subcommand === 'unknown' ? '📘 Нераспознанные логи кабинета' : '📘 Последние логи кабинета',
+          actions
+        )]
+      }));
+      return true;
+    }
   }
 
   if (interaction.commandName === 'serverbackup') {

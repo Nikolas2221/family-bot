@@ -76,6 +76,34 @@ export interface VoiceRoomsConfig {
   dataFile: string;
 }
 
+export interface MajesticApiConfig {
+  enabled: boolean;
+  apiKey: string;
+  baseUrl: string;
+  authHeaderName: string;
+  authScheme: string;
+  serverId: string;
+  allowedRoleIds: string[];
+}
+
+export interface FamilyCabinetModuleConfig {
+  enabled: boolean;
+  email: string;
+  password: string;
+  familyUrl: string;
+  loginUrl: string;
+  syncEnabled: boolean;
+  syncChannelId: string;
+  logChannelId: string;
+  syncIntervalMs: number;
+  dataFile: string;
+  scraperModulePath: string;
+  sessionStoragePath: string;
+  logsFetchTarget: number;
+  financeTabEnabled: boolean;
+  financeFetchTarget: number;
+}
+
 export interface RoleEnvEntry {
   key: string;
   value: string;
@@ -122,6 +150,8 @@ export interface AppConfig {
   afkLeave: AfkLeaveConfig;
   serverBackup: ServerBackupConfig;
   voiceRooms: VoiceRoomsConfig;
+  majesticApi: MajesticApiConfig;
+  familyCabinet: FamilyCabinetModuleConfig;
   autoRanks: AutoRanksConfig;
   leakGuard: GuardConfig;
   scamGuard: ScamGuardConfig;

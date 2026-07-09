@@ -35,7 +35,9 @@ const ADMIN_VISIBLE_COMMANDS = new Set([
   'banlist',
   'blacklistlist',
   'testaccept',
-  'debugconfig'
+  'debugconfig',
+  'marketplace',
+  'cabinet'
 ]);
 
 function commandJsonWithDefaults(command: { toJSON(): unknown }): CommandJson {
@@ -60,6 +62,61 @@ export function buildCommands(): CommandJson[] {
     new SlashCommandBuilder().setName('capabilities').setDescription('Что я могу делать на сервере'),
     new SlashCommandBuilder().setName('online').setDescription('Показать участников Discord в сети'),
     buildVoiceRoomsCommandData(),
+    new SlashCommandBuilder()
+      .setName('marketplace')
+      .setDescription('Показать данные marketplace через официальный Majestic API')
+      .addStringOption(option =>
+        option
+          .setName('category')
+          .setDescription('Категория marketplace')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Транспорт', value: 'vehicles' },
+            { name: 'Предметы', value: 'items' },
+            { name: 'Дома', value: 'houses' },
+            { name: 'Квартиры', value: 'apartments' },
+            { name: 'Склады', value: 'warehouses' },
+            { name: 'Офисы', value: 'offices' },
+            { name: 'Одежда', value: 'clothes' }
+          )
+      )
+      .addStringOption(option =>
+        option
+          .setName('server')
+          .setDescription('Сервер Majestic, например RU14')
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('cabinet')
+      .setDescription('Синхронизация и просмотр логов семейного кабинета')
+      .addSubcommand(subcommand => subcommand.setName('status').setDescription('Показать статус модуля кабинета'))
+      .addSubcommand(subcommand => subcommand.setName('sync').setDescription('Запустить синхронизацию кабинета вручную'))
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('actions')
+          .setDescription('Показать последние действия из кабинета')
+          .addIntegerOption(option =>
+            option
+              .setName('limit')
+              .setDescription('Сколько записей показать')
+              .setMinValue(1)
+              .setMaxValue(25)
+              .setRequired(false)
+          )
+      )
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('unknown')
+          .setDescription('Показать нераспознанные действия кабинета')
+          .addIntegerOption(option =>
+            option
+              .setName('limit')
+              .setDescription('Сколько записей показать')
+              .setMinValue(1)
+              .setMaxValue(25)
+              .setRequired(false)
+          )
+      ),
     new SlashCommandBuilder()
       .setName('serverbackup')
       .setDescription('Создать или восстановить backup структуры Discord-сервера')

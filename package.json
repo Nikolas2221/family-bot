@@ -1,7 +1,9 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "1.0.67",
-  "engines": { "node": ">=18" },
+  "version": "1.0.68",
+  "engines": {
+    "node": ">=18"
+  },
   "main": "dist-ts/index.js",
   "scripts": {
     "start": "npm run build:ts && node dist-ts/index.js",
@@ -15,6 +17,7 @@
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
+    "playwright": "^1.61.1",
     "telegraf": "^4.16.3"
   },
   "overrides": {

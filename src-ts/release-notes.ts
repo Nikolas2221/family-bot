@@ -1,6 +1,23 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.68': {
+    added: [
+      'добавлен модуль официального Majestic API с командой /marketplace и rate-limit 5 запросов за 60 секунд',
+      'добавлен модуль Family Cabinet с командой /cabinet, JSON-хранилищем логов и безопасным ручным/авто sync',
+      'добавлены Railway/env настройки MAJESTIC_API_* и FAMILY_CABINET_* без хранения секретов в коде'
+    ],
+    updated: [
+      'новые модули встроены в общий command-runtime без отдельных interactionCreate listeners',
+      'Family Cabinet не роняет запуск без Playwright/scraper и показывает понятную причину в /cabinet status или /cabinet sync',
+      'диагностика старта теперь показывает статус Majestic API и Family Cabinet'
+    ],
+    fixed: [
+      'исправлен риск конфликта внешних модулей с существующей командой /family: кабинет вынесен в отдельную команду /cabinet',
+      'официальный API не запускается без MAJESTIC_API_ENABLED и не падает при отсутствующем ключе',
+      'ошибки внешних интеграций возвращаются пользователю понятным текстом с причиной'
+    ]
+  },
   '1.0.67': {
     added: [
       'Voice Rooms внедрены в основной runtime: приватные временные голосовые комнаты, /voice и DM-панель владельца',

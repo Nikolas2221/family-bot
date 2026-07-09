@@ -29,6 +29,8 @@ const { createReportRequestService } = require('./services/report-requests');
 const { createMediaShareService } = require('./services/media-share');
 const { createServerBackupService } = require('./services/server-backups');
 const { createVoiceRoomsService } = require('./modules/voiceRooms');
+const { createMajesticApiService } = require('./modules/majesticApi');
+const { createFamilyCabinetService } = require('./modules/familyCabinet');
 const { refreshLegacyBrandMessages } = require('./services/brand-refresh');
 const { createAccessApi } = require('./access');
 const { registerClientReadyRuntime } = require('./client-ready-runtime');
@@ -181,6 +183,8 @@ const voiceRoomsService = createVoiceRoomsService({
   client,
   config: config.voiceRooms
 });
+const majesticApiService = createMajesticApiService(config.majesticApi);
+const familyCabinetService = createFamilyCabinetService(client, config.familyCabinet);
 registerTelegramHandlers(telegramBot, {
   adminChatId: config.telegramAdminChatId,
   tickets: ticketService,
@@ -1513,6 +1517,7 @@ registerClientReadyRuntime({
 
 client.once('clientReady', () => {
   serverBackupService.startAutoBackups();
+  familyCabinetService.startAutoSync();
   voiceRoomsService.reconcileAll().catch((error: unknown) => {
     console.error('Voice Rooms startup reconciliation failed:', error);
   });
@@ -1559,6 +1564,7 @@ process.on('SIGINT', () => {
   stopTelegramBot(telegramBot, 'SIGINT');
   ticketService.stop();
   serverBackupService.stopAutoBackups();
+  familyCabinetService.stop();
   voiceRoomsService.stop();
   flushVoiceSessions();
   database.flush();
@@ -1570,6 +1576,7 @@ process.on('SIGTERM', () => {
   stopTelegramBot(telegramBot, 'SIGTERM');
   ticketService.stop();
   serverBackupService.stopAutoBackups();
+  familyCabinetService.stop();
   voiceRoomsService.stop();
   flushVoiceSessions();
   database.flush();
@@ -1695,7 +1702,9 @@ registerInteractionRuntime({
     ticketService,
     lawService,
     serverBackupService,
-    voiceRoomsService
+    voiceRoomsService,
+    majesticApiService,
+    familyCabinetService
   });
   },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,

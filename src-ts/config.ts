@@ -138,6 +138,32 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
       staffOverrideRoleIds: parseCsv(env.VOICE_ROOMS_STAFF_ROLE_IDS),
       dataFile: trim(env.VOICE_ROOMS_DATA_FILE) || 'data/voice-rooms.json'
     },
+    majesticApi: {
+      enabled: parseBoolean(env.MAJESTIC_API_ENABLED),
+      apiKey: trim(env.MAJESTIC_API_KEY),
+      baseUrl: trim(env.MAJESTIC_API_BASE_URL) || 'https://api.majestic-files.net',
+      authHeaderName: trim(env.MAJESTIC_API_AUTH_HEADER) || 'X-API-KEY',
+      authScheme: trim(env.MAJESTIC_API_AUTH_SCHEME),
+      serverId: trim(env.MAJESTIC_API_SERVER_ID) || 'RU14',
+      allowedRoleIds: parseCsv(env.MAJESTIC_API_ALLOWED_ROLE_IDS)
+    },
+    familyCabinet: {
+      enabled: parseBoolean(env.FAMILY_CABINET_ENABLED),
+      email: trim(env.MAJESTIC_EMAIL),
+      password: trim(env.MAJESTIC_PASSWORD),
+      familyUrl: trim(env.MAJESTIC_FAMILY_URL),
+      loginUrl: trim(env.MAJESTIC_LOGIN_URL) || 'https://id.majestic-rp.ru/login',
+      syncEnabled: parseBoolean(env.FAMILY_CABINET_SYNC_ENABLED || 'true'),
+      syncChannelId: trim(env.FAMILY_CABINET_SYNC_CHANNEL_ID),
+      logChannelId: trim(env.FAMILY_CABINET_LOG_CHANNEL_ID),
+      syncIntervalMs: parseNumber(env.FAMILY_CABINET_SYNC_INTERVAL_MS, 150000, { min: 60000 }),
+      dataFile: trim(env.FAMILY_CABINET_DATA_FILE) || 'data/family-cabinet.json',
+      scraperModulePath: trim(env.FAMILY_CABINET_SCRAPER_MODULE),
+      sessionStoragePath: trim(env.SESSION_STORAGE_PATH) || '/data/.browser-session',
+      logsFetchTarget: parseNumber(env.FAMILY_CABINET_LOGS_FETCH_TARGET, 200, { min: 1 }),
+      financeTabEnabled: parseBoolean(env.FAMILY_CABINET_FINANCE_TAB_ENABLED || 'true'),
+      financeFetchTarget: parseNumber(env.FAMILY_CABINET_FINANCE_FETCH_TARGET, 200, { min: 1 })
+    },
     autoRanks: {
       enabled: parseBoolean(env.AUTO_RANKS_ENABLED),
       intervalMs: parseNumber(env.AUTO_RANKS_INTERVAL_MS, 300000, { min: 60000 }),
@@ -226,6 +252,27 @@ export function validateConfig(config: AppConfig): ValidationResult {
   if (config.voiceRooms.enabled && !config.voiceRooms.categoryId) {
     warnings.push('VOICE_ROOMS_ENABLED=true, но не задан VOICE_ROOMS_CATEGORY_ID. Voice Rooms будут отключены.');
   }
+
+  if (config.majesticApi.enabled && !config.majesticApi.apiKey) {
+    warnings.push('MAJESTIC_API_ENABLED=true, но не задан MAJESTIC_API_KEY. /marketplace будет отвечать ошибкой настройки.');
+  }
+  for (const roleId of config.majesticApi.allowedRoleIds) {
+    validateDiscordId('MAJESTIC_API_ALLOWED_ROLE_IDS', roleId, errors, warnings);
+  }
+
+  if (config.familyCabinet.enabled) {
+    if (!config.familyCabinet.familyUrl) {
+      warnings.push('FAMILY_CABINET_ENABLED=true, но не задан MAJESTIC_FAMILY_URL.');
+    }
+    if (!config.familyCabinet.email || !config.familyCabinet.password) {
+      warnings.push('FAMILY_CABINET_ENABLED=true, но не заданы MAJESTIC_EMAIL/MAJESTIC_PASSWORD.');
+    }
+    if (!config.familyCabinet.scraperModulePath) {
+      notes.push('Family Cabinet использует встроенный Playwright scraper. Для Railway нужен установленный playwright и сохранённый SESSION_STORAGE_PATH.');
+    }
+  }
+  validateDiscordId('FAMILY_CABINET_SYNC_CHANNEL_ID', config.familyCabinet.syncChannelId, errors, warnings);
+  validateDiscordId('FAMILY_CABINET_LOG_CHANNEL_ID', config.familyCabinet.logChannelId, errors, warnings);
 
   for (const role of config.roles) {
     validateDiscordId(role.key, role.value, errors, warnings);
@@ -351,6 +398,8 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- support tickets: ${config.supportTickets.categoryId && config.supportTickets.supportRoleId ? 'configured' : 'not configured'}`,
     `- AFK leave: ${config.afkLeave.channelId ? 'configured' : 'not configured'}`,
     `- voice rooms: ${config.voiceRooms.enabled && config.voiceRooms.categoryId ? 'configured' : 'disabled'}`,
+    `- Majestic API: ${config.majesticApi.enabled ? (config.majesticApi.apiKey ? 'configured' : 'missing key') : 'disabled'}`,
+    `- Family Cabinet: ${config.familyCabinet.enabled ? (config.familyCabinet.scraperModulePath ? 'configured custom scraper' : 'configured built-in scraper') : 'disabled'}`,
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,
