@@ -70,7 +70,7 @@ export function buildVoiceRoomsCommandData() {
     .addSubcommand(subcommand => subcommand.setName('delete').setDescription('Удалить свою голосовую комнату'));
 }
 
-export function buildVoiceControlPanelEmbed(roomName: string): EmbedBuilder {
+function buildVoiceControlPanelEmbedLegacy(roomName: string): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('🎛 Управление голосовой комнатой')
@@ -84,6 +84,29 @@ export function buildVoiceControlPanelEmbed(roomName: string): EmbedBuilder {
       '✅ Доступ / ❌ Убрать / 👢 Выгнать — участники',
       '👑 Передать — новый владелец',
       '🗑 Удалить — удалить комнату'
+    ].join('\n'));
+}
+
+export function buildVoiceControlPanelEmbed(roomName: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle('🎛️ Панель управления Voice Room')
+    .setDescription([
+      `Ваша комната Voice Room — **${roomName}** создана.`,
+      'Управляйте ей кнопками ниже, либо командами `/voice`.',
+      '',
+      '🔒 **Закрыть** — никто новый не сможет зайти без вашего разрешения.',
+      '🔓 **Открыть** — снова разрешить вход всем, у кого есть доступ к серверу.',
+      '👁️ **Скрыть** — комната пропадёт из списка каналов для всех, кроме вас и тех, кому вы дали доступ.',
+      '🌐 **Показать** — снова сделать комнату видимой в списке каналов.',
+      '✏️ **Переименовать** — изменить название комнаты.',
+      '👥 **Лимит** — задать максимум участников (0 = без лимита).',
+      '🎚️ **Битрейт** — изменить качество звука в комнате (kbps).',
+      '🥾 **Выгнать** — отключить конкретного участника от вашей комнаты.',
+      '✅ **Добавить доступ** — разрешить конкретному пользователю видеть и заходить в закрытую/скрытую комнату.',
+      '❌ **Убрать доступ** — отозвать ранее выданный доступ у пользователя.',
+      '👑 **Передать владельца** — сделать другого участника комнаты новым владельцем.',
+      '🗑️ **Удалить комнату** — удалить вашу Voice Room (с подтверждением).'
     ].join('\n'));
 }
 

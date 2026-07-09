@@ -118,6 +118,7 @@ export class VoiceRoomsService {
         if (channel?.delete) {
           await channel.delete('Voice Rooms startup cleanup').catch(() => null);
         }
+        await this.deleteControlPanel(room);
         this.store.deleteRoom(room.channelId);
         removed += 1;
       }
@@ -187,6 +188,16 @@ export class VoiceRoomsService {
     const room = await this.createRoomFor(member);
     this.store.setLastCreateAt(member.id, now);
     await member.voice.setChannel(room.channelId).catch(() => null);
+    await this.clearRadioMode(member).catch(() => null);
+  }
+
+  private async clearRadioMode(member: any): Promise<void> {
+    if (typeof member?.voice?.setSuppressed === 'function') {
+      await member.voice.setSuppressed(false).catch(() => null);
+    }
+    if (typeof member?.voice?.setRequestToSpeak === 'function') {
+      await member.voice.setRequestToSpeak(false).catch(() => null);
+    }
   }
 
   private async createRoomFor(member: any): Promise<VoiceRoomRecord> {
@@ -195,15 +206,15 @@ export class VoiceRoomsService {
     const overwrites: any[] = [
       {
         id: guild.roles.everyone.id,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.UseVAD]
       },
       {
         id: member.id,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.UseVAD]
       },
       ...this.config.staffOverrideRoleIds.map(roleId => ({
         id: roleId,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.UseVAD]
       }))
     ];
 
@@ -293,6 +304,7 @@ export class VoiceRoomsService {
   async deleteRoom(guild: any, channelId: string, reason: string, actorTag = ''): Promise<void> {
     const room = this.store.getRoomByChannelId(channelId);
     const channel = guild.channels.cache.get(channelId);
+    if (room) await this.deleteControlPanel(room);
     if (channel?.type === ChannelType.GuildVoice) {
       for (const member of channel.members.values()) {
         await member.voice.disconnect(reason).catch(() => null);
@@ -305,6 +317,13 @@ export class VoiceRoomsService {
       actorTag ? `Инициатор: ${actorTag}` : '',
       `Причина: ${reason}`
     ], 0xed4245);
+  }
+
+  private async deleteControlPanel(room: VoiceRoomRecord): Promise<void> {
+    if (!room.panelChannelId || !room.panelMessageId) return;
+    const channel = await this.client.channels.fetch(room.panelChannelId).catch(() => null);
+    const message = await channel?.messages?.fetch?.(room.panelMessageId).catch(() => null);
+    await message?.delete?.().catch(() => null);
   }
 
   async rename(guild: any, room: VoiceRoomRecord, name: string, actorTag: string): Promise<void> {
@@ -339,7 +358,7 @@ export class VoiceRoomsService {
 
   async allowUser(guild: any, room: VoiceRoomRecord, target: any, actorTag: string): Promise<void> {
     const channel = this.getRoomChannel(guild, room.channelId);
-    await channel.permissionOverwrites.edit(target.id, { ViewChannel: true, Connect: true, Speak: true }, { reason: `Voice Room allowed by ${actorTag}` });
+    await channel.permissionOverwrites.edit(target.id, { ViewChannel: true, Connect: true, Speak: true, UseVAD: true }, { reason: `Voice Room allowed by ${actorTag}` });
   }
 
   async denyUser(guild: any, room: VoiceRoomRecord, target: any, actorTag: string): Promise<void> {
@@ -367,7 +386,7 @@ export class VoiceRoomsService {
     if (target.voice?.channelId !== room.channelId) throw new Error('Новый владелец должен находиться в этой комнате.');
     const channel = this.getRoomChannel(guild, room.channelId);
     await channel.permissionOverwrites.delete(room.ownerId, `Voice Room transfer by ${actorTag}`).catch(() => null);
-    await channel.permissionOverwrites.edit(target.id, { ViewChannel: true, Connect: true, Speak: true }, { reason: `Voice Room owner by ${actorTag}` });
+    await channel.permissionOverwrites.edit(target.id, { ViewChannel: true, Connect: true, Speak: true, UseVAD: true }, { reason: `Voice Room owner by ${actorTag}` });
     this.store.updateRoom(room.channelId, { ownerId: target.id, ownerTag: userTag(target.user) });
   }
 
@@ -448,7 +467,16 @@ export class VoiceRoomsService {
     };
     const modal = modalActions[customId];
     if (modal) {
-      await interaction.showModal(buildVoiceModal(modal[0], modal[1], modal[2], '123456789012345678'));
+      const placeholders: Record<string, string> = {
+        'vr:rename:modal': 'Например: Комната Оскара',
+        'vr:limit:modal': 'Например: 5 или 0 без лимита',
+        'vr:bitrate:modal': 'Например: 64, 96 или 128',
+        'vr:allow:modal': 'Например: @username или 123456789012345678',
+        'vr:deny:modal': 'Например: @username или 123456789012345678',
+        'vr:kick:modal': 'Например: @username или 123456789012345678',
+        'vr:transfer:modal': 'Например: @username или 123456789012345678'
+      };
+      await interaction.showModal(buildVoiceModal(modal[0], modal[1], modal[2], placeholders[customId] || ''));
       return;
     }
 
