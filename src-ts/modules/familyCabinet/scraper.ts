@@ -51,6 +51,21 @@ function withTab(url: string, tab: string): string {
   return `${clean}?tab=${tab}`;
 }
 
+function restoreSessionFromEnv(sessionStoragePath: string): boolean {
+  const encoded = String(process.env.CABINET_SESSION_B64 || '').trim();
+  if (!encoded || fs.existsSync(sessionStoragePath)) return false;
+
+  try {
+    const json = Buffer.from(encoded, 'base64').toString('utf8');
+    JSON.parse(json);
+    fs.mkdirSync(sessionStoragePath.replace(/[\\/][^\\/]+$/u, ''), { recursive: true });
+    fs.writeFileSync(sessionStoragePath, json);
+    return true;
+  } catch (error) {
+    throw new Error(`CABINET_SESSION_B64 is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function expandRows(page: any, target: number): Promise<void> {
   const rowSelector = 'div.overflow-hidden.rounded-lg.bg-background-tertiary';
   const maxClicks = Math.ceil(Math.max(0, target - 50) / 50) + 1;
@@ -119,6 +134,7 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
   if (!config.familyUrl) {
     throw new Error('MAJESTIC_FAMILY_URL не задан.');
   }
+  restoreSessionFromEnv(config.sessionStoragePath);
   if (!fs.existsSync(config.sessionStoragePath)) {
     throw new Error(`Сессия кабинета не найдена: ${config.sessionStoragePath}. Нужно один раз сохранить Playwright storageState.`);
   }

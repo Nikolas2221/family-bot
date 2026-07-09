@@ -14,7 +14,10 @@
     "start:ts": "node dist-ts/index.js",
     "law:import": "node scripts/import-law.js",
     "cabinet:install": "npx playwright install --with-deps chromium",
-    "cabinet:login": "node scripts/cabinet-login.js"
+    "cabinet:login": "node scripts/cabinet-login.js",
+    "cabinet:session:check": "node scripts/cabinet-session.js check",
+    "cabinet:session:export": "node scripts/cabinet-session.js export",
+    "cabinet:session:import": "node scripts/cabinet-session.js import"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
