@@ -500,15 +500,22 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
 
   function getVerificationRoleId(guildId: string) {
     const settings = resolveGuildSettings(guildId);
-    return settings.applicationDefaultRole || settings.verification.roleId || settings.verificationRoleId || settings.autoroleRoleId || '';
+    return (
+      String(process.env.APPLICATION_DEFAULT_ROLE || '').trim() ||
+      settings.applicationDefaultRole ||
+      settings.verification.roleId ||
+      settings.verificationRoleId ||
+      settings.autoroleRoleId ||
+      '1522317438228627528'
+    );
   }
 
   async function applyVerificationRole(member: GuildMember) {
     const roleId = getVerificationRoleId(member.guild.id);
-    if (!roleId) return { ok: false, roleId: '' };
+    if (!roleId) return { ok: false, roleId: '', error: 'APPLICATION_DEFAULT_ROLE не задан.' };
 
     const role = member.guild.roles.cache.get(roleId) || (await member.guild.roles.fetch(roleId).catch(() => null));
-    if (!role) return { ok: false, roleId };
+    if (!role) return { ok: false, roleId, error: `Роль ${roleId} не найдена на сервере.` };
 
     const hasRole = member.roles.cache.has(role.id);
     if (hasRole) return { ok: true, roleId: role.id, already: true };
@@ -516,15 +523,22 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: member.guild });
     if (unsafeReason) {
       console.warn(`Verification role assignment blocked for ${role.id}: ${unsafeReason}`);
-      return { ok: false, roleId: role.id };
+      return { ok: false, roleId: role.id, error: unsafeReason };
     }
 
     const ok = await member.roles
       .add(role, `Verification via bot for ${member.id}`)
       .then(() => true)
-      .catch(() => false);
+      .catch(error => {
+        console.warn(`Verification role assignment failed for ${role.id}:`, error);
+        return false;
+      });
 
-    return { ok, roleId: role.id };
+    return {
+      ok,
+      roleId: role.id,
+      error: ok ? undefined : 'Discord отклонил выдачу роли. Проверь Manage Roles и позицию роли бота выше стартовой роли.'
+    };
   }
 
   return {
