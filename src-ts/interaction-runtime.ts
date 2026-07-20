@@ -789,6 +789,57 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
     }
 
     const reason = String(interaction.fields.getTextInputValue('reason') || '').trim() || 'Не указано';
+    const isWarnAction = action === 'profile_warn_modal';
+    try {
+      if (isWarnAction) {
+        guildStorage.addWarn({ userId, moderatorId: interaction.user.id, reason });
+      } else {
+        guildStorage.addCommend({ userId, moderatorId: interaction.user.id, reason });
+      }
+    } catch (error) {
+      console.error('Profile moderation save failed:', error);
+      await interaction.reply(options.ephemeral({
+        content: 'Не удалось сохранить действие профиля. Проверь логи бота.'
+      }));
+      return true;
+    }
+
+    const successContent = isWarnAction
+      ? `Выговор выдан <@${userId}>.`
+      : `Баллы добавлены <@${userId}>.`;
+    await interaction.reply(options.ephemeral({ content: successContent }));
+
+    const refreshedMember = await options.refreshMember(member).catch((error: unknown) => {
+      console.warn('Profile moderation member refresh failed:', error);
+      return member;
+    });
+    await interaction.followUp(options.ephemeral(options.buildProfilePayload(
+      refreshedMember,
+      true,
+      successContent
+    ))).catch((error: unknown) => {
+      console.warn('Profile moderation follow-up failed:', error);
+    });
+    await options.doPanelUpdate(guildId, false).catch((error: unknown) => {
+      console.warn('Profile moderation panel update failed:', error);
+    });
+    return true;
+  }
+
+  if (interaction.isModalSubmit?.() && (interaction.customId?.startsWith?.('profile_warn_modal:') || interaction.customId?.startsWith?.('profile_points_modal:'))) {
+    if (!options.canManageRanks(interaction.member)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [action, userId] = interaction.customId.split(':');
+    const member = await options.fetchMemberFast(interaction.guild, userId);
+    if (!member) {
+      await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
+      return true;
+    }
+
+    const reason = String(interaction.fields.getTextInputValue('reason') || '').trim() || 'Не указано';
     if (action === 'profile_warn_modal') {
       guildStorage.addWarn({ userId, moderatorId: interaction.user.id, reason });
     } else {

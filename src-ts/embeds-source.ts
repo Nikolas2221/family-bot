@@ -55,6 +55,14 @@ function trimValue(value: unknown, limit = 1024, fallback = '—'): string {
   return next.length > limit ? `${next.slice(0, limit - 1)}…` : next;
 }
 
+function mentionUserReference(value: unknown): string {
+  const raw = text(value).trim();
+  if (!raw) return '';
+  const mentionMatch = raw.match(/<@!?(\d{16,20})>/u);
+  const idMatch = mentionMatch?.[1] || raw.match(/\b(\d{16,20})\b/u)?.[1];
+  return idMatch ? `<@${idMatch}>` : raw;
+}
+
 function hoursFromMinutes(minutes: unknown): string {
   return `${(Number(minutes || 0) / 60).toFixed(1)} ч`;
 }
@@ -394,9 +402,9 @@ export function buildApplyModal({ familyTitle = 'Семья' }: AnyRecord = {}):
     .setTitle(`Заявка в семью ${text(familyTitle, 'KLAIZ')}`.slice(0, 45))
     .addComponents(
       inputRow(new TextInputBuilder().setCustomId('nickname').setLabel('Игровой никнейм | STATIC ID').setPlaceholder('Пример: Ovik Klaiz | 218833').setStyle(TextInputStyle.Short).setRequired(true)),
-      inputRow(new TextInputBuilder().setCustomId('level').setLabel('Игровой уровень').setPlaceholder('Пример: 24').setStyle(TextInputStyle.Short).setRequired(true)),
+      inputRow(new TextInputBuilder().setCustomId('level').setLabel('Ваш возраст').setPlaceholder('Пример: 24').setStyle(TextInputStyle.Short).setRequired(true)),
       inputRow(new TextInputBuilder().setCustomId('discovery').setLabel('Откуда вы узнали о нас?').setPlaceholder('Пример: Укажите информацию откуда узнали про нас.').setStyle(TextInputStyle.Short).setRequired(true)),
-      inputRow(new TextInputBuilder().setCustomId('inviter').setLabel('Кто вас пригласил?').setPlaceholder('Пример: игровой ник/статик или Discord-тег пригласившего').setStyle(TextInputStyle.Short).setRequired(true)),
+      inputRow(new TextInputBuilder().setCustomId('inviter').setLabel('Кто вас пригласил?').setPlaceholder('Пример: @ник, Discord ID или игровой ник/статик').setStyle(TextInputStyle.Short).setRequired(true)),
       inputRow(new TextInputBuilder().setCustomId('about').setLabel('Расскажите о себе').setPlaceholder('Пример: вводная информация, сильные черты, опыт и чем хотите заниматься.').setStyle(TextInputStyle.Paragraph).setRequired(true))
     );
 }
@@ -927,9 +935,9 @@ export function buildApplicationEmbed({
   }).addFields(
     section('👤 **Кандидат**', `<@${user.id}>`, false),
     section('🎮 **Игровой никнейм | STATIC ID**', text(nickname), false),
-    section('📊 **Игровой уровень**', text(normalizedLevel), false),
+    section('🎂 **Ваш возраст**', text(normalizedLevel), false),
     section('📌 **Откуда вы узнали о нас?**', text(discovery || 'не указано'), false),
-    section('👤 **Кто вас пригласил?**', text(inviter || 'не указано'), false),
+    section('👤 **Кто вас пригласил?**', mentionUserReference(inviter) || 'не указано', false),
     section('📝 **Расскажите о себе**', text(normalizedAbout), false),
     section('💎 **Готовы ли вы ценить ценности семьи, поддерживать и развивать её?**', text(values || 'Не указано'), false),
     section('🚀 **В каком направлении вы хотите развиваться?**', text(development || 'Не указано'), false),

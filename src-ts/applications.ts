@@ -179,6 +179,18 @@ export function createApplicationsService({
       .join(' ');
   }
 
+  function extractDiscordUserMentions(value: unknown): string[] {
+    const raw = String(value || '');
+    const result = new Set<string>();
+    const mentionPattern = /<@!?(\d{16,20})>|\b(\d{16,20})\b/gu;
+    let match: RegExpExecArray | null;
+    while ((match = mentionPattern.exec(raw))) {
+      const userId = match[1] || match[2];
+      if (userId) result.add(userId);
+    }
+    return [...result].slice(0, 10);
+  }
+
   async function createApplicationReviewCard(channel: any, application: any, user: any) {
     const managerMentions = buildApplicationManagerMentions();
     const reviewMessage = await channel.send({
@@ -204,7 +216,7 @@ export function createApplicationsService({
       allowedMentions: {
         parse: [],
         roles: applicationAccessRoleIds,
-        users: []
+        users: extractDiscordUserMentions(application.inviter)
       }
     });
 

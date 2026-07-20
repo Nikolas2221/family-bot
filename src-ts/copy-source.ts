@@ -1127,6 +1127,9 @@ Object.assign(copy.applications, {
   fieldInvite: '🫂 Кто дал инвайт / Откуда узнали',
   fieldText: '📝 Расскажите о себе'
 });
+Object.assign(copy.applications, {
+  applyModalLevel: 'Ваш возраст'
+});
 copy.applications.ticketThreadName = function ticketThreadName(nickname: any, applicationId: any) {
   return `ticket-${nickname}-${applicationId}`.slice(0, 90);
 };
