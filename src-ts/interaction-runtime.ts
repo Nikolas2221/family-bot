@@ -988,7 +988,7 @@ async function handleFamilyAndAdminModals(interaction: any, options: Interaction
   if (!guildId || !interaction.isModalSubmit?.()) return false;
 
   if (interaction.customId === 'family_apply_modal') {
-    await options.getApplicationsService(guildId).continueApplication(interaction);
+    await options.getApplicationsService(guildId).submitApplication(interaction);
     return true;
   }
 
@@ -1025,6 +1025,51 @@ async function handleFamilyAndAdminModals(interaction: any, options: Interaction
     } catch (error: any) {
       await interaction.editReply({ content: options.copy.ai.unavailable(error?.message || options.copy.ai.advisorUnavailable) });
     }
+    return true;
+  }
+
+  if (interaction.customId.startsWith('profile_warn_modal:') || interaction.customId.startsWith('profile_points_modal:')) {
+    const actorMember = await interaction.guild.members.fetch(interaction.user.id).catch(() => interaction.member);
+    if (!options.canManageRanks(actorMember)) {
+      await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
+      return true;
+    }
+
+    const [action, userId] = interaction.customId.split(':');
+    const member = await options.fetchMemberFast(interaction.guild, userId);
+    if (!member) {
+      await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
+      return true;
+    }
+
+    const reason = String(interaction.fields.getTextInputValue('reason') || '').trim() || 'Не указано';
+    const guildStorage = options.getGuildStorage(guildId);
+    const isWarnAction = action === 'profile_warn_modal';
+
+    try {
+      if (isWarnAction) {
+        guildStorage.addWarn({ userId, moderatorId: interaction.user.id, reason });
+      } else {
+        guildStorage.addCommend({ userId, moderatorId: interaction.user.id, reason });
+      }
+    } catch (error) {
+      console.error('Profile moderation save failed:', error);
+      await interaction.reply(options.ephemeral({
+        content: 'Не удалось сохранить действие профиля. Проверь логи бота.'
+      }));
+      return true;
+    }
+
+    const successContent = isWarnAction
+      ? `Выговор выдан <@${userId}>.`
+      : `Баллы добавлены <@${userId}>.`;
+
+    await interaction.reply(options.ephemeral(
+      options.buildProfilePayload(member, true, successContent)
+    ));
+    await options.doPanelUpdate(guildId, false).catch((error: unknown) => {
+      console.warn('Profile moderation panel update failed:', error);
+    });
     return true;
   }
 
