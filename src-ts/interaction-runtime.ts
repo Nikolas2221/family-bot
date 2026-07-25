@@ -1,5 +1,6 @@
 import { PermissionFlagsBits } from 'discord.js';
 import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
+import { getPlayerData, callAiAdvisor } from './services/aiAdvisor';
 
 interface InteractionRuntimeOptions {
   client: {
@@ -1280,6 +1281,44 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
   return false;
 }
 
+/// New handler for /aiadvisor command
+async function handleAiAdvisorCommand(interaction: any, options: InteractionRuntimeOptions): Promise<void> {
+  const guildId = interaction.guild?.id;
+  if (!guildId) {
+    await interaction.reply(options.ephemeral({ content: 'Команда доступна только на сервере.' }));
+    return;
+  }
+
+  const targetUser = interaction.options.getUser(options.copy.commands.userOptionName, true);
+  const targetMember = await options.fetchMemberFast(interaction.guild, targetUser.id);
+  if (!targetMember) {
+    await interaction.reply(options.ephemeral({ content: 'Участник не найден на сервере.' }));
+    return;
+  }
+
+  const question = interaction.options.getString('question') || undefined;
+
+  await interaction.deferReply({ flags: 64 }); // ephemeral
+
+  try {
+    const guildStorage = options.getGuildStorage(guildId);
+    const playerData = getPlayerData(targetMember, guildStorage, guildStorage, guildId);
+    const aiResponse = await callAiAdvisor(playerData, question);
+
+    const embed = new options.EmbedBuilderCtor()
+      .setColor(0x3b82f6)
+      .setTitle(`🧠 AI-советник: ${targetMember.displayName || targetUser.username}`)
+      .setDescription(aiResponse.slice(0, 4000))
+      .setFooter({ text: `ID: ${targetUser.id}` })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (error: any) {
+    console.error('AI Advisor error:', error);
+    await interaction.editReply({ content: `❌ Ошибка: ${error.message || 'Неизвестная ошибка'}` });
+  }
+}
+
 export function registerInteractionRuntime(options: InteractionRuntimeOptions): void {
   const { client } = options;
 
@@ -1315,6 +1354,10 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
 
       if (interaction.isChatInputCommand && interaction.isChatInputCommand()) {
         if (await options.handleCommand(interaction)) return;
+        if (interaction.commandName === 'aiadvisor') {
+          await handleAiAdvisorCommand(interaction, options);
+          return;
+        }
         if (await handleWelcomeCommands(interaction, options)) return;
         if (await handleAutoroleCommands(interaction, options)) return;
         if (await handleReactionRoleCommands(interaction, options)) return;

@@ -87,3 +87,56 @@ export function createDeepSeekService(options: DeepSeekOptions) {
 
   return { enabled: Boolean(apiKey), model, answerLawQuestion };
 }
+
+// New generic OpenRouter chat completion
+export function createOpenRouterChatCompletion(options: DeepSeekOptions) {
+  const apiKey = String(options.apiKey || '').trim();
+  const baseUrl = cleanBaseUrl(options.baseUrl || 'https://openrouter.ai/api/v1');
+  const model = options.model || 'openai/gpt-4o-mini';
+  const timeoutMs = options.timeoutMs || 10_000;
+  const fetchImpl = options.fetchImpl || fetch;
+  const referer = options.referer || 'https://github.com/your-repo';
+
+  async function chat(messages: Array<{ role: string; content: string }>): Promise<string | null> {
+    if (!apiKey) return null;
+
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const request = fetchImpl(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': referer
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.7,
+          max_tokens: 1024,
+          messages
+        }),
+        signal: controller.signal
+      });
+      const hardTimeout = new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`OpenRouter timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+      });
+      const response = await Promise.race([request, hardTimeout]);
+
+      if (!response.ok) {
+        throw new Error(`OpenRouter HTTP ${response.status}`);
+      }
+
+      const payload = await response.json() as any;
+      const content = String(payload?.choices?.[0]?.message?.content || '').trim();
+      return content || null;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  return { chat };
+}

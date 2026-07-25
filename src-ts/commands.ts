@@ -856,7 +856,12 @@ export function buildCommands(): CommandJson[] {
       .setName('aiadvisor')
       .setDescription(copy.commands.aiAdvisorDescription)
       .addUserOption(option =>
-        option.setName(copy.commands.userOptionName).setDescription(copy.commands.profileUserDescription).setRequired(false)
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.profileUserDescription).setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName('question')
+          .setDescription('Вопрос к AI-советнику (необязательно)')
+          .setRequired(false)
       ),
     new SlashCommandBuilder()
       .setName('subscription')
