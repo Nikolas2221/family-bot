@@ -775,6 +775,7 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
     return true;
   }
 
+  // Объединённый обработчик модалок выговора/баллов
   if (interaction.isModalSubmit?.() && (interaction.customId?.startsWith?.('profile_warn_modal:') || interaction.customId?.startsWith?.('profile_points_modal:'))) {
     if (!options.canManageRanks(interaction.member)) {
       await interaction.reply(options.ephemeral({ content: options.copy.common.noAccess }));
@@ -788,8 +789,15 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
       return true;
     }
 
+    // Проверка, что пользователь не пытается выдать выговор/баллы сам себе
+    if (userId === interaction.user.id) {
+      await interaction.reply(options.ephemeral({ content: 'Нельзя выдать выговор или баллы самому себе.' }));
+      return true;
+    }
+
     const reason = String(interaction.fields.getTextInputValue('reason') || '').trim() || 'Не указано';
     const isWarnAction = action === 'profile_warn_modal';
+
     try {
       if (isWarnAction) {
         guildStorage.addWarn({ userId, moderatorId: interaction.user.id, reason });
@@ -807,19 +815,13 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
     const successContent = isWarnAction
       ? `Выговор выдан <@${userId}>.`
       : `Баллы добавлены <@${userId}>.`;
-    await interaction.reply(options.ephemeral({ content: successContent }));
 
-    const refreshedMember = await options.refreshMember(member).catch((error: unknown) => {
-      console.warn('Profile moderation member refresh failed:', error);
-      return member;
-    });
-    await interaction.followUp(options.ephemeral(options.buildProfilePayload(
-      refreshedMember,
-      true,
-      successContent
-    ))).catch((error: unknown) => {
-      console.warn('Profile moderation follow-up failed:', error);
-    });
+    // Отправляем основной ответ
+    await interaction.reply(options.ephemeral(
+      options.buildProfilePayload(member, true, successContent)
+    ));
+
+    // Обновляем панель семьи
     await options.doPanelUpdate(guildId, false).catch((error: unknown) => {
       console.warn('Profile moderation panel update failed:', error);
     });
