@@ -1,0 +1,83 @@
+{
+  "cookies": [
+    {
+      "name": "_ym_uid",
+      "value": "1783610084716649679",
+      "domain": ".majestic-rp.ru",
+      "path": "/",
+      "expires": 1799162083.682152,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_d",
+      "value": "1783610084",
+      "domain": ".majestic-rp.ru",
+      "path": "/",
+      "expires": 1799162083.682253,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_isad",
+      "value": "2",
+      "domain": ".majestic-rp.ru",
+      "path": "/",
+      "expires": 1783682083,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_visorc",
+      "value": "b",
+      "domain": ".majestic-rp.ru",
+      "path": "/",
+      "expires": 1783611884,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://id.majestic-rp.ru",
+      "localStorage": [
+        {
+          "name": "_ym_synced",
+          "value": "{\"com\":29726834}"
+        },
+        {
+          "name": "_ym_wv2rf:52292158:0",
+          "value": "1"
+        },
+        {
+          "name": "_ym_retryReqs",
+          "value": "{\"1\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"clmap/52292158\",\"time\":1783610097922,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://id.majestic-rp.ru/RU14/219057/family\",\"pointer-click\":\"rn:545246208:x:21153:y:46420:t:142:p:PAAFA2AA:X:414:Y:469\",\"hidv2\":\"3864758648425939115\"},\"browserInfo\":{\"u\":\"1783610084716649679\",\"v\":\"2581\",\"vf\":\"cxcvitzjebe1sfh1wqh5e2qpo9rrv\",\"rqnl\":1,\"st\":1783610098},\"counterId\":52292158,\"ghid\":805196261,\"telemetry\":{\"gdpr\":\"14\",\"ti\":4}},\"2\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"clmap/52292158\",\"time\":1783610108745,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://id.majestic-rp.ru/RU14/219057/family\",\"pointer-click\":\"rn:362552239:x:42456:y:13404:t:250:p:AAFA2AA:X:511:Y:451\",\"hidv2\":\"3864758648425939115\"},\"browserInfo\":{\"u\":\"1783610084716649679\",\"v\":\"2581\",\"vf\":\"cxcvitzjebe1sfh1wqh5e2qpo9rrv\",\"rqnl\":1,\"st\":1783610109},\"counterId\":52292158,\"ghid\":805196261,\"telemetry\":{\"gdpr\":\"14\",\"ti\":4}},\"3\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"clmap/52292158\",\"time\":1783610112882,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://id.majestic-rp.ru/RU14/219057/family\",\"pointer-click\":\"rn:493977482:x:3413:y:46420:t:291:p:PA1AFA2AA:X:327:Y:525\",\"hidv2\":\"3864758648425939115\"},\"browserInfo\":{\"u\":\"1783610084716649679\",\"v\":\"2581\",\"vf\":\"cxcvitzjebe1sfh1wqh5e2qpo9rrv\",\"rqnl\":1,\"st\":1783610113},\"counterId\":52292158,\"ghid\":805196261,\"telemetry\":{\"gdpr\":\"14\",\"ti\":4}},\"4\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"clmap/52292158\",\"time\":1783610113814,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://id.majestic-rp.ru/RU14/219057/family\",\"pointer-click\":\"rn:418658594:x:22052:y:34737:t:301:p:?AA1FA2AA:X:396:Y:612\",\"hidv2\":\"3864758648425939115\"},\"browserInfo\":{\"u\":\"1783610084716649679\",\"v\":\"2581\",\"vf\":\"cxcvitzjebe1sfh1wqh5e2qpo9rrv\",\"rqnl\":1,\"st\":1783610114},\"counterId\":52292158,\"ghid\":805196261,\"telemetry\":{\"gdpr\":\"14\",\"ti\":4}},\"5\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"clmap/52292158\",\"time\":1783610129648,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://id.majestic-rp.ru/RU14/219057/family\",\"pointer-click\":\"rn:38176573:x:51491:y:39789:t:459:p:PAAFA2AA:X:314:Y:483\",\"hidv2\":\"3864758648425939115\"},\"browserInfo\":{\"u\":\"1783610084716649679\",\"v\":\"2581\",\"vf\":\"cxcvitzjebe1sfh1wqh5e2qpo9rrv\",\"rqnl\":1,\"st\":1783610130},\"counterId\":52292158,\"ghid\":805196261,\"telemetry\":{\"gdpr\":\"14\",\"ti\":4}},\"6\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"clmap/52292158\",\"time\":1783610135616,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://id.majestic-rp.ru/RU14/219057/family\",\"pointer-click\":\"rn:781056183:x:61584:y:44398:t:519:p:?A1FA2AA:X:616:Y:561\",\"hidv2\":\"3864758648425939115\"},\"browserInfo\":{\"u\":\"1783610084716649679\",\"v\":\"2581\",\"vf\":\"cxcvitzjebe1sfh1wqh5e2qpo9rrv\",\"rqnl\":1,\"st\":1783610136},\"counterId\":52292158,\"ghid\":805196261,\"telemetry\":{\"gdpr\":\"14\",\"ti\":1}},\"7\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/52292158\",\"time\":1783610163012,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://id.majestic-rp.ru/RU14/219057/family\",\"charset\":\"utf-8\",\"uah\":\"chu\\n\\\"Not;A=Brand\\\";v=\\\"8\\\",\\\"Chromium\\\";v=\\\"150\\\",\\\"Brave\\\";v=\\\"150\\\"\\ncha\\nx86\\nchb\\n64\\nchf\\n150.0.0.0\\nchl\\n\\\"Not;A=Brand\\\";v=\\\"8.0.0.0\\\",\\\"Chromium\\\";v=\\\"150.0.0.0\\\",\\\"Brave\\\";v=\\\"150.0.0.0\\\"\\nchm\\n?0\\nchp\\nWindows\\nchv\\n19.0.0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"cxcvitzjebe1sfh1wqh5e2qpo9rrv\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2581\",\"cn\":1,\"dp\":0,\"ls\":61142257226,\"hid\":1067161119,\"z\":180,\"i\":\"20260709181603\",\"et\":1783610163,\"c\":1,\"rn\":817170957,\"rqn\":11,\"u\":\"1783610084716649679\",\"w\":\"921x968\",\"s\":\"1680x1050x24\",\"sk\":1,\"wv\":2,\"ds\":\"42,142,128,0,2,0,,53,,,,,\",\"co\":0,\"ns\":1783610162614,\"t\":\"Majestic RP × Личный кабинет\",\"adb\":\"2\",\"rqnl\":1,\"st\":1783610163},\"counterId\":52292158,\"ghid\":1067161119,\"telemetry\":{\"clt\":19,\"gdpr\":\"14\",\"clc\":\"0-0-0\",\"rqnt\":1,\"rfs\":1,\"ufs\":1,\"aw\":1,\"rcm\":0,\"cdl\":\"na\",\"eco\":42275364,\"ti\":1}}}"
+        },
+        {
+          "name": "_ym52292158:0_reqNum",
+          "value": "11"
+        },
+        {
+          "name": "_ym_uid",
+          "value": "\"1783610084716649679\""
+        },
+        {
+          "name": "_ym52292158_lsid",
+          "value": "61142257226"
+        },
+        {
+          "name": "_ym52292158_lastHit",
+          "value": "1783610121361"
+        },
+        {
+          "name": "auth-session",
+          "value": "{\"state\":{\"sessionId\":\"5XtMIjGQxaI_Nj9pBi3JFXrru9Jc_See\"},\"version\":0}"
+        }
+      ]
+    }
+  ]
+}

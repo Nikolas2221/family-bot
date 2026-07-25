@@ -10,3 +10,4 @@ storage.local.json
 
 # Claude Code worktrees and per-machine settings
 .claude/
+.aider*
