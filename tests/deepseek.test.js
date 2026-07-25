@@ -23,7 +23,7 @@ async function main() {
   }]);
 
   assert.equal(answer, 'Развёрнутый ответ [1].');
-  assert.equal(request.url, 'https://api.deepseek.com/chat/completions');
+  assert.equal(request.url, 'https://openrouter.ai/api/v1/chat/completions');
   assert.equal(request.options.headers.Authorization, 'Bearer secret-key');
   const body = JSON.parse(request.options.body);
   assert.equal(body.model, 'deepseek-chat');
