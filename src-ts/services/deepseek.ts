@@ -6,6 +6,7 @@ interface DeepSeekOptions {
   model?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  referer?: string; // for OpenRouter
 }
 
 function cleanBaseUrl(value: string): string {
@@ -22,10 +23,12 @@ function buildSources(sources: LawSearchResult[]): string {
 
 export function createDeepSeekService(options: DeepSeekOptions) {
   const apiKey = String(options.apiKey || '').trim();
-  const baseUrl = cleanBaseUrl(options.baseUrl || 'https://api.deepseek.com');
-  const model = options.model || 'deepseek-chat';
+  // Use OpenRouter as the default provider
+  const baseUrl = cleanBaseUrl(options.baseUrl || 'https://openrouter.ai/api/v1');
+  const model = options.model || 'openai/gpt-4o-mini';
   const timeoutMs = options.timeoutMs || 10_000;
   const fetchImpl = options.fetchImpl || fetch;
+  const referer = options.referer || 'https://github.com/your-repo';
 
   async function answerLawQuestion(question: string, sources: LawSearchResult[]): Promise<string | null> {
     if (!apiKey || !sources.length) return null;
@@ -37,7 +40,8 @@ export function createDeepSeekService(options: DeepSeekOptions) {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'HTTP-Referer': referer // optional but recommended by OpenRouter
         },
         body: JSON.stringify({
           model,
@@ -64,13 +68,13 @@ export function createDeepSeekService(options: DeepSeekOptions) {
       const hardTimeout = new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(() => {
           controller.abort();
-          reject(new Error(`DeepSeek timeout after ${timeoutMs}ms`));
+          reject(new Error(`OpenRouter timeout after ${timeoutMs}ms`));
         }, timeoutMs);
       });
       const response = await Promise.race([request, hardTimeout]);
 
       if (!response.ok) {
-        throw new Error(`DeepSeek HTTP ${response.status}`);
+        throw new Error(`OpenRouter HTTP ${response.status}`);
       }
 
       const payload = await response.json() as any;
