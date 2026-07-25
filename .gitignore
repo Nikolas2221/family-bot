@@ -2,6 +2,7 @@
 node_modules/
 dist-ts/
 npm-debug.log*
+data/cabinet-chrome-profile/
 
 # Local runtime state (kept per-machine, not in repo)
 database.local.json
