@@ -1298,7 +1298,8 @@ async function handleAiAdvisorCommand(interaction: any, options: InteractionRunt
 
   const question = interaction.options.getString('question') || undefined;
 
-  await interaction.deferReply({ flags: 64 }); // ephemeral
+  // Сначала отвечаем, чтобы не было зависания
+  await interaction.reply({ content: 'Анализирую участника...', flags: 64 });
 
   try {
     const guildStorage = options.getGuildStorage(guildId);
