@@ -1761,6 +1761,3 @@ registerInteractionRuntime({
 client.login(config.token).then(() => startTelegramBot(telegramBot)).catch((error: unknown) => {
   console.error('Discord login failed:', error);
 });
-
-
-
