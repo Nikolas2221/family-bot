@@ -1,6 +1,18 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.80': {
+    added: [
+      'тест на кнопку AI-совет и modal-ответ советника, чтобы Discord timeout не возвращался'
+    ],
+    updated: [
+      'кнопка AI-совет на панели семьи снова открывает окно выбора участника'
+    ],
+    fixed: [
+      'исправлен Discord timeout "приложение не ответило вовремя" при нажатии AI-совет',
+      'modal AI-советника теперь сразу подтверждает interaction и только потом ищет участника/ждёт AI'
+    ]
+  },
   '1.0.79': {
     added: [
       'кнопки "Одобрить" и "Отказать" под карточками отчётов на повышение, контрактов и выплат',

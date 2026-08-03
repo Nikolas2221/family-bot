@@ -31,7 +31,9 @@ function createOptions(calls) {
         admin: { premiumOnly: 'premium only' },
         ai: { unavailable: message => message, advisorUnavailable: 'ai unavailable' }
       },
-      embeds: {},
+      embeds: {
+        buildAiAdvisorModal: () => ({ customId: 'family_aiadvisor_modal' })
+      },
       database: {},
       aiService: {},
       EmbedBuilderCtor: class {},
@@ -110,6 +112,35 @@ function createModal(customId, guild) {
       this.replied = true;
       replies.push(payload);
     },
+    async deferReply() {
+      this.deferred = true;
+    },
+    async editReply(payload) {
+      replies.push(payload);
+    },
+    _replies: replies
+  };
+}
+
+function createButton(customId, guild) {
+  const replies = [];
+  return {
+    guild,
+    guildId: guild.id,
+    customId,
+    member: { guild, permissions: { has: () => true } },
+    user: { id: 'mod-1' },
+    isRepliable: () => true,
+    isModalSubmit: () => false,
+    isButton: () => true,
+    isChatInputCommand: () => false,
+    async reply(payload) {
+      this.replied = true;
+      replies.push(payload);
+    },
+    async showModal(modal) {
+      this.modal = modal;
+    },
     _replies: replies
   };
 }
@@ -128,6 +159,15 @@ async function main() {
   assert.equal(calls.warns.length, 1);
   assert.equal(calls.warns[0].userId, 'target-1');
   assert.equal(calls.warns[0].moderatorId, 'mod-1');
+
+  const aiButton = createButton('admin_aiadvisor', guild);
+  await listenerBox.interactionCreate(aiButton);
+  assert.equal(aiButton.modal.customId, 'family_aiadvisor_modal');
+
+  const aiModal = createModal('family_aiadvisor_modal', guild);
+  await listenerBox.interactionCreate(aiModal);
+  assert.equal(aiModal.deferred, true);
+  assert.deepEqual(aiModal._replies.at(-1), { embeds: [{}] });
 
   console.log('ALL PROFILE MODAL RUNTIME TESTS PASSED');
 }
