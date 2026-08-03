@@ -20,7 +20,7 @@ const FAMILY_ROLE_ENV_KEYS = [
 ] as const;
 
 const AUTO_RANK_REQUIRED_KEYS = ['ROLE_ELDER', 'ROLE_MEMBER', 'ROLE_NEWBIE'] as const;
-const CORE_FAMILY_ROLE_ENV_KEYS = ['ROLE_LEADER', 'ROLE_DEPUTY', 'ROLE_ELDER', 'ROLE_MEMBER', 'ROLE_NEWBIE'] as const;
+const CORE_FAMILY_ROLE_ENV_KEYS = ['ROLE_LEADER', 'ROLE_DEPUTY', 'ROLE_ELDER', 'ROLE_MEMBER'] as const;
 const DEFAULT_FAMILY_MEMBER_ROLE_ID = '1522317438228627528';
 const DEFAULT_MEDIA_MODERATOR_ROLE_ID = '1522316775251775658';
 
@@ -201,7 +201,10 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
       enabled: parseBoolean(trim(env.CHANNEL_GUARD_ENABLED || 'true')),
       allowedRoles: parseCsv(env.CHANNEL_GUARD_ALLOWED_ROLES)
     },
-    roles: FAMILY_ROLE_ENV_KEYS.map((key): RoleEnvEntry => ({ key, value: trim(env[key]) }))
+    roles: FAMILY_ROLE_ENV_KEYS.map((key): RoleEnvEntry => ({
+      key,
+      value: key === 'ROLE_MEMBER' ? (trim(env[key]) || familyMemberRoleId) : trim(env[key])
+    }))
   };
 }
 
@@ -353,7 +356,7 @@ export function validateConfig(config: AppConfig): ValidationResult {
     if (missingBackupFields.length) {
       warnings.push(`SERVER_BACKUP_ENABLED=true, но не заданы GitHub backup переменные: ${missingBackupFields.join(', ')}`);
     } else {
-      warnings.push('GitHub backup stores Discord channel/role structure. Use a private repository and a fine-grained token limited to Contents read/write for this repo.');
+      notes.push('GitHub backup stores Discord channel/role structure. Use a private repository and a fine-grained token limited to Contents read/write for this repo.');
     }
   }
 

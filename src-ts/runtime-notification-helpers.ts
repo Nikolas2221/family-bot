@@ -58,6 +58,8 @@ interface DatabaseLike {
 }
 
 interface TelegramNotificationsLike {
+  enabled?: boolean;
+  allowsGuild?(guildId?: string | null): boolean;
   notifyUpdateAnnouncement?(input: {
     guildId?: string;
     versionLabel: string;
@@ -371,6 +373,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     try {
       let discordSent = false;
       let discordFailure = '';
+      const hasDiscordTarget = channelIds.length > 0;
 
       for (const channelId of channelIds) {
         const channel = await fetchTextChannel(guild, channelId);
@@ -397,33 +400,45 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
         if (discordSent) break;
       }
 
-      if (!channelIds.length) {
-        discordFailure = 'no update/log/panel/applications/reports channel configured';
-      }
-      if (!discordSent) {
+      if (!hasDiscordTarget) {
+        console.log(`[update-card] Discord card skipped for ${guild.id}: no update/log/panel/applications/reports channel configured`);
+      } else if (!discordSent) {
         console.warn(`[update-card] Discord card not sent for ${guild.id}: ${discordFailure || 'unknown error'}`);
       }
 
-      const telegramSent = await telegramNotifications?.notifyUpdateAnnouncement?.({
-        guildId: guild.id,
-        versionLabel: productVersionLabel,
-        semver: productVersionSemver,
-        buildId: deployBuildId,
-        commitMessage: deployCommitMessage,
-        changeLines,
-        createdAt: new Date()
-      }).catch(error => {
-        console.warn(`[update-card] Telegram card failed for ${guild.id}: ${error instanceof Error ? error.message : String(error)}`);
-        return false;
-      }) || false;
+      const telegramCanSend = Boolean(
+        telegramNotifications?.notifyUpdateAnnouncement &&
+        telegramNotifications.enabled !== false &&
+        (telegramNotifications.allowsGuild?.(guild.id) ?? true)
+      );
+      let telegramSent = false;
 
-      if (!telegramSent) {
-        console.warn(`[update-card] Telegram card not sent for ${guild.id}: check TELEGRAM_BOT_TOKEN, TELEGRAM_ANNOUNCEMENTS_CHAT_ID/TELEGRAM_ADMIN_CHAT_ID and TELEGRAM_ALLOWED_GUILD_IDS`);
+      if (telegramCanSend) {
+        telegramSent = await telegramNotifications?.notifyUpdateAnnouncement?.({
+          guildId: guild.id,
+          versionLabel: productVersionLabel,
+          semver: productVersionSemver,
+          buildId: deployBuildId,
+          commitMessage: deployCommitMessage,
+          changeLines,
+          createdAt: new Date()
+        }).catch(error => {
+          console.warn(`[update-card] Telegram card failed for ${guild.id}: ${error instanceof Error ? error.message : String(error)}`);
+          return false;
+        }) || false;
+
+        if (!telegramSent) {
+          console.warn(`[update-card] Telegram card not sent for ${guild.id}: check TELEGRAM_BOT_TOKEN, TELEGRAM_ANNOUNCEMENTS_CHAT_ID/TELEGRAM_ADMIN_CHAT_ID and TELEGRAM_ALLOWED_GUILD_IDS`);
+        }
+      } else {
+        console.log(`[update-card] Telegram card skipped for ${guild.id}: disabled or guild is not allowed`);
       }
 
       if (discordSent || telegramSent) {
         database.updateGuildMaintenance(guild.id, { lastUpdateAnnouncementId: updateAnnouncementId });
         console.log(`[update-card] announced ${productVersionSemver} for ${guild.id}: discord=${discordSent}, telegram=${telegramSent}`);
+      } else if (!hasDiscordTarget && !telegramCanSend) {
+        console.log(`[update-card] skipped ${guild.id}: no configured update target`);
       } else {
         console.warn(`[update-card] not marked as announced for ${guild.id}: every target failed`);
       }

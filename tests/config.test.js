@@ -75,6 +75,29 @@ async function testApplicationDefaultRoleIgnoresLegacyNewbieRole() {
   });
 
   assert.equal(config.applicationDefaultRole, '1522317438228627528');
+  assert.equal(config.roles.find(role => role.key === 'ROLE_MEMBER').value, '1522317438228627528');
+  const validationText = validateConfig(config).warnings.join('\n');
+  assert.doesNotMatch(validationText, /ROLE_MEMBER/);
+  assert.doesNotMatch(validationText, /ROLE_NEWBIE/);
+}
+
+async function testConfiguredBackupSecurityMessageIsANote() {
+  const config = createConfig({
+    TOKEN: 'token',
+    GUILD_ID: '123456789012345678',
+    CHANNEL_ID: '123456789012345679',
+    SERVER_BACKUP_ENABLED: 'true',
+    GITHUB_BACKUP_TOKEN: 'github-secret',
+    GITHUB_BACKUP_OWNER: 'owner',
+    GITHUB_BACKUP_REPO: 'repo'
+  });
+  const validation = validateConfig(config);
+  const notes = validation.notes.join('\n');
+  const warnings = validation.warnings.join('\n');
+
+  assert.match(notes, /GitHub backup stores Discord channel\/role structure/);
+  assert.doesNotMatch(warnings, /GitHub backup stores Discord channel\/role structure/);
+  assert.doesNotMatch(warnings, /github-secret/);
 }
 
 async function testDeepSeekConfigKeepsKeySecret() {
@@ -229,6 +252,7 @@ async function main() {
   await runTest('config summary stays safe and readable', testSummaryContainsSafeHumanReadableFields);
   await runTest('config reads storage file path from env', testStorageFileEnvIsReadFromConfig);
   await runTest('application default role ignores legacy newbie role', testApplicationDefaultRoleIgnoresLegacyNewbieRole);
+  await runTest('configured backup security message is a note', testConfiguredBackupSecurityMessageIsANote);
   await runTest('DeepSeek config keeps API key secret', testDeepSeekConfigKeepsKeySecret);
   await runTest('OpenRouter config keeps key secret and uses selected model', testOpenRouterConfigKeepsKeySecretAndUsesSelectedModel);
   await runTest('config validation catches invalid auto rank thresholds', testAutoRanksThresholdValidation);

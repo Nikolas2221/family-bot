@@ -157,6 +157,51 @@ async function main() {
   await telegramOnlyHelpers.announceBuildUpdate(member.guild);
   assert.equal(telegramOnlyUpdates.length, 1);
 
+  const originalWarn = console.warn;
+  const warningLines = [];
+  console.warn = (...args) => warningLines.push(args.join(' '));
+  try {
+    const skippedUpdates = [];
+    const skippedHelpers = createNotificationRuntimeHelpers({
+      copy: {},
+      embeds,
+      database: {
+        getGuild: () => ({ maintenance: {} }),
+        updateGuildMaintenance: (guildId, patch) => skippedUpdates.push({ guildId, patch })
+      },
+      EmbedBuilderCtor: require('discord.js').EmbedBuilder,
+      fetchTextChannel: async () => null,
+      isPremiumGuild: () => true,
+      resolveGuildSettings: () => ({
+        familyTitle: 'KLAIZ',
+        channels: {},
+        visuals: {},
+        welcome: { enabled: false, dmEnabled: false, message: '' },
+        verification: { enabled: false, roleId: '' }
+      }),
+      currentBuildSignature: '1.0.58:ghi9012',
+      productVersionLabel: 'KLAIZ BOT 1.0.58',
+      productVersionSemver: '1.0.58',
+      deployBuildId: 'ghi9012',
+      deployCommitMessage: 'quiet update card skips',
+      getUpdateChangeGroups: () => ({ added: [], updated: [], fixed: ['quiet skips'] }),
+      getCurrentReleaseChangeGroups: () => ({ added: [], updated: [], fixed: ['quiet skips'] }),
+      telegramNotifications: {
+        enabled: true,
+        allowsGuild: () => false,
+        notifyUpdateAnnouncement: async () => {
+          throw new Error('should not send to disallowed guild');
+        }
+      }
+    });
+
+    await skippedHelpers.announceBuildUpdate(member.guild);
+    assert.equal(skippedUpdates.length, 0);
+    assert.equal(warningLines.length, 0);
+  } finally {
+    console.warn = originalWarn;
+  }
+
   await helpers.sendWelcomeInvite(member);
   const welcomePayload = sentPayloads.find(payload => payload.embeds?.[0]?.type === 'welcome' && payload.components);
   assert.equal(welcomePayload.content, '<@user-1>');

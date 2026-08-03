@@ -45,6 +45,7 @@ export interface AfkRequestNotificationInput {
 
 export interface TelegramNotificationService {
   enabled: boolean;
+  allowsGuild(guildId?: string | null): boolean;
   notifyApplicationCreated(input: ApplicationNotificationInput): Promise<boolean>;
   notifyApplicationAccepted(input: ApplicationNotificationInput): Promise<boolean>;
   notifyApplicationRejected(input: ApplicationNotificationInput): Promise<boolean>;
@@ -238,6 +239,7 @@ export function createTelegramNotificationService(options: {
 
   return {
     enabled,
+    allowsGuild,
     notifyApplicationCreated(input) {
       if (!allowsGuild(input.guild?.id)) return Promise.resolve(false);
       const url = discordTicketUrl(input.guild?.id, input.ticketChannel?.id);

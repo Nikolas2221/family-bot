@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.77': {
+    added: [
+      'карточка обновления для чистки Railway-логов и более точной диагностики update-card'
+    ],
+    updated: [
+      'update-card теперь различает реальную ошибку отправки и обычный пропуск сервера без настроенного Discord/Telegram-канала',
+      'ROLE_MEMBER автоматически берется из APPLICATION_DEFAULT_ROLE, а старая ROLE_NEWBIE больше не считается обязательной семейной ролью'
+    ],
+    fixed: [
+      'Railway больше не помечает красным ожидаемый пропуск Telegram-карточки для серверов вне TELEGRAM_ALLOWED_GUILD_IDS',
+      'предупреждение про GitHub backup переведено из WARN в обычную заметку, если backup полностью настроен',
+      'добавлены тесты, защищающие update-card от повторного возврата шумных предупреждений'
+    ]
+  },
   '1.0.76': {
     added: [
       'добавлен живой AI-режим: бот отвечает в чате, если явно упомянуть KLAIZ BOT',
