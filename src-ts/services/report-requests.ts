@@ -3,13 +3,17 @@ import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import type { DatabaseApi, ReportRequestConfig, ReportRequestType } from '../types';
 import {
   REPORT_REQUEST_DEFINITIONS,
+  buildReportRequestDecisionEmbed,
+  buildReportRequestDecisionLogEmbed,
   buildReportRequestEmbed,
   buildReportRequestLogEmbed,
   buildReportRequestModal,
   buildReportRequestPanel,
+  buildReportRequestReviewButtons,
   isReportRequestType,
   readReportRequestValues
 } from '../report-requests-ui';
+import type { ReportRequestDecision } from '../report-requests-ui';
 
 export interface ReportRequestService {
   handleInteraction(interaction: any): Promise<boolean>;
@@ -250,6 +254,7 @@ export function createReportRequestService(options: {
           reporter: interaction.user,
           reportId
         })],
+        components: [buildReportRequestReviewButtons(type, reportId)],
         allowedMentions: { parse: [] }
       });
 
@@ -272,6 +277,67 @@ export function createReportRequestService(options: {
     }
   }
 
+  async function handleDecisionButton(
+    interaction: any,
+    type: ReportRequestType,
+    reportId: string,
+    decision: ReportRequestDecision
+  ): Promise<void> {
+    if (!interaction.guild) {
+      await interaction.reply(ephemeral({ content: 'Отчёт можно рассматривать только на сервере.' }));
+      return;
+    }
+
+    if (!canManage(interaction)) {
+      await interaction.reply(ephemeral({ content: 'Недостаточно прав для рассмотрения отчёта.' }));
+      return;
+    }
+
+    const config = getConfig(interaction.guild.id, type);
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const targetChannelId = interaction.channelId || interaction.message?.channelId || config?.targetChannelId || '';
+    const targetMessageId = interaction.message?.id || '';
+    const updatedEmbed = buildReportRequestDecisionEmbed({
+      type,
+      reportId,
+      decision,
+      moderator: interaction.user,
+      sourceEmbed: interaction.message?.embeds?.[0]
+    });
+
+    try {
+      await interaction.message?.edit?.({
+        embeds: [updatedEmbed],
+        components: [buildReportRequestReviewButtons(type, reportId, true)],
+        allowedMentions: { parse: [] }
+      });
+
+      if (config) {
+        await sendLog(interaction.guild, config, {
+          embeds: [buildReportRequestDecisionLogEmbed({
+            type,
+            reportId,
+            decision,
+            moderator: interaction.user,
+            guildId: interaction.guild.id,
+            targetChannelId,
+            targetMessageId
+          })]
+        });
+      }
+
+      await interaction.editReply({
+        content: decision === 'approved'
+          ? `✅ Отчёт ${reportId} одобрен.`
+          : `❌ По отчёту ${reportId} выставлен отказ.`
+      });
+    } catch (error) {
+      console.warn('Report request decision failed:', error);
+      await interaction.editReply({ content: 'Не удалось обновить отчёт. Проверь права бота на редактирование сообщения.' });
+    }
+  }
+
   async function handleInteraction(interaction: any): Promise<boolean> {
     if (interaction.isChatInputCommand?.() && interaction.commandName === 'reportform') {
       await handleCommand(interaction);
@@ -282,6 +348,17 @@ export function createReportRequestService(options: {
       const match = String(interaction.customId || '').match(/^report_request_open:(up_rank|contracts|payouts)$/u);
       if (match && isReportRequestType(match[1])) {
         await handleOpenButton(interaction, match[1]);
+        return true;
+      }
+
+      const decisionMatch = String(interaction.customId || '').match(/^report_request_(approve|decline):(up_rank|contracts|payouts):([a-z0-9_-]+)$/u);
+      if (decisionMatch && isReportRequestType(decisionMatch[2])) {
+        await handleDecisionButton(
+          interaction,
+          decisionMatch[2],
+          decisionMatch[3],
+          decisionMatch[1] === 'approve' ? 'approved' : 'declined'
+        );
         return true;
       }
     }

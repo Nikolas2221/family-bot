@@ -9,6 +9,8 @@ import {
 } from 'discord.js';
 import type { ReportRequestConfig, ReportRequestType } from './types';
 
+export type ReportRequestDecision = 'approved' | 'declined';
+
 type ReportField = {
   id: string;
   label: string;
@@ -84,6 +86,14 @@ function timestampLabel(date = new Date()): string {
 
 function safe(value: unknown, fallback = 'Не указано', limit = 1024): string {
   return (String(value || '').trim() || fallback).slice(0, limit);
+}
+
+function decisionLabel(decision: ReportRequestDecision): string {
+  return decision === 'approved' ? 'Одобрено' : 'Отказано';
+}
+
+function decisionColor(decision: ReportRequestDecision): number {
+  return decision === 'approved' ? 0x22c55e : 0xef4444;
 }
 
 export function buildReportRequestPanel(type: ReportRequestType, config?: Partial<ReportRequestConfig>) {
@@ -162,6 +172,79 @@ export function buildReportRequestEmbed(input: {
       }))
     )
     .setFooter({ text: `${definition.label} • ${timestampLabel()}` })
+    .setTimestamp();
+}
+
+export function buildReportRequestReviewButtons(type: ReportRequestType, reportId: string, disabled = false) {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`report_request_approve:${type}:${reportId}`)
+      .setLabel('Одобрить')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`report_request_decline:${type}:${reportId}`)
+      .setLabel('Отказать')
+      .setEmoji('❌')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled)
+  );
+}
+
+export function buildReportRequestDecisionEmbed(input: {
+  type: ReportRequestType;
+  reportId: string;
+  decision: ReportRequestDecision;
+  moderator: { id: string; username?: string; globalName?: string; tag?: string };
+  sourceEmbed?: any;
+}) {
+  const definition = REPORT_REQUEST_DEFINITIONS[input.type];
+  const raw = input.sourceEmbed?.toJSON?.() || input.sourceEmbed?.data || input.sourceEmbed || {};
+  const ignoredFields = new Set(['Статус', 'Решение', 'Модератор', 'Дата решения', 'Одобрил', 'Отказал']);
+  const fields = Array.isArray(raw.fields)
+    ? raw.fields.filter((field: any) => !ignoredFields.has(String(field?.name || '')))
+    : [];
+
+  return new EmbedBuilder(raw)
+    .setColor(decisionColor(input.decision))
+    .setTitle(raw.title || definition.reportTitle)
+    .setFields(
+      ...fields,
+      { name: 'Статус', value: decisionLabel(input.decision), inline: true },
+      { name: input.decision === 'approved' ? 'Одобрил' : 'Отказал', value: `<@${input.moderator.id}>`, inline: true },
+      { name: 'Дата решения', value: timestampLabel(), inline: true }
+    )
+    .setFooter({ text: `${definition.label} • ${decisionLabel(input.decision)} • ${timestampLabel()}` })
+    .setTimestamp();
+}
+
+export function buildReportRequestDecisionLogEmbed(input: {
+  type: ReportRequestType;
+  reportId: string;
+  decision: ReportRequestDecision;
+  moderator: { id: string; username?: string; globalName?: string; tag?: string };
+  guildId: string;
+  targetChannelId: string;
+  targetMessageId?: string;
+}) {
+  const definition = REPORT_REQUEST_DEFINITIONS[input.type];
+  const messageLink = input.targetMessageId
+    ? `https://discord.com/channels/${input.guildId}/${input.targetChannelId}/${input.targetMessageId}`
+    : 'Не указано';
+  const approved = input.decision === 'approved';
+
+  return new EmbedBuilder()
+    .setColor(approved ? 0x22c55e : 0xef4444)
+    .setTitle(`${approved ? '✅' : '❌'} Решение по отчёту`)
+    .addFields(
+      { name: 'ID отчёта', value: input.reportId, inline: true },
+      { name: 'Тип', value: definition.label, inline: true },
+      { name: 'Статус', value: decisionLabel(input.decision), inline: true },
+      { name: approved ? 'Одобрил' : 'Отказал', value: `<@${input.moderator.id}>`, inline: true },
+      { name: 'Сообщение', value: messageLink, inline: false }
+    )
+    .setFooter({ text: `Логи отчётов • ${timestampLabel()}` })
     .setTimestamp();
 }
 

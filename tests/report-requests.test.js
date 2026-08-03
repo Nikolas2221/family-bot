@@ -32,9 +32,14 @@ function createChannel(id) {
       sent.push(payload);
       const message = {
         id: `${id}-message-${sent.length}`,
+        channelId: id,
+        embeds: payload.embeds || [],
+        components: payload.components || [],
         edits: [],
         async edit(update) {
           this.edits.push(update);
+          if (update.embeds) this.embeds = update.embeds;
+          if (update.components) this.components = update.components;
           sent.push(update);
           return this;
         }
@@ -127,6 +132,19 @@ async function main() {
   assert.equal(targetChannel.sent.length, 1);
   assert.equal(logChannel.sent.length, 1);
   assert.match(modal.replies[0].content, /Отчёт отправлен/u);
+
+  assert.equal(targetChannel.sent[0].components[0].toJSON().components[0].label, 'Одобрить');
+  const reportMessage = await targetChannel.messages.fetch('333333333333333333-message-1');
+  const approve = baseInteraction(guild, adminUser, adminMember);
+  approve.isButton = () => true;
+  approve.customId = 'report_request_approve:contracts:contracts-test';
+  approve.channelId = targetChannel.id;
+  approve.message = reportMessage;
+  await service.handleInteraction(approve);
+  assert.equal(reportMessage.edits.length, 1);
+  assert.equal(reportMessage.components[0].toJSON().components[0].disabled, true);
+  assert.equal(logChannel.sent.length, 2);
+  assert.match(approve.replies[0].content, /одобрен/u);
 
   console.log('ALL REPORT REQUEST SERVICE TESTS PASSED');
 }
