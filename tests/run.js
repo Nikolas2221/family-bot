@@ -9,6 +9,7 @@ async function main() {
   const { main: runCommandsTests } = require('./commands.test');
   const { main: runAnnouncementCommandRuntimeTests } = require('./command-runtime-announcements.test');
   const { main: runLawCommandRuntimeTests } = require('./command-runtime-law.test');
+  const { main: runOnlineCommandRuntimeTests } = require('./command-runtime-online.test');
   const { main: runClientReadyRuntimeTests } = require('./client-ready-runtime.test');
   const { main: runCopyRuntimeTests } = require('./copy-runtime.test');
   const { main: runDatabaseTests } = require('./database.test');
@@ -54,6 +55,7 @@ async function main() {
   await runCommandsTests();
   await runAnnouncementCommandRuntimeTests();
   await runLawCommandRuntimeTests();
+  await runOnlineCommandRuntimeTests();
   await runClientReadyRuntimeTests();
   await runCopyRuntimeTests();
   await runDatabaseTests();

@@ -419,7 +419,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   }
 
   if (interaction.commandName === 'online') {
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: 64 });
     const text = await buildDiscordOnlineMembersText(interaction.guild);
     await interaction.editReply({ content: text, allowedMentions: { parse: [] } });
     return true;

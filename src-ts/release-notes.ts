@@ -1,6 +1,17 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.81': {
+    added: [
+      'тест runtime-команды /online, чтобы скрытый ответ не слетел при будущих изменениях'
+    ],
+    updated: [
+      'Discord-команда /online теперь отправляет список участников только тому, кто запросил команду'
+    ],
+    fixed: [
+      'список участников онлайн больше не виден всем в канале после вызова /online'
+    ]
+  },
   '1.0.80': {
     added: [
       'тест на кнопку AI-совет и modal-ответ советника, чтобы Discord timeout не возвращался'
