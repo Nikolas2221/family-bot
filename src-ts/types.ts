@@ -143,6 +143,9 @@ export interface AppConfig {
   aiEnabled: boolean;
   aiModel: string;
   aiTimeoutMs: number;
+  aiMentionEnabled: boolean;
+  aiMentionCooldownSeconds: number;
+  aiMentionMaxChars: number;
   openAiApiKey: string;
   openRouterApiKey: string;
   openRouterBaseUrl: string;

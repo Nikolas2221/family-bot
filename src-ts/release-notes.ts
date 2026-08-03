@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.76': {
+    added: [
+      'добавлен живой AI-режим: бот отвечает в чате, если явно упомянуть KLAIZ BOT',
+      'добавлены env-настройки AI_MENTION_ENABLED, AI_MENTION_COOLDOWN_SECONDS и AI_MENTION_MAX_CHARS'
+    ],
+    updated: [
+      'AI-ответы по упоминанию используют выбранную OpenRouter-модель и короткий дружелюбный стиль',
+      'дефолтный AI timeout увеличен до 60 секунд, чтобы бесплатные модели OpenRouter успевали отвечать чаще'
+    ],
+    fixed: [
+      'Railway-логи больше не забиваются полным stack trace при обычном timeout внешней AI-модели',
+      'AI mention-защита ограничивает длину вопроса и частоту запросов от одного пользователя'
+    ]
+  },
   '1.0.75': {
     added: [
       'добавлена полноценная поддержка OpenRouter AI через OPENROUTER_API_KEY, OPENROUTER_BASE_URL и OPENROUTER_MODEL',

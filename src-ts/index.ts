@@ -1535,6 +1535,12 @@ client.once('clientReady', () => {
 
 registerEventRuntime({
   client,
+  aiMention: {
+    enabled: config.aiEnabled && config.aiMentionEnabled,
+    cooldownSeconds: config.aiMentionCooldownSeconds,
+    maxChars: config.aiMentionMaxChars
+  },
+  aiService,
   leakGuard: LEAK_GUARD,
   scamGuard: SCAM_GUARD,
   channelGuard: CHANNEL_GUARD,

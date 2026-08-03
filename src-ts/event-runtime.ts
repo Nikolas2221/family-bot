@@ -58,6 +58,7 @@ interface ChannelLike {
   archived?: boolean;
   guild?: GuildLike | null;
   send?(payload: Record<string, unknown>): Promise<NoticeLike | null>;
+  sendTyping?(): Promise<unknown>;
   fetchWebhooks?(): Promise<any>;
   permissionOverwrites?: {
     edit(target: unknown, overwrite: Record<string, boolean | null>, options?: Record<string, unknown>): Promise<unknown>;
@@ -72,6 +73,7 @@ interface NoticeLike {
 interface MentionsLike {
   users?: {
     size?: number;
+    has?(id: string): boolean;
   };
 }
 
@@ -293,9 +295,18 @@ interface WelcomeSettingsLike {
 
 interface EventRuntimeOptions {
   client: {
+    user?: UserLike | null;
     removeAllListeners(event: string): unknown;
     on(event: string, listener: (...args: any[]) => unknown): unknown;
   };
+  aiMention: {
+    enabled: boolean;
+    cooldownSeconds: number;
+    maxChars: number;
+  };
+  aiService?: {
+    aiText(systemPrompt: string, userPrompt: string): Promise<string>;
+  } | null;
   leakGuard: {
     enabled: boolean;
   };
@@ -601,9 +612,101 @@ async function handleWebhookUpdate(
   }, options);
 }
 
+function botWasMentioned(message: MessageLike, botId: string): boolean {
+  if (!botId) return false;
+  if (message.mentions?.users?.has?.(botId)) return true;
+  return new RegExp(`<@!?${botId}>`, 'u').test(String(message.content || ''));
+}
+
+function stripBotMention(content: string, botId: string): string {
+  return String(content || '')
+    .replace(new RegExp(`<@!?${botId}>`, 'gu'), ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function buildMentionSystemPrompt(): string {
+  return [
+    'Ты KLAIZ BOT, живой AI-помощник Discord-семьи.',
+    'Отвечай по-русски, дружелюбно, уверенно и коротко.',
+    'По умолчанию давай один готовый ответ, а не список из многих вариантов.',
+    'Если просят объявление, текст, ответ участнику или идею, сразу дай готовый вариант.',
+    'Если данных мало, задай один короткий уточняющий вопрос.',
+    'Не раскрывай и не проси токены, пароли, cookie, ключи API или приватные данные.',
+    'Не пингуй everyone/here и не вставляй опасные ссылки.'
+  ].join(' ');
+}
+
+async function handleAiMentionMessage(
+  message: MessageLike,
+  state: Map<string, number>,
+  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService'>
+): Promise<boolean> {
+  const botId = options.client.user?.id || '';
+  if (!message.guild || message.author?.bot || !botWasMentioned(message, botId)) return false;
+
+  if (!options.aiMention.enabled || !options.aiService) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, AI-помощник сейчас выключен.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const prompt = stripBotMention(message.content, botId);
+  if (!prompt) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, напиши вопрос после упоминания. Например: <@${botId}> сделай короткое объявление о собрании в 20:00.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const maxChars = Math.max(50, Number(options.aiMention.maxChars) || 700);
+  if (prompt.length > maxChars) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, вопрос слишком длинный: ${prompt.length}/${maxChars}. Сократи его и попробуй ещё раз.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const cooldownMs = Math.max(3, Number(options.aiMention.cooldownSeconds) || 30) * 1000;
+  const cooldownKey = `${message.guild.id}:${message.author.id}`;
+  const lastAt = state.get(cooldownKey) || 0;
+  const waitMs = cooldownMs - (Date.now() - lastAt);
+  if (waitMs > 0) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, подожди ещё ${Math.ceil(waitMs / 1000)} сек. перед следующим AI-вопросом.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  state.set(cooldownKey, Date.now());
+  await message.channel.sendTyping?.().catch(() => null);
+
+  try {
+    const answer = await options.aiService.aiText(buildMentionSystemPrompt(), prompt);
+    await message.channel.send?.({
+      content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800)}`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+  } catch (error: any) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, AI сейчас не ответил: ${String(error?.message || 'неизвестная ошибка').slice(0, 300)}`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+  }
+
+  return true;
+}
+
 export function registerEventRuntime(options: EventRuntimeOptions): void {
   const {
     client,
+    aiMention,
+    aiService,
     leakGuard,
     scamGuard,
     channelGuard,
@@ -639,6 +742,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     handleVoiceRoomsVoiceStateUpdate
   } = options;
   const welcomeInviteBatches = new Map<string, WelcomeInviteBatch>();
+  const aiMentionCooldowns = new Map<string, number>();
 
   function scheduleWelcomeInvite(member: MemberLike): void {
     const guildId = member.guild.id;
@@ -750,6 +854,14 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
     guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
     await handleCustomTriggerMessage(message).catch(() => null);
+
+    if (await handleAiMentionMessage(message, aiMentionCooldowns, {
+      client,
+      aiMention,
+      aiService
+    })) {
+      return;
+    }
 
     if (!hasFamilyRole(message.member)) return;
     guildStorage.recordMessage(message.member.id);

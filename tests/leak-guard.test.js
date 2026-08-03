@@ -41,7 +41,9 @@ async function main() {
   const securityLogs = [];
   const telegramJoins = [];
   const telegramScamReports = [];
+  const aiReplies = [];
   const client = {
+    user: { id: 'bot-1', bot: true },
     removeAllListeners(name) {
       listeners.delete(name);
     },
@@ -51,6 +53,10 @@ async function main() {
   };
   registerEventRuntime({
     client,
+    aiMention: { enabled: true, cooldownSeconds: 30, maxChars: 700 },
+    aiService: {
+      aiText: async (_system, prompt) => `AI reply: ${prompt}`
+    },
     leakGuard: { enabled: true },
     scamGuard: { enabled: true, timeoutMinutes: 1440 },
     channelGuard: { enabled: false },
@@ -146,6 +152,39 @@ async function main() {
   assert.equal(scamMuted, true);
   assert.equal(telegramScamReports.length, 1);
   assert.match(securityLogs[2], /Scam guard/);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4',
+    content: '<@bot-1> сделай объявление',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    channel: {
+      id: 'channel-1',
+      sendTyping: async () => {},
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(aiReplies[0], '<@user-1> AI reply: сделай объявление');
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-5',
+    content: '<@bot-1> еще вопрос',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.match(aiReplies[1], /подожди ещё/u);
 }
 
 if (require.main === module) {

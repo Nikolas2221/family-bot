@@ -104,7 +104,7 @@ export async function callAiAdvisor(
   const model = process.env.OPENROUTER_MODEL
     || process.env.DEEPSEEK_MODEL
     || (usesOpenRouter ? 'openrouter/free' : 'deepseek-chat');
-  const timeoutMs = Math.max(1000, Number(process.env.AI_TIMEOUT_MS) || 30000);
+  const timeoutMs = Math.max(1000, Number(process.env.AI_TIMEOUT_MS) || 60000);
 
   const completion = createOpenRouterChatCompletion({
     apiKey,

@@ -109,8 +109,12 @@ async function testOpenRouterConfigKeepsKeySecretAndUsesSelectedModel() {
   assert.equal(config.openRouterModel, 'nvidia/nemotron-3-ultra-550b-a55b:free');
   assert.equal(config.aiModel, 'nvidia/nemotron-3-ultra-550b-a55b:free');
   assert.equal(config.openRouterBaseUrl, 'https://openrouter.ai/api/v1');
+  assert.equal(config.aiTimeoutMs, 60000);
+  assert.equal(config.aiMentionEnabled, true);
+  assert.equal(config.aiMentionCooldownSeconds, 30);
   assert.match(validation.notes.join('\n'), /OpenRouter/);
   assert.match(summary, /OpenRouter enabled \(nvidia\/nemotron-3-ultra-550b-a55b:free\)/);
+  assert.match(summary, /AI mentions: enabled \(30s cooldown\)/);
   assert.doesNotMatch(summary, /openrouter-secret/);
 }
 

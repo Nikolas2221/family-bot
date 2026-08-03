@@ -79,7 +79,8 @@ async function safeChat(
     const result = await chatCompletion.chat(messages);
     return normalizeText(result) || null;
   } catch (error) {
-    console.warn('External AI request failed, falling back to local helper:', error);
+    const message = error instanceof Error ? error.message : String(error || 'unknown error');
+    console.warn(`External AI request failed, falling back to local helper: ${message}`);
     return null;
   }
 }
@@ -368,7 +369,13 @@ export function createAIService({
     const external = await safeChat(chatCompletion || undefined, [
       {
         role: 'system',
-        content: _systemPrompt || 'Ты помощник Discord-семьи. Отвечай по-русски, понятно, кратко и по делу. Не раскрывай токены, секреты и приватные данные.'
+        content: [
+          _systemPrompt || 'Ты помощник Discord-семьи.',
+          'Отвечай по-русски, понятно и по делу.',
+          'По умолчанию давай один готовый ответ, а не несколько вариантов.',
+          'Если пользователь просит текст или объявление, сразу пиши готовый текст без пояснений.',
+          'Не раскрывай токены, секреты и приватные данные.'
+        ].join(' ')
       },
       { role: 'user', content: userPrompt }
     ]);
