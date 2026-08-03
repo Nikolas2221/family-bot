@@ -19,6 +19,7 @@ async function main() {
   const callbackAnswers = [];
   const verified = [];
   const afkReviews = [];
+  const aiCalls = [];
   const adminChatMember = async () => ({ status: 'administrator' });
   registerTelegramHandlers(bot, {
     adminChatId: '-1001',
@@ -45,6 +46,16 @@ async function main() {
       }
     },
     getOnlineMembers: async () => '👥 Участники Discord в сети: 2',
+    aiService: {
+      aiText: async (system, prompt) => {
+        aiCalls.push({ system, prompt });
+        return `AI answer: ${prompt}`;
+      },
+      analyzeApplication: async () => 'application',
+      analyzeMember: async () => 'member'
+    },
+    aiCooldownSeconds: 3,
+    aiMaxChars: 80,
     verifyWelcomeMember: async (guildId, userId, actor) => {
       verified.push({ guildId, userId, actor });
       return 'ok';
@@ -161,6 +172,53 @@ async function main() {
   assert.deepEqual(afkReviews[1], {
     id: 'd4c3b2a1', decision: 'declined', actorId: '7', actorName: '@admin', reason: 'Недостаточная причина'
   });
+
+  await commands.get('ai')({
+    chat: { id: 999 },
+    from: { id: 8, username: 'outsider' },
+    message: { text: '/ai test' },
+    reply: async text => replies.push(text)
+  });
+  assert.match(replies.at(-1), /административном чате/);
+
+  await commands.get('ai')({
+    chat: { id: -1001 },
+    from: { id: 9, username: 'admin2' },
+    getChatMember: adminChatMember,
+    message: { text: '/ai' },
+    reply: async text => replies.push(text)
+  });
+  assert.match(replies.at(-1), /Укажи вопрос/u);
+
+  await commands.get('ai')({
+    chat: { id: -1001 },
+    from: { id: 9, username: 'admin2' },
+    getChatMember: adminChatMember,
+    message: { text: '/ai РЎРѕСЃС‚Р°РІСЊ РєРѕСЂРѕС‚РєРѕРµ РѕР±СЉСЏРІР»РµРЅРёРµ' },
+    reply: async text => {
+      replies.push(text);
+      return { message_id: replies.length };
+    },
+    deleteMessage: async () => null
+  });
+  assert.equal(aiCalls.length, 1);
+  assert.match(aiCalls[0].system, /KLAIZ BOT/u);
+  assert.match(replies.at(-1), /AI answer:/u);
+
+  await commands.get('aionline')({
+    chat: { id: -1001 },
+    from: { id: 9, username: 'admin2' },
+    getChatMember: adminChatMember,
+    reply: async text => {
+      replies.push(text);
+      return { message_id: replies.length };
+    },
+    deleteMessage: async () => null
+  });
+  assert.equal(aiCalls.length, 2);
+  assert.match(aiCalls[1].system, /online|онлайн/i);
+  assert.match(aiCalls[1].prompt, /Discord online/u);
+  assert.match(replies.at(-1), /AI-анализ онлайна|AI answer:/u);
 
   await commands.get('online')({
     chat: { id: -1001 }, from: { id: 7, username: 'admin' },

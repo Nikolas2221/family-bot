@@ -3,6 +3,7 @@ import { formatAnnouncementResultMessage } from '../services/announcements';
 import type { AnnouncementService } from '../services/announcements';
 import type { TicketService } from '../services/tickets';
 import type { AfkLeaveService } from '../services/afk-leave';
+import type { AIService } from '../types';
 
 function commandText(ctx: any): string {
   return String(ctx.message?.text || '').replace(/^\/\w+(?:@\w+)?\s*/u, '').trim();
@@ -15,16 +16,69 @@ function telegramAuthor(ctx: any): { id: string; name: string } {
   return { id, name };
 }
 
+function splitTelegramText(text: string, limit = 3800): string[] {
+  const normalized = String(text || '').trim() || 'AI не смог подготовить ответ. Попробуй переформулировать вопрос.';
+  const chunks: string[] = [];
+  let rest = normalized;
+  while (rest.length > limit) {
+    const breakpoint = Math.max(
+      rest.lastIndexOf('\n\n', limit),
+      rest.lastIndexOf('\n', limit),
+      rest.lastIndexOf(' ', limit)
+    );
+    const cutAt = breakpoint > 500 ? breakpoint : limit;
+    chunks.push(rest.slice(0, cutAt).trim());
+    rest = rest.slice(cutAt).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+function buildTelegramAiSystemPrompt(authorName: string): string {
+  return [
+    'Ты KLAIZ BOT, AI-помощник для Telegram-чата администрации семьи.',
+    'Отвечай по-русски, спокойно, живо и по делу.',
+    'Помогай с текстами объявлений, советами по участникам, разбором ситуаций, заявками, модерацией и организацией семьи.',
+    `Автор вопроса: ${authorName}.`,
+    'Не раскрывай токены, ключи, пароли, cookies, session storage и приватные данные проекта.',
+    'Если не хватает контекста, задай один короткий уточняющий вопрос или дай аккуратный вариант с допущениями.'
+  ].join(' ');
+}
+
+function buildTelegramOnlineSystemPrompt(authorName: string): string {
+  return [
+    'Ты KLAIZ BOT, AI-советник по онлайну Discord-семьи.',
+    'На основе списка участников онлайн сделай короткий красивый отчёт для Telegram.',
+    'Структура: сводка, заметные участники/роли, риски по активности, что сделать старшему составу.',
+    'Не выдумывай людей и цифры, используй только переданный список.',
+    `Запросил: ${authorName}.`
+  ].join(' ');
+}
+
+function formatTelegramAiCard(title: string, body: string): string {
+  return [
+    `🤖 ${title}`,
+    '━━━━━━━━━━━━',
+    String(body || '').trim() || 'Нет данных для анализа.',
+    '━━━━━━━━━━━━',
+    'KLAIZ BOT • AI'
+  ].join('\n');
+}
+
 export function registerTelegramHandlers(bot: Telegraf | null, options: {
   adminChatId: string;
   tickets: TicketService;
   announcements: AnnouncementService;
   afkLeave?: AfkLeaveService;
+  aiService?: AIService;
+  aiCooldownSeconds?: number;
+  aiMaxChars?: number;
   getOnlineMembers?: () => Promise<string>;
   verifyWelcomeMember?: (guildId: string, userId: string, actorName: string) => Promise<'ok' | 'already' | 'not_found' | 'role_missing' | 'failed'>;
 }): void {
   if (!bot) return;
   const adminChatId = String(options.adminChatId || '').trim();
+  const aiCooldowns = new Map<string, number>();
 
   function isAdminChat(ctx: any): boolean {
     return Boolean(adminChatId && String(ctx.chat?.id || '') === adminChatId);
@@ -198,6 +252,91 @@ export function registerTelegramHandlers(bot: Telegraf | null, options: {
 
   bot.command('announce', (ctx: any) => handleAnnouncement(ctx, 'announcement'));
   bot.command('event', (ctx: any) => handleAnnouncement(ctx, 'event'));
+  bot.command('ai', async (ctx: any) => {
+    if (!(await requireTelegramAdmin(ctx))) return;
+    const prompt = commandText(ctx);
+    if (!prompt) {
+      await ctx.reply('❌ Укажи вопрос: /ai текст вопроса');
+      return;
+    }
+    const maxChars = Math.max(50, Number(options.aiMaxChars) || 700);
+    if (prompt.length > maxChars) {
+      await ctx.reply(`❌ Вопрос слишком длинный. Сейчас: ${prompt.length}/${maxChars}.`);
+      return;
+    }
+    if (!options.aiService) {
+      await ctx.reply('❌ AI-помощник сейчас выключен. Проверь AI_ENABLED и OPENROUTER_API_KEY в Railway.');
+      return;
+    }
+
+    const author = telegramAuthor(ctx);
+    const cooldownMs = Math.max(3, Number(options.aiCooldownSeconds) || 30) * 1000;
+    const cooldownKey = author.id;
+    const nextAllowedAt = Number(aiCooldowns.get(cooldownKey) || 0);
+    const waitMs = nextAllowedAt - Date.now();
+    if (waitMs > 0) {
+      await ctx.reply(`⏳ Подожди ещё ${Math.ceil(waitMs / 1000)} сек. перед следующим AI-вопросом.`);
+      return;
+    }
+    aiCooldowns.set(cooldownKey, Date.now() + cooldownMs);
+
+    const thinking = await ctx.reply('🤖 KLAIZ BOT думает...').catch(() => null);
+    try {
+      const answer = await options.aiService.aiText(buildTelegramAiSystemPrompt(author.name), prompt);
+      for (const chunk of splitTelegramText(answer)) {
+        await ctx.reply(chunk);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || 'неизвестная ошибка');
+      await ctx.reply(`❌ AI сейчас не ответил.\nПричина: ${message.slice(0, 300)}`);
+    } finally {
+      if (thinking && typeof ctx.deleteMessage === 'function') {
+        await ctx.deleteMessage(thinking.message_id).catch(() => null);
+      }
+    }
+  });
+  bot.command('aionline', async (ctx: any) => {
+    if (!(await requireTelegramAdmin(ctx))) return;
+    if (!options.aiService) {
+      await ctx.reply('❌ AI-помощник сейчас выключен. Проверь AI_ENABLED и OPENROUTER_API_KEY в Railway.');
+      return;
+    }
+    if (!options.getOnlineMembers) {
+      await ctx.reply('❌ Не удалось получить список участников Discord.');
+      return;
+    }
+
+    const author = telegramAuthor(ctx);
+    const cooldownMs = Math.max(3, Number(options.aiCooldownSeconds) || 30) * 1000;
+    const cooldownKey = `${author.id}:online`;
+    const nextAllowedAt = Number(aiCooldowns.get(cooldownKey) || 0);
+    const waitMs = nextAllowedAt - Date.now();
+    if (waitMs > 0) {
+      await ctx.reply(`⏳ Подожди ещё ${Math.ceil(waitMs / 1000)} сек. перед следующим AI-анализом онлайна.`);
+      return;
+    }
+    aiCooldowns.set(cooldownKey, Date.now() + cooldownMs);
+
+    const thinking = await ctx.reply('📡 Собираю онлайн и отдаю AI на анализ...').catch(() => null);
+    try {
+      const onlineText = await options.getOnlineMembers();
+      const answer = await options.aiService.aiText(
+        buildTelegramOnlineSystemPrompt(author.name),
+        `Список Discord online:\n${onlineText}`
+      );
+      const card = formatTelegramAiCard('AI-анализ онлайна', answer);
+      for (const chunk of splitTelegramText(card)) {
+        await ctx.reply(chunk);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || 'неизвестная ошибка');
+      await ctx.reply(`❌ Не удалось сделать AI-анализ онлайна.\nПричина: ${message.slice(0, 300)}`);
+    } finally {
+      if (thinking && typeof ctx.deleteMessage === 'function') {
+        await ctx.deleteMessage(thinking.message_id).catch(() => null);
+      }
+    }
+  });
   bot.command('online', async (ctx: any) => {
     if (!(await requireTelegramAdmin(ctx))) return;
     if (!options.getOnlineMembers) {

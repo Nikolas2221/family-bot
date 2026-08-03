@@ -1,6 +1,21 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.78': {
+    added: [
+      'Telegram-команда /ai для вопросов к выбранной OpenRouter/AI-модели прямо из админ-чата',
+      'Telegram-команда /aionline: AI собирает текущий Discord online и возвращает аккуратную карточку-отчёт',
+      'защита Telegram AI от спама: лимит длины вопроса и cooldown на запросы'
+    ],
+    updated: [
+      'Telegram AI использует тот же aiService, что и Discord /ai, без отдельного ключа и без хранения секретов в коде',
+      'длинные AI-ответы в Telegram автоматически делятся на безопасные части'
+    ],
+    fixed: [
+      'добавлены тесты Telegram handlers для /ai и /aionline',
+      'AI-команды Telegram доступны только в TELEGRAM_ADMIN_CHAT_ID и только администраторам/создателю Telegram-чата'
+    ]
+  },
   '1.0.77': {
     added: [
       'карточка обновления для чистки Railway-логов и более точной диагностики update-card'

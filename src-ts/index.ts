@@ -200,6 +200,9 @@ registerTelegramHandlers(telegramBot, {
   tickets: ticketService,
   announcements: announcementService,
   afkLeave: afkLeaveService,
+  aiService,
+  aiCooldownSeconds: config.aiMentionCooldownSeconds,
+  aiMaxChars: config.aiMentionMaxChars,
   getOnlineMembers: async () => {
     const guildId = config.discordOnlineGuildId;
     const guild = client.guilds.cache.get(guildId)
