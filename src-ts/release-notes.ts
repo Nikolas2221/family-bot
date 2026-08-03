@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.74': {
+    added: [
+      'добавлен runtime-тест, который проверяет, что модалки «Добавить баллы» и «Выдать выговор» реально сохраняют действие'
+    ],
+    updated: [
+      'проект очищен от недоделанного bootstrap-рефакторинга, который не был подключён к основному запуску бота',
+      'боевой entrypoint остаётся стабильным: package main указывает на dist-ts/index.js'
+    ],
+    fixed: [
+      'сборка TypeScript снова проходит без ошибок после удаления сломанного bootstrap/config/container/logger слоя',
+      'удалены старые корневые JS-обёртки index.js и roles.js, конфликтовавшие с полной TS-миграцией',
+      'DeepSeek-сервис снова использует модель deepseek-chat по умолчанию и возвращает корректные DeepSeek-ошибки'
+    ]
+  },
   '1.0.73': {
     added: [
       'добавлена карточка обновления для правок заявки и модалок профиля'

@@ -23,9 +23,8 @@ function buildSources(sources: LawSearchResult[]): string {
 
 export function createDeepSeekService(options: DeepSeekOptions) {
   const apiKey = String(options.apiKey || '').trim();
-  // Use OpenRouter as the default provider
   const baseUrl = cleanBaseUrl(options.baseUrl || 'https://openrouter.ai/api/v1');
-  const model = options.model || 'openai/gpt-4o-mini';
+  const model = options.model || 'deepseek-chat';
   const timeoutMs = options.timeoutMs || 10_000;
   const fetchImpl = options.fetchImpl || fetch;
   const referer = options.referer || 'https://github.com/your-repo';
@@ -68,13 +67,13 @@ export function createDeepSeekService(options: DeepSeekOptions) {
       const hardTimeout = new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(() => {
           controller.abort();
-          reject(new Error(`OpenRouter timeout after ${timeoutMs}ms`));
+          reject(new Error(`DeepSeek timeout after ${timeoutMs}ms`));
         }, timeoutMs);
       });
       const response = await Promise.race([request, hardTimeout]);
 
       if (!response.ok) {
-        throw new Error(`OpenRouter HTTP ${response.status}`);
+        throw new Error(`DeepSeek HTTP ${response.status}`);
       }
 
       const payload = await response.json() as any;
