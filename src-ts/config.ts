@@ -55,6 +55,16 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
   const channelId = trim(env.CHANNEL_ID);
   const logChannelId = trim(env.LOG_CHANNEL_ID);
   const familyMemberRoleId = trim(env.APPLICATION_DEFAULT_ROLE) || DEFAULT_FAMILY_MEMBER_ROLE_ID;
+  const openRouterApiKey = trim(env.OPENROUTER_API_KEY);
+  const legacyDeepSeekApiKey = trim(env.DEEPSEEK_API_KEY);
+  const aiApiKey = openRouterApiKey || legacyDeepSeekApiKey;
+  const usesOpenRouter = Boolean(openRouterApiKey || trim(env.OPENROUTER_MODEL) || trim(env.OPENROUTER_BASE_URL));
+  const aiBaseUrl = trim(env.OPENROUTER_BASE_URL)
+    || trim(env.DEEPSEEK_BASE_URL)
+    || (usesOpenRouter ? 'https://openrouter.ai/api/v1' : 'https://api.deepseek.com');
+  const aiModel = trim(env.OPENROUTER_MODEL)
+    || trim(env.DEEPSEEK_MODEL)
+    || (usesOpenRouter ? 'openrouter/free' : 'deepseek-chat');
 
   return {
     raw: { ...env },
@@ -88,11 +98,15 @@ export function createConfig(env: EnvLike = process.env): AppConfig {
     accessRanks: parseCsv(env.ACCESS_RANKS),
     ownerIds: parseCsv(env.BOT_OWNER_IDS),
     aiEnabled: parseBoolean(env.AI_ENABLED),
-    aiModel: trim(env.DEEPSEEK_API_KEY) ? (trim(env.DEEPSEEK_MODEL) || 'deepseek-chat') : 'offline',
+    aiModel: aiApiKey ? aiModel : 'offline',
+    aiTimeoutMs: parseNumber(env.AI_TIMEOUT_MS, 30000, { min: 1000 }),
     openAiApiKey: '',
-    deepSeekApiKey: trim(env.DEEPSEEK_API_KEY),
-    deepSeekBaseUrl: trim(env.DEEPSEEK_BASE_URL) || 'https://api.deepseek.com',
-    deepSeekModel: trim(env.DEEPSEEK_MODEL) || 'deepseek-chat',
+    openRouterApiKey,
+    openRouterBaseUrl: trim(env.OPENROUTER_BASE_URL) || (usesOpenRouter ? aiBaseUrl : ''),
+    openRouterModel: trim(env.OPENROUTER_MODEL) || (usesOpenRouter ? aiModel : ''),
+    deepSeekApiKey: legacyDeepSeekApiKey,
+    deepSeekBaseUrl: trim(env.DEEPSEEK_BASE_URL) || (!usesOpenRouter ? aiBaseUrl : ''),
+    deepSeekModel: trim(env.DEEPSEEK_MODEL) || (!usesOpenRouter ? aiModel : 'deepseek-chat'),
     supportTickets: {
       categoryId: trim(env.TICKET_CATEGORY_ID),
       supportRoleId: trim(env.TICKET_SUPPORT_ROLE_ID),
@@ -342,8 +356,10 @@ export function validateConfig(config: AppConfig): ValidationResult {
 
   if (!config.aiEnabled) {
     notes.push('AI отключён через AI_ENABLED=false.');
+  } else if (config.openRouterApiKey) {
+    notes.push(`AI использует OpenRouter (${config.openRouterModel || config.aiModel}).`);
   } else if (config.deepSeekApiKey) {
-    notes.push(`AI использует DeepSeek (${config.deepSeekModel}).`);
+    notes.push(`AI использует DeepSeek (${config.deepSeekModel || config.aiModel}).`);
   } else {
     notes.push('AI работает локально в оффлайн-режиме без внешнего API.');
   }
@@ -403,7 +419,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- panel message id: ${config.messageId || 'auto-create'}`,
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,
-    `- AI: ${config.aiEnabled ? (config.deepSeekApiKey ? `DeepSeek enabled (${config.deepSeekModel})` : 'offline helper enabled') : 'disabled'}`,
+    `- AI: ${config.aiEnabled ? (config.openRouterApiKey ? `OpenRouter enabled (${config.openRouterModel || config.aiModel})` : (config.deepSeekApiKey ? `DeepSeek enabled (${config.deepSeekModel || config.aiModel})` : 'offline helper enabled')) : 'disabled'}`,
     `- auto ranks: ${autoRanksSummary}`,
     `- leak guard: ${leakGuardSummary}`,
     `- scam guard: ${scamGuardSummary}`,

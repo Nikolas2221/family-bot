@@ -91,7 +91,7 @@ export function createDeepSeekService(options: DeepSeekOptions) {
 export function createOpenRouterChatCompletion(options: DeepSeekOptions) {
   const apiKey = String(options.apiKey || '').trim();
   const baseUrl = cleanBaseUrl(options.baseUrl || 'https://openrouter.ai/api/v1');
-  const model = options.model || 'openai/gpt-4o-mini';
+  const model = options.model || 'openrouter/free';
   const timeoutMs = options.timeoutMs || 10_000;
   const fetchImpl = options.fetchImpl || fetch;
   const referer = options.referer || 'https://github.com/your-repo';
@@ -137,5 +137,5 @@ export function createOpenRouterChatCompletion(options: DeepSeekOptions) {
     }
   }
 
-  return { chat };
+  return { enabled: Boolean(apiKey), model, chat };
 }

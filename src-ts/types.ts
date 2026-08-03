@@ -142,7 +142,11 @@ export interface AppConfig {
   ownerIds: string[];
   aiEnabled: boolean;
   aiModel: string;
+  aiTimeoutMs: number;
   openAiApiKey: string;
+  openRouterApiKey: string;
+  openRouterBaseUrl: string;
+  openRouterModel: string;
   deepSeekApiKey: string;
   deepSeekBaseUrl: string;
   deepSeekModel: string;

@@ -51,9 +51,30 @@ async function testAdvisorFlagsAfkRisk() {
   assert.match(result, /ПРЕДУПРЕДИТЬ ОБ AFK|КИК \/ ЧИСТКА ЗА AFK/i);
 }
 
+async function testExternalAiChatIsUsedWhenConfigured() {
+  const calls = [];
+  const aiService = createAIService({
+    enabled: true,
+    chatCompletion: {
+      enabled: true,
+      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      async chat(messages) {
+        calls.push(messages);
+        return 'Ответ от OpenRouter модели';
+      }
+    }
+  });
+
+  const answer = await aiService.aiText('system', 'question');
+  assert.equal(answer, 'Ответ от OpenRouter модели');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1].content, 'question');
+}
+
 async function main() {
   await runTest('ai advisor suggests promotion for strong member', testAdvisorSuggestsPromotionForStrongMember);
   await runTest('ai advisor flags afk risk', testAdvisorFlagsAfkRisk);
+  await runTest('external ai chat is used when configured', testExternalAiChatIsUsedWhenConfigured);
   console.log('ALL AI TESTS PASSED');
 }
 

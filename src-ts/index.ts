@@ -22,7 +22,7 @@ const { buildDiscordOnlineMembersText } = require('./services/online-members');
 const { createTicketService } = require('./services/tickets');
 const { canSendDiscordAnnouncement, createAnnouncementService } = require('./services/announcements');
 const { createLawService } = require('./services/law');
-const { createDeepSeekService } = require('./services/deepseek');
+const { createDeepSeekService, createOpenRouterChatCompletion } = require('./services/deepseek');
 const { createSupportTicketService } = require('./services/support-tickets');
 const { createAfkLeaveService } = require('./services/afk-leave');
 const { createReportRequestService } = require('./services/report-requests');
@@ -135,11 +135,21 @@ const client = new Client({
 
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
-const aiService = createAIService({ enabled: AI_ENABLED });
+const aiApiKey = config.openRouterApiKey || config.deepSeekApiKey;
+const aiBaseUrl = config.openRouterBaseUrl || config.deepSeekBaseUrl;
+const aiModel = config.openRouterModel || config.deepSeekModel;
+const aiChatCompletion = createOpenRouterChatCompletion({
+  apiKey: AI_ENABLED ? aiApiKey : '',
+  baseUrl: aiBaseUrl,
+  model: aiModel,
+  timeoutMs: config.aiTimeoutMs
+});
+const aiService = createAIService({ enabled: AI_ENABLED, chatCompletion: aiChatCompletion });
 const deepSeekService = createDeepSeekService({
-  apiKey: AI_ENABLED ? config.deepSeekApiKey : '',
-  baseUrl: config.deepSeekBaseUrl,
-  model: config.deepSeekModel
+  apiKey: AI_ENABLED ? aiApiKey : '',
+  baseUrl: aiBaseUrl,
+  model: aiModel,
+  timeoutMs: config.aiTimeoutMs
 });
 const lawService = createLawService(deepSeekService.enabled ? deepSeekService : null);
 const supportTicketService = createSupportTicketService({ storage, client, config: config.supportTickets });

@@ -1,6 +1,20 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.75': {
+    added: [
+      'добавлена полноценная поддержка OpenRouter AI через OPENROUTER_API_KEY, OPENROUTER_BASE_URL и OPENROUTER_MODEL',
+      'в .env.example добавлен пример выбранной бесплатной модели nvidia/nemotron-3-ultra-550b-a55b:free'
+    ],
+    updated: [
+      '/ai, AI-анализ заявок и AI-советник участников теперь используют выбранную модель из Railway',
+      'старые DEEPSEEK_* переменные оставлены как совместимость, но OpenRouter становится основным способом подключения AI'
+    ],
+    fixed: [
+      'AI-советник больше не прибит к openai/gpt-4o-mini и берёт модель из OPENROUTER_MODEL',
+      'при ошибке внешней AI-модели бот не падает и возвращается к локальному fallback-анализу'
+    ]
+  },
   '1.0.74': {
     added: [
       'добавлен runtime-тест, который проверяет, что модалки «Добавить баллы» и «Выдать выговор» реально сохраняют действие'

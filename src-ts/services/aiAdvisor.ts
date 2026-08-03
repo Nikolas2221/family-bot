@@ -93,15 +93,24 @@ export async function callAiAdvisor(
   playerData: PlayerData,
   question?: string
 ): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY || '';
+  const apiKey = process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || '';
   if (!apiKey) {
     return '❌ API-ключ OpenRouter не настроен. Установи переменную OPENROUTER_API_KEY.';
   }
+  const usesOpenRouter = Boolean(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_MODEL || process.env.OPENROUTER_BASE_URL);
+  const baseUrl = process.env.OPENROUTER_BASE_URL
+    || process.env.DEEPSEEK_BASE_URL
+    || (usesOpenRouter ? 'https://openrouter.ai/api/v1' : 'https://api.deepseek.com');
+  const model = process.env.OPENROUTER_MODEL
+    || process.env.DEEPSEEK_MODEL
+    || (usesOpenRouter ? 'openrouter/free' : 'deepseek-chat');
+  const timeoutMs = Math.max(1000, Number(process.env.AI_TIMEOUT_MS) || 30000);
 
   const completion = createOpenRouterChatCompletion({
     apiKey,
-    model: 'openai/gpt-4o-mini',
-    timeoutMs: 30000
+    baseUrl,
+    model,
+    timeoutMs
   });
 
   const dataText = formatPlayerDataForAI(playerData);

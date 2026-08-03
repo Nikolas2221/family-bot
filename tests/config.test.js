@@ -94,6 +94,26 @@ async function testDeepSeekConfigKeepsKeySecret() {
   assert.doesNotMatch(summary, /deepseek-secret/);
 }
 
+async function testOpenRouterConfigKeepsKeySecretAndUsesSelectedModel() {
+  const config = createConfig({
+    TOKEN: 'token',
+    GUILD_ID: '123456789012345678',
+    CHANNEL_ID: '123456789012345679',
+    AI_ENABLED: 'true',
+    OPENROUTER_API_KEY: 'openrouter-secret',
+    OPENROUTER_MODEL: 'nvidia/nemotron-3-ultra-550b-a55b:free'
+  });
+  const validation = validateConfig(config);
+  const summary = summarizeConfig(config).join('\n');
+
+  assert.equal(config.openRouterModel, 'nvidia/nemotron-3-ultra-550b-a55b:free');
+  assert.equal(config.aiModel, 'nvidia/nemotron-3-ultra-550b-a55b:free');
+  assert.equal(config.openRouterBaseUrl, 'https://openrouter.ai/api/v1');
+  assert.match(validation.notes.join('\n'), /OpenRouter/);
+  assert.match(summary, /OpenRouter enabled \(nvidia\/nemotron-3-ultra-550b-a55b:free\)/);
+  assert.doesNotMatch(summary, /openrouter-secret/);
+}
+
 async function testAutoRanksThresholdValidation() {
   const config = createConfig({
     TOKEN: 'token',
@@ -206,6 +226,7 @@ async function main() {
   await runTest('config reads storage file path from env', testStorageFileEnvIsReadFromConfig);
   await runTest('application default role ignores legacy newbie role', testApplicationDefaultRoleIgnoresLegacyNewbieRole);
   await runTest('DeepSeek config keeps API key secret', testDeepSeekConfigKeepsKeySecret);
+  await runTest('OpenRouter config keeps key secret and uses selected model', testOpenRouterConfigKeepsKeySecretAndUsesSelectedModel);
   await runTest('config validation catches invalid auto rank thresholds', testAutoRanksThresholdValidation);
   await runTest('Telegram config is paired and token stays secret', testTelegramConfigIsSafeAndRequiresBothValues);
   await runTest('support ticket config is parsed', testSupportTicketConfig);

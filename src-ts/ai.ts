@@ -5,6 +5,12 @@ import type {
   MemberRecommendationInput
 } from './types';
 
+type ChatCompletionLike = {
+  enabled?: boolean;
+  model?: string;
+  chat(messages: Array<{ role: string; content: string }>): Promise<string | null>;
+};
+
 const POSITIVE_KEYWORDS = [
   'актив',
   'онлайн',
@@ -32,6 +38,50 @@ const NEGATIVE_KEYWORDS = [
 
 function normalizeText(value: unknown): string {
   return String(value || '').trim();
+}
+
+function formatApplicationForModel(application: ApplicationAnalysisInput): string {
+  return [
+    `Кандидат: ${normalizeText(application.discordUsername) || normalizeText(application.discordId) || normalizeText(application.userId) || 'не указан'}`,
+    `Discord ID: ${normalizeText(application.discordId || application.userId) || 'не указан'}`,
+    `Игровой никнейм / static: ${normalizeText(application.nickname) || 'не указан'}`,
+    `Возраст / уровень: ${normalizeText(application.age || application.level) || 'не указан'}`,
+    `Кто пригласил: ${normalizeText(application.inviter) || 'не указано'}`,
+    `Откуда узнал: ${normalizeText(application.discovery) || 'не указано'}`,
+    `О себе: ${normalizeText(application.about || application.text) || 'не указано'}`,
+    `Ценности семьи: ${normalizeText(application.values) || 'не указано'}`,
+    `Направление развития: ${normalizeText(application.development) || 'не указано'}`,
+    `Сильные стороны: ${normalizeText(application.strengths) || 'не указано'}`
+  ].join('\n');
+}
+
+function formatMemberForModel(profile: MemberRecommendationInput): string {
+  return [
+    `Участник: ${normalizeText(profile.displayName) || 'без имени'}`,
+    `Текущая роль: ${normalizeText(profile.currentRoleName) || 'нет роли'}`,
+    `Цель авто-ранга: ${normalizeText(profile.autoTargetRoleName) || 'нет'}`,
+    `Актив-очки: ${Math.max(0, Number(profile.activityScore) || 0)}`,
+    `Баллы/репутация: ${Math.max(0, Number(profile.points) || 0)}/100`,
+    `Выговоры: ${Math.max(0, Number(profile.warns) || 0)}/6`,
+    `Похвалы: ${Math.max(0, Number(profile.commends) || 0)}`,
+    `Сообщения: ${Math.max(0, Number(profile.messageCount) || 0)}`,
+    `Голосовые минуты: ${Math.max(0, Number(profile.voiceMinutes) || 0)}`,
+    `Последняя активность timestamp: ${Number(profile.lastSeenAt) || 0}`
+  ].join('\n');
+}
+
+async function safeChat(
+  chatCompletion: ChatCompletionLike | undefined,
+  messages: Array<{ role: string; content: string }>
+): Promise<string | null> {
+  if (!chatCompletion?.enabled) return null;
+  try {
+    const result = await chatCompletion.chat(messages);
+    return normalizeText(result) || null;
+  } catch (error) {
+    console.warn('External AI request failed, falling back to local helper:', error);
+    return null;
+  }
 }
 
 function scoreApplication(application: ApplicationAnalysisInput) {
@@ -303,11 +353,26 @@ function buildMemberRecommendation(profile: MemberRecommendationInput): string {
   ].join('\n');
 }
 
-export function createAIService({ enabled }: { enabled: boolean }): AIService {
+export function createAIService({
+  enabled,
+  chatCompletion
+}: {
+  enabled: boolean;
+  chatCompletion?: ChatCompletionLike | null;
+}): AIService {
   async function aiText(_systemPrompt: string, userPrompt: string): Promise<string> {
     if (!enabled) {
       throw new Error(copy.ai.disabled);
     }
+
+    const external = await safeChat(chatCompletion || undefined, [
+      {
+        role: 'system',
+        content: _systemPrompt || 'Ты помощник Discord-семьи. Отвечай по-русски, понятно, кратко и по делу. Не раскрывай токены, секреты и приватные данные.'
+      },
+      { role: 'user', content: userPrompt }
+    ]);
+    if (external) return external;
 
     return buildOfflineReply(userPrompt);
   }
@@ -317,6 +382,21 @@ export function createAIService({ enabled }: { enabled: boolean }): AIService {
       throw new Error(copy.ai.disabled);
     }
 
+    const external = await safeChat(chatCompletion || undefined, [
+      {
+        role: 'system',
+        content: [
+          'Ты AI-советник Старшего состава Discord-семьи.',
+          'Проанализируй заявку кандидата по-русски.',
+          'Не принимай финальное решение вместо администрации.',
+          'Структура ответа: оглавление, общая информация, сильные стороны, возможные риски, совпадение с ценностями, рекомендация, итог.',
+          'Пиши аккуратно, без технического ID заявки, кандидат должен быть указан как Discord mention/name, если он есть.'
+        ].join(' ')
+      },
+      { role: 'user', content: `Данные заявки:\n${formatApplicationForModel(application)}` }
+    ]);
+    if (external) return external;
+
     return buildApplicationAnalysis(application);
   }
 
@@ -324,6 +404,20 @@ export function createAIService({ enabled }: { enabled: boolean }): AIService {
     if (!enabled) {
       throw new Error(copy.ai.disabled);
     }
+
+    const external = await safeChat(chatCompletion || undefined, [
+      {
+        role: 'system',
+        content: [
+          'Ты AI-советник по участникам Discord-семьи.',
+          'На основе статистики дай полезный разбор участника: активность, риски, выговоры, баллы, голос, сообщения и рекомендацию для старшего состава.',
+          'Не выдумывай факты, используй только переданные данные.',
+          'Пиши по-русски, структурно и без лишней воды.'
+        ].join(' ')
+      },
+      { role: 'user', content: `Данные участника:\n${formatMemberForModel(profile)}` }
+    ]);
+    if (external) return external;
 
     return buildMemberRecommendation(profile);
   }
