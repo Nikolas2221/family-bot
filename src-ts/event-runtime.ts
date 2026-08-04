@@ -65,6 +65,9 @@ interface ChannelLike {
   send?(payload: Record<string, unknown>): Promise<NoticeLike | null>;
   sendTyping?(): Promise<unknown>;
   fetchWebhooks?(): Promise<any>;
+  messages?: {
+    fetch(options?: Record<string, unknown>): Promise<any>;
+  };
   permissionOverwrites?: {
     edit(target: unknown, overwrite: Record<string, boolean | null>, options?: Record<string, unknown>): Promise<unknown>;
   };
@@ -301,6 +304,9 @@ interface WelcomeSettingsLike {
 interface EventRuntimeOptions {
   client: {
     user?: UserLike | null;
+    channels?: {
+      fetch(channelId: string): Promise<ChannelLike | null>;
+    };
     removeAllListeners(event: string): unknown;
     on(event: string, listener: (...args: any[]) => unknown): unknown;
   };
@@ -812,6 +818,114 @@ function findDiscordRule(prompt: string): DiscordRuleMatch | null {
   return match ? { title: match.title, detail: match.detail, defaultMuteMinutes: match.defaultMuteMinutes } : null;
 }
 
+function buildDiscordRulesSummary(): string {
+  return [
+    '⚖️ Кратко по правилам Discord:',
+    '',
+    ...DISCORD_RULES.map((rule, index) => `${index + 1}. **${rule.title}** — ${rule.detail}. Наказание: мут от ${rule.defaultMuteMinutes >= 1440 ? `${Math.round(rule.defaultMuteMinutes / 1440)} дн.` : `${rule.defaultMuteMinutes} мин.`}, по решению администрации возможны кик/бан.`),
+    '',
+    'Решение по наказанию принимает администрация. Бот может выдать/снять мут только по команде администратора.'
+  ].join('\n');
+}
+
+function parseMentionedChannelId(content: string): string {
+  const match = String(content || '').match(/<#(\d{16,20})>/u);
+  return match?.[1] || '';
+}
+
+function looksLikeRulesQuestion(prompt: string): boolean {
+  const text = String(prompt || '').toLowerCase();
+  const hasChannelMention = Boolean(parseMentionedChannelId(prompt));
+  return (
+    text.includes('правил')
+    || text.includes('rules')
+    || text.includes('наруш')
+    || (hasChannelMention && (text.includes('тут') || text.includes('здесь') || text.length <= 80))
+  );
+}
+
+function collectionValues<T = any>(value: any): T[] {
+  if (!value) return [];
+  if (typeof value.values === 'function') return Array.from(value.values());
+  if (Array.isArray(value)) return value;
+  return [];
+}
+
+function messageTextForRules(message: any): string {
+  const embedText = Array.isArray(message?.embeds)
+    ? message.embeds.flatMap((embed: any) => [
+      embed?.title,
+      embed?.description,
+      ...(Array.isArray(embed?.fields) ? embed.fields.flatMap((field: any) => [field?.name, field?.value]) : [])
+    ])
+    : [];
+  return [message?.content, ...embedText].filter(Boolean).join('\n').trim();
+}
+
+async function readMentionedRulesChannel(
+  prompt: string,
+  client: EventRuntimeOptions['client']
+): Promise<{ channelId: string; text: string; error: string }> {
+  const channelId = parseMentionedChannelId(prompt);
+  if (!channelId) return { channelId: '', text: '', error: '' };
+  try {
+    const channel = await client.channels?.fetch(channelId).catch(() => null);
+    if (!channel?.messages?.fetch) return { channelId, text: '', error: 'канал не найден или бот не может читать сообщения' };
+    const messages = await channel.messages.fetch({ limit: 10 }).catch((error: any) => {
+      throw error;
+    });
+    const text = collectionValues(messages)
+      .map(messageTextForRules)
+      .filter(Boolean)
+      .join('\n\n')
+      .slice(0, 6000);
+    return { channelId, text, error: text ? '' : 'в последних сообщениях канала нет текста правил' };
+  } catch (error: any) {
+    return { channelId, text: '', error: String(error?.message || error || 'нет доступа к каналу') };
+  }
+}
+
+async function handleRulesQuestion(
+  message: MessageLike,
+  prompt: string,
+  options: Pick<EventRuntimeOptions, 'client' | 'aiService'>
+): Promise<boolean> {
+  if (!looksLikeRulesQuestion(prompt)) return false;
+
+  const channelContext = await readMentionedRulesChannel(prompt, options.client);
+  const fallback = buildDiscordRulesSummary();
+  let answer = fallback;
+
+  if (channelContext.text && options.aiService) {
+    const systemPrompt = [
+      'Ты помощник Discord-сервера. По тексту правил составь краткую понятную сводку.',
+      'Обязательно укажи, что нельзя нарушать, и какие последствия возможны: предупреждение, мут, кик или бан по решению администрации.',
+      'Не выдумывай правил, которых нет в тексте. Если в тексте есть токсичные исключения, не повторяй их как допустимые.',
+      'Ответь на русском, структурой до 1800 символов.'
+    ].join('\n');
+    const userPrompt = [
+      `Вопрос пользователя: ${prompt}`,
+      '',
+      `Текст из канала <#${channelContext.channelId}>:`,
+      channelContext.text
+    ].join('\n');
+    const aiAnswer = await options.aiService.aiText(systemPrompt, userPrompt).catch(() => '');
+    answer = String(aiAnswer || '').trim() || fallback;
+  } else if (channelContext.error) {
+    answer = [
+      `Не смог прочитать <#${channelContext.channelId}>: ${channelContext.error}.`,
+      '',
+      fallback
+    ].join('\n');
+  }
+
+  await message.channel.send?.({
+    content: `<@${message.author.id}>\n${answer}`.slice(0, 1900),
+    allowedMentions: { parse: [], users: [message.author.id] }
+  }).catch(() => null);
+  return true;
+}
+
 function parseMuteDurationMs(prompt: string, fallbackMinutes = 60): number {
   const match = String(prompt || '').toLowerCase().match(/(\d{1,4})\s*(мин|минут|m|ч|час|часа|h)\b/u);
   if (!match) return Math.max(1, fallbackMinutes) * 60 * 1000;
@@ -1079,6 +1193,10 @@ async function handleAiMentionMessage(
   }
 
   if (await handleNaturalAdminCommand(message, prompt, options)) {
+    return true;
+  }
+
+  if (await handleRulesQuestion(message, prompt, options)) {
     return true;
   }
 

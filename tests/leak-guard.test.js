@@ -59,6 +59,20 @@ async function main() {
   const naturalAnnouncements = [];
   const client = {
     user: { id: 'bot-1', bot: true },
+    channels: {
+      fetch: async id => (id === '333333333333333333'
+        ? {
+          id,
+          messages: {
+            fetch: async () => new Map([
+              ['rules-message', {
+                content: 'Правила: запрещены оскорбления, флуд, реклама и слив личных данных. За нарушение мут, кик или бан.'
+              }]
+            ])
+          }
+        }
+        : null)
+    },
     removeAllListeners(name) {
       listeners.delete(name);
     },
@@ -191,6 +205,39 @@ async function main() {
     delete: async () => {}
   });
   assert.equal(aiReplies[0], '<@user-1> AI reply: подскажи текст');
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4rules',
+    content: '<@bot-1> напомни какие правила сервера нельзя нарушать и что будет за нарушение',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.match(aiReplies.at(-1), /Кратко по правилам Discord/u);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4rules-channel',
+    content: '<@bot-1> вот тут <#333333333333333333>',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.match(aiReplies.at(-1), /AI reply:/u);
+  assert.match(aiReplies.at(-1), /запрещены оскорбления/u);
 
   await listeners.get('messageCreate')({
     ...baseMessage,
