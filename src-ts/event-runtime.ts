@@ -32,7 +32,7 @@ interface MemberLike {
   };
   ban?(options?: Record<string, unknown> | string): Promise<unknown>;
   kick?(reason?: string): Promise<unknown>;
-  timeout?(duration: number, reason?: string): Promise<unknown>;
+  timeout?(duration: number | null, reason?: string): Promise<unknown>;
 }
 
 interface GuildLike {
@@ -828,8 +828,10 @@ function formatDurationRu(durationMs: number): string {
   return `${minutes} мин.`;
 }
 
-function parseNaturalModerationAction(prompt: string): 'ban' | 'kick' | 'mute' | '' {
+function parseNaturalModerationAction(prompt: string): 'ban' | 'kick' | 'mute' | 'unmute' | '' {
   const text = String(prompt || '').toLowerCase();
+  if (/(^|\s)(размуть|размут|unmute)(\s|$)/u.test(text)) return 'unmute';
+  if (/(сними|снять|убери|убрать)\s+(мут|timeout|таймаут|наказание)/u.test(text)) return 'unmute';
   if (/(^|\s)(забань|бан|ban)(\s|$)/u.test(text)) return 'ban';
   if (/(^|\s)(кикни|кик|kick)(\s|$)/u.test(text)) return 'kick';
   if (/(^|\s)(замуть|мут|mute|timeout|накажи|наказание)(\s|$)/u.test(text)) return 'mute';
@@ -965,7 +967,7 @@ async function handleNaturalAdminCommand(
     const targetId = parseMentionedUserId(message.content, botId);
     if (!targetId) {
       await message.channel.send?.({
-        content: `<@${message.author.id}>, укажи участника: например, <@${botId}> замуть @user 60 мин.`,
+        content: `<@${message.author.id}>, укажи участника: например, <@${botId}> замуть @user 60 мин. или <@${botId}> размуть @user.`,
         allowedMentions: { parse: [], users: [message.author.id] }
       }).catch(() => null);
       return true;
@@ -990,11 +992,19 @@ async function handleNaturalAdminCommand(
       ok = await targetMember.ban?.({ reason }).then(() => true).catch(() => false) || false;
     } else if (action === 'kick') {
       ok = await targetMember.kick?.(reason).then(() => true).catch(() => false) || false;
+    } else if (action === 'unmute') {
+      ok = await targetMember.timeout?.(null, reason).then(() => true).catch(() => false) || false;
     } else {
       ok = await targetMember.timeout?.(durationMs, reason).then(() => true).catch(() => false) || false;
     }
 
-    const actionLabel = action === 'ban' ? 'забанен' : action === 'kick' ? 'кикнут' : `получил мут на ${formatDurationRu(durationMs)}`;
+    const actionLabel = action === 'ban'
+      ? 'забанен'
+      : action === 'kick'
+        ? 'кикнут'
+        : action === 'unmute'
+          ? 'размучен'
+          : `получил мут на ${formatDurationRu(durationMs)}`;
     const ruleLine = rule ? `\n⚖️ Правило: ${rule.title}\nПричина: ${rule.detail}` : '';
     await message.channel.send?.({
       content: ok

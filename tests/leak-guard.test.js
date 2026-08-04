@@ -215,6 +215,27 @@ async function main() {
 
   await listeners.get('messageCreate')({
     ...baseMessage,
+    id: 'message-4unmute',
+    content: '<@bot-1> размуть <@222222222222222222>',
+    mentions: { users: { size: 2, has: id => id === 'bot-1' || id === targetMember.id } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(naturalTimeoutMs, null);
+  assert.match(aiReplies.at(-1), /размучен/);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
     id: 'message-4b',
     content: '<@bot-1> сделай красивое оповещение о собрании завтра в 8 вечера',
     mentions: { users: { size: 1, has: id => id === 'bot-1' } },
