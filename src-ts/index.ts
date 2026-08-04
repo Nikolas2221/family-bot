@@ -1572,6 +1572,8 @@ registerEventRuntime({
     maxChars: config.aiMentionMaxChars
   },
   aiService,
+  announcementService,
+  familyAnnouncementRoleId: config.applicationDefaultRole,
   leakGuard: LEAK_GUARD,
   scamGuard: SCAM_GUARD,
   channelGuard: CHANNEL_GUARD,

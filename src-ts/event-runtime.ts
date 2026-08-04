@@ -23,10 +23,15 @@ interface MemberLike {
   user?: UserLike | null;
   guild: GuildLike;
   moderatable?: boolean;
+  permissions?: {
+    has(permission: unknown): boolean;
+  } | null;
   roles: {
     add(role: RoleLike, reason?: string): Promise<unknown>;
     remove(role: RoleLike, reason?: string): Promise<unknown>;
   };
+  ban?(options?: Record<string, unknown> | string): Promise<unknown>;
+  kick?(reason?: string): Promise<unknown>;
   timeout?(duration: number, reason?: string): Promise<unknown>;
 }
 
@@ -307,6 +312,10 @@ interface EventRuntimeOptions {
   aiService?: {
     aiText(systemPrompt: string, userPrompt: string): Promise<string>;
   } | null;
+  announcementService?: {
+    sendTelegramFromDiscord(input: Record<string, any>): Promise<{ ok: boolean; code?: string; detail?: string }>;
+  } | null;
+  familyAnnouncementRoleId?: string;
   leakGuard: {
     enabled: boolean;
   };
@@ -710,10 +719,236 @@ async function handleAiSoftConflict(
   }).catch(() => null);
 }
 
+function isAdminMember(member: MemberLike | null | undefined): boolean {
+  return Boolean(member?.permissions?.has?.(PermissionFlagsBits.Administrator));
+}
+
+function parseMentionedUserId(content: string, botId: string): string {
+  const matches = Array.from(String(content || '').matchAll(/<@!?(\d{16,20})>|\b(\d{16,20})\b/gu));
+  for (const match of matches) {
+    const id = match[1] || match[2] || '';
+    if (id && id !== botId) return id;
+  }
+  return '';
+}
+
+type DiscordRuleMatch = {
+  title: string;
+  detail: string;
+  defaultMuteMinutes: number;
+};
+
+const DISCORD_RULES: Array<{
+  title: string;
+  detail: string;
+  defaultMuteMinutes: number;
+  patterns: RegExp[];
+}> = [
+  {
+    title: 'Уважение и недопустимость конфликтов',
+    detail: 'упоминание родителей, оскорбления и разжигание конфликтов запрещены',
+    defaultMuteMinutes: 120,
+    patterns: [/родител/u, /мам[ауеы]?/u, /бат[яюи]?/u, /конфликт/u, /провокац/u]
+  },
+  {
+    title: 'Оскорбления и нарушение уважения',
+    detail: 'прямые и скрытые оскорбления участников запрещены',
+    defaultMuteMinutes: 60,
+    patterns: [/оскорб/u, /униж/u, /сарказм/u, /инсинуац/u]
+  },
+  {
+    title: 'Запрет на распространение неподходящего контента',
+    detail: 'эротический, порнографический, грубый, жестокий и экстремистский контент запрещён',
+    defaultMuteMinutes: 1440,
+    patterns: [/эрот/u, /порн/u, /nsfw/u, /жесток/u, /насил/u, /экстрем/u]
+  },
+  {
+    title: 'Запрет на чрезмерный флуд',
+    detail: 'чрезмерный флуд мешает общению и запрещён',
+    defaultMuteMinutes: 30,
+    patterns: [/флуд/u, /спам/u, /flood/u, /spam/u]
+  },
+  {
+    title: 'Запрет на дискриминацию',
+    detail: 'дискриминация по любому признаку запрещена',
+    defaultMuteMinutes: 1440,
+    patterns: [/дискрим/u, /расов/u, /национал/u, /религи/u, /инвалид/u, /гомофоб/u]
+  },
+  {
+    title: 'Запрет на рекламу и сторонние ссылки',
+    detail: 'реклама сторонних проектов, сайтов и Discord-каналов без одобрения запрещена',
+    defaultMuteMinutes: 1440,
+    patterns: [/реклам/u, /сторонн/u, /discord\.gg/u, /дискорд\.гг/u, /инвайт/u]
+  },
+  {
+    title: 'Запрет на разглашение персональной информации',
+    detail: 'слив личных данных без разрешения владельца запрещён',
+    defaultMuteMinutes: 1440,
+    patterns: [/персональн/u, /личн[а-я]* данн/u, /докс/u, /деанон/u, /слив/u]
+  },
+  {
+    title: 'Запрет на угрозы и политические конфликты',
+    detail: 'угрозы в реальной жизни и провокационные политические темы запрещены',
+    defaultMuteMinutes: 1440,
+    patterns: [/угроз/u, /полит/u, /войн/u, /реал/u]
+  },
+  {
+    title: 'Запрет на ввод в заблуждение',
+    detail: 'нельзя выдавать себя за модератора и вводить участников в заблуждение',
+    defaultMuteMinutes: 720,
+    patterns: [/модератор/u, /админ/u, /выда[её]т себя/u, /обман/u, /заблужден/u]
+  }
+];
+
+function findDiscordRule(prompt: string): DiscordRuleMatch | null {
+  const text = String(prompt || '').toLowerCase();
+  const match = DISCORD_RULES.find(rule => rule.patterns.some(pattern => pattern.test(text)));
+  return match ? { title: match.title, detail: match.detail, defaultMuteMinutes: match.defaultMuteMinutes } : null;
+}
+
+function parseMuteDurationMs(prompt: string, fallbackMinutes = 60): number {
+  const match = String(prompt || '').toLowerCase().match(/(\d{1,4})\s*(мин|минут|m|ч|час|часа|h)\b/u);
+  if (!match) return Math.max(1, fallbackMinutes) * 60 * 1000;
+  const value = Math.max(1, Number(match[1]) || 1);
+  const unit = match[2];
+  const minutes = unit.startsWith('ч') || unit === 'h' ? value * 60 : value;
+  return Math.min(minutes, 28 * 24 * 60) * 60 * 1000;
+}
+
+function formatDurationRu(durationMs: number): string {
+  const minutes = Math.max(1, Math.round(durationMs / 60000));
+  if (minutes % 1440 === 0) return `${minutes / 1440} дн.`;
+  if (minutes % 60 === 0) return `${minutes / 60} ч.`;
+  return `${minutes} мин.`;
+}
+
+function parseNaturalModerationAction(prompt: string): 'ban' | 'kick' | 'mute' | '' {
+  const text = String(prompt || '').toLowerCase();
+  if (/(^|\s)(забань|бан|ban)(\s|$)/u.test(text)) return 'ban';
+  if (/(^|\s)(кикни|кик|kick)(\s|$)/u.test(text)) return 'kick';
+  if (/(^|\s)(замуть|мут|mute|timeout|накажи|наказание)(\s|$)/u.test(text)) return 'mute';
+  if (/(нарушил|нарушение|получил мут|выдай мут)/u.test(text) && findDiscordRule(text)) return 'mute';
+  return '';
+}
+
+function looksLikeAnnouncementRequest(prompt: string): boolean {
+  const text = String(prompt || '').toLowerCase();
+  return (
+    (text.includes('оповещ') || text.includes('объяв') || text.includes('анонс') || text.includes('собрани'))
+    && !parseNaturalModerationAction(text)
+  );
+}
+
+function cleanNaturalAnnouncementText(prompt: string): string {
+  return String(prompt || '')
+    .replace(/^(сделай|создай|отправь|напиши)\s+/iu, '')
+    .replace(/^(оповещение|объявление|анонс)\s+/iu, '')
+    .trim()
+    .slice(0, 2500);
+}
+
+async function handleNaturalAdminCommand(
+  message: MessageLike,
+  prompt: string,
+  options: Pick<EventRuntimeOptions, 'client' | 'announcementService' | 'familyAnnouncementRoleId'>
+): Promise<boolean> {
+  const botId = options.client.user?.id || '';
+  const action = parseNaturalModerationAction(prompt);
+  const wantsAnnouncement = looksLikeAnnouncementRequest(prompt);
+  if (!action && !wantsAnnouncement) return false;
+
+  if (!isAdminMember(message.member)) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, эту AI-команду может выполнять только участник с правом Administrator.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  if (action) {
+    const targetId = parseMentionedUserId(message.content, botId);
+    if (!targetId) {
+      await message.channel.send?.({
+        content: `<@${message.author.id}>, укажи участника: например, <@${botId}> замуть @user 60 мин.`,
+        allowedMentions: { parse: [], users: [message.author.id] }
+      }).catch(() => null);
+      return true;
+    }
+
+    const targetMember = await message.guild?.members.fetch(targetId).catch(() => null);
+    if (!targetMember) {
+      await message.channel.send?.({
+        content: `<@${message.author.id}>, участник <@${targetId}> не найден на сервере.`,
+        allowedMentions: { parse: [], users: [message.author.id, targetId] }
+      }).catch(() => null);
+      return true;
+    }
+
+    const rule = findDiscordRule(prompt);
+    const durationMs = parseMuteDurationMs(prompt, rule?.defaultMuteMinutes || 60);
+    const reason = rule
+      ? `Discord rule: ${rule.title}; moderator: ${message.author.id}`
+      : `Natural AI moderation by ${message.author.id}`;
+    let ok = false;
+    if (action === 'ban') {
+      ok = await targetMember.ban?.({ reason }).then(() => true).catch(() => false) || false;
+    } else if (action === 'kick') {
+      ok = await targetMember.kick?.(reason).then(() => true).catch(() => false) || false;
+    } else {
+      ok = await targetMember.timeout?.(durationMs, reason).then(() => true).catch(() => false) || false;
+    }
+
+    const actionLabel = action === 'ban' ? 'забанен' : action === 'kick' ? 'кикнут' : `получил мут на ${formatDurationRu(durationMs)}`;
+    const ruleLine = rule ? `\n⚖️ Правило: ${rule.title}\nПричина: ${rule.detail}` : '';
+    await message.channel.send?.({
+      content: ok
+        ? `✅ <@${targetId}> ${actionLabel}.${ruleLine}\nМодератор: <@${message.author.id}>.`
+        : `❌ Не удалось выполнить действие для <@${targetId}>. Проверь права и иерархию роли бота.`,
+      allowedMentions: { parse: [], users: [message.author.id, targetId] }
+    }).catch(() => null);
+    return true;
+  }
+
+  if (!options.announcementService) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, модуль объявлений сейчас не настроен.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const text = cleanNaturalAnnouncementText(prompt);
+  if (!text) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, напиши текст оповещения. Например: собрание сегодня в 20:00, быть всем.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const result = await options.announcementService.sendTelegramFromDiscord({
+    guildId: message.guild?.id,
+    type: text.toLowerCase().includes('собрани') || text.toLowerCase().includes('ивент') ? 'event' : 'announcement',
+    text,
+    authorId: message.author.id,
+    authorName: message.author.globalName || message.author.username || message.author.id,
+    fallbackDiscordChannelId: message.channel.id,
+    pingRoleId: String(options.familyAnnouncementRoleId || '').trim()
+  });
+
+  await message.channel.send?.({
+    content: result.ok
+      ? `✅ Оповещение отправлено в канал новостей и продублировано в Telegram.`
+      : `❌ Не удалось отправить оповещение. Проверь канал новостей и Telegram-настройки.`,
+    allowedMentions: { parse: [] }
+  }).catch(() => null);
+  return true;
+}
+
 async function handleAiMentionMessage(
   message: MessageLike,
   state: Map<string, number>,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId'>
 ): Promise<boolean> {
   const botId = options.client.user?.id || '';
   if (!message.guild || message.author?.bot || !botWasMentioned(message, botId)) return false;
@@ -732,6 +967,10 @@ async function handleAiMentionMessage(
       content: `<@${message.author.id}>, напиши вопрос после упоминания. Например: <@${botId}> сделай короткое объявление о собрании в 20:00.`,
       allowedMentions: { parse: [], users: [message.author.id] }
     }).catch(() => null);
+    return true;
+  }
+
+  if (await handleNaturalAdminCommand(message, prompt, options)) {
     return true;
   }
 
@@ -788,6 +1027,8 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     client,
     aiMention,
     aiService,
+    announcementService,
+    familyAnnouncementRoleId,
     leakGuard,
     scamGuard,
     channelGuard,
@@ -941,7 +1182,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     if (await handleAiMentionMessage(message, aiMentionCooldowns, {
       client,
       aiMention,
-      aiService
+      aiService,
+      announcementService,
+      familyAnnouncementRoleId
     })) {
       return;
     }

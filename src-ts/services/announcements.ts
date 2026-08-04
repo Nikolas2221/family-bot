@@ -24,6 +24,7 @@ type AnnouncementInput = {
   authorId: string;
   authorName: string;
   fallbackDiscordChannelId?: string;
+  pingRoleId?: string;
 };
 
 type AnnouncementResultCode =
@@ -149,8 +150,10 @@ export function createAnnouncementService(options: {
   }
 
   async function publishDiscord(channel: DiscordChannelLike, input: AnnouncementInput, source: 'Telegram' | 'Discord', createdAt: string): Promise<string> {
+    const pingRoleId = String(input.pingRoleId || '').trim();
     const message = await channel.send({
       content: [
+        pingRoleId ? `<@&${pingRoleId}>` : null,
         title(input.type),
         '',
         safeText(input.text),
@@ -158,8 +161,8 @@ export function createAnnouncementService(options: {
         `Источник: ${source}`,
         `Автор: ${safeText(input.authorName, 100)}`,
         `Дата: ${new Date(createdAt).toLocaleString('ru-RU')}`
-      ].join('\n'),
-      allowedMentions: { parse: [] }
+      ].filter(line => line !== null).join('\n'),
+      allowedMentions: pingRoleId ? { parse: [], roles: [pingRoleId] } : { parse: [] }
     });
     return String(message?.id || '');
   }

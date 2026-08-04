@@ -29,7 +29,21 @@ async function main() {
     channelGuard: { enabled: true, allowedRoles: [] },
     resolveGuildSettings: () => ({ access: { applications: [], discipline: [], ranks: [] } })
   });
-  const guild = { id: 'guild-1', ownerId: 'owner-1' };
+  let naturalTimeoutMs = 0;
+  const targetMember = {
+    id: '222222222222222222',
+    guild: null,
+    roles: { add: async () => {}, remove: async () => {} },
+    timeout: async ms => { naturalTimeoutMs = ms; },
+    kick: async () => {},
+    ban: async () => {}
+  };
+  const guild = {
+    id: 'guild-1',
+    ownerId: 'owner-1',
+    members: { fetch: async id => (id === targetMember.id ? targetMember : null) }
+  };
+  targetMember.guild = guild;
   const permissions = { has: permission => permission === PermissionFlagsBits.ManageMessages };
   const roleCache = roles => ({ some: callback => roles.some(id => callback({ id })) });
 
@@ -42,6 +56,7 @@ async function main() {
   const telegramJoins = [];
   const telegramScamReports = [];
   const aiReplies = [];
+  const naturalAnnouncements = [];
   const client = {
     user: { id: 'bot-1', bot: true },
     removeAllListeners(name) {
@@ -57,6 +72,13 @@ async function main() {
     aiService: {
       aiText: async (_system, prompt) => `AI reply: ${prompt}`
     },
+    announcementService: {
+      sendTelegramFromDiscord: async payload => {
+        naturalAnnouncements.push(payload);
+        return { ok: true };
+      }
+    },
+    familyAnnouncementRoleId: 'family-role',
     leakGuard: { enabled: true },
     scamGuard: { enabled: true, timeoutMinutes: 1440 },
     channelGuard: { enabled: false },
@@ -156,7 +178,7 @@ async function main() {
   await listeners.get('messageCreate')({
     ...baseMessage,
     id: 'message-4',
-    content: '<@bot-1> сделай объявление',
+    content: '<@bot-1> подскажи текст',
     mentions: { users: { size: 1, has: id => id === 'bot-1' } },
     channel: {
       id: 'channel-1',
@@ -168,7 +190,51 @@ async function main() {
     },
     delete: async () => {}
   });
-  assert.equal(aiReplies[0], '<@user-1> AI reply: сделай объявление');
+  assert.equal(aiReplies[0], '<@user-1> AI reply: подскажи текст');
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4a',
+    content: '<@bot-1> замуть <@222222222222222222> за флуд',
+    mentions: { users: { size: 2, has: id => id === 'bot-1' || id === targetMember.id } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(naturalTimeoutMs, 30 * 60 * 1000);
+  assert.match(aiReplies.at(-1), /Запрет на чрезмерный флуд/);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4b',
+    content: '<@bot-1> сделай оповещение о собрании сегодня в 20:00',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(naturalAnnouncements.length, 1);
+  assert.equal(naturalAnnouncements[0].type, 'event');
+  assert.equal(naturalAnnouncements[0].pingRoleId, 'family-role');
+  assert.match(naturalAnnouncements[0].text, /собрании сегодня/u);
 
   await listeners.get('messageCreate')({
     ...baseMessage,
@@ -184,7 +250,7 @@ async function main() {
     },
     delete: async () => {}
   });
-  assert.match(aiReplies[1], /подожди ещё/u);
+  assert.match(aiReplies.at(-1), /подожди ещё/u);
 }
 
 if (require.main === module) {
