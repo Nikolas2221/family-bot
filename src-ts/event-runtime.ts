@@ -637,6 +637,79 @@ function buildMentionSystemPrompt(): string {
   ].join(' ');
 }
 
+function isCapabilityQuestion(value: string): boolean {
+  const text = String(value || '').toLowerCase();
+  return [
+    'что можешь',
+    'что ты можешь',
+    'что умеешь',
+    'что ты умеешь',
+    'какие команды',
+    'мои команды',
+    'что может бот',
+    'что может klaiz bot'
+  ].some(marker => text.includes(marker));
+}
+
+function buildMentionCapabilitiesText(): string {
+  return [
+    '🤖 Что я могу:',
+    '',
+    '• вести панель семьи, роли, баллы, выговоры и активность;',
+    '• принимать заявки в семью и отправлять вердикт в личные сообщения;',
+    '• дублировать заявки, AFK, объявления и события в Telegram;',
+    '• показывать /online, /aionline и списки активности;',
+    '• отвечать через AI: /ai, /aimember, /aidaily, /aistaff, /aiannounce;',
+    '• анализировать участников, заявки и риски по активности;',
+    '• делать шаблоны объявлений и событий;',
+    '• защищать сервер от scam/gift ссылок, invite-слива и опасных действий;',
+    '• создавать backup структуры Discord в GitHub;',
+    '• вести тикеты, AFK-отпуска, отчёты, медиа и Voice Room.',
+    '',
+    'Полный список доступен командой /capabilities.'
+  ].join('\n');
+}
+
+const conflictMarkers = [
+  'идиот',
+  'дурак',
+  'тупой',
+  'заткнись',
+  'клоун',
+  'оскорб',
+  'ссора',
+  'конфликт',
+  'пошел',
+  'пошёл'
+];
+
+function looksLikeConflict(value: string): boolean {
+  const text = String(value || '').toLowerCase();
+  if (text.length < 8) return false;
+  const hits = conflictMarkers.filter(marker => text.includes(marker)).length;
+  return hits >= 1 && /[!?]{2,}|[А-ЯA-Z]{8,}/u.test(String(value || ''));
+}
+
+async function handleAiSoftConflict(
+  message: MessageLike,
+  state: Map<string, number>,
+  options: Pick<EventRuntimeOptions, 'aiMention'>
+): Promise<void> {
+  if (!message.guild || message.author?.bot || !options.aiMention.enabled) return;
+  if (!looksLikeConflict(message.content)) return;
+
+  const key = `${message.guild.id}:${message.channel.id}`;
+  const cooldownMs = Math.max(60, Number(options.aiMention.cooldownSeconds) || 30) * 4 * 1000;
+  const lastAt = state.get(key) || 0;
+  if (Date.now() - lastAt < cooldownMs) return;
+  state.set(key, Date.now());
+
+  await message.channel.send?.({
+    content: '🕊️ Давайте спокойнее и по фактам. Если есть спорная ситуация, лучше оформить её через тикет или позвать старший состав.',
+    allowedMentions: { parse: [] }
+  }).catch(() => null);
+}
+
 async function handleAiMentionMessage(
   message: MessageLike,
   state: Map<string, number>,
@@ -657,6 +730,14 @@ async function handleAiMentionMessage(
   if (!prompt) {
     await message.channel.send?.({
       content: `<@${message.author.id}>, напиши вопрос после упоминания. Например: <@${botId}> сделай короткое объявление о собрании в 20:00.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  if (isCapabilityQuestion(prompt)) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>\n${buildMentionCapabilitiesText()}`.slice(0, 1800),
       allowedMentions: { parse: [], users: [message.author.id] }
     }).catch(() => null);
     return true;
@@ -743,6 +824,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   } = options;
   const welcomeInviteBatches = new Map<string, WelcomeInviteBatch>();
   const aiMentionCooldowns = new Map<string, number>();
+  const aiConflictCooldowns = new Map<string, number>();
 
   function scheduleWelcomeInvite(member: MemberLike): void {
     const guildId = member.guild.id;
@@ -854,6 +936,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
     guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
     await handleCustomTriggerMessage(message).catch(() => null);
+    await handleAiSoftConflict(message, aiConflictCooldowns, { aiMention }).catch(() => null);
 
     if (await handleAiMentionMessage(message, aiMentionCooldowns, {
       client,

@@ -28,6 +28,10 @@ const ADMIN_VISIBLE_COMMANDS = new Set([
   'serverreport',
   'activityreport',
   'aiadvisor',
+  'aimember',
+  'aidaily',
+  'aistaff',
+  'aiannounce',
   'subscription',
   'security',
   'blacklist',
@@ -862,6 +866,43 @@ export function buildCommands(): CommandJson[] {
         option.setName('question')
           .setDescription('Вопрос к AI-советнику (необязательно)')
           .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('aimember')
+      .setDescription('AI-анализ участника по активности, баллам и рискам')
+      .addUserOption(option =>
+        option.setName(copy.commands.userOptionName).setDescription(copy.commands.profileUserDescription).setRequired(true)
+      )
+      .addStringOption(option =>
+        option.setName('question')
+          .setDescription('Что именно спросить про участника')
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('aidaily')
+      .setDescription('AI-итоги дня по активности, голосу, заявкам и рискам'),
+    new SlashCommandBuilder()
+      .setName('aistaff')
+      .setDescription('Задать AI вопрос для старшего состава')
+      .addStringOption(option =>
+        option.setName(copy.commands.queryOptionName).setDescription(copy.commands.queryDescription).setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('aiannounce')
+      .setDescription('AI-шаблон объявления или события')
+      .addStringOption(option =>
+        option
+          .setName('type')
+          .setDescription('Формат текста')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Объявление', value: 'announce' },
+            { name: 'Событие', value: 'event' },
+            { name: 'Коротко в игровой чат', value: 'chat' }
+          )
+      )
+      .addStringOption(option =>
+        option.setName(copy.commands.queryOptionName).setDescription('Тема, факты или черновик').setRequired(true)
       ),
     new SlashCommandBuilder()
       .setName('subscription')

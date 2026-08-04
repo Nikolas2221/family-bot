@@ -71,6 +71,10 @@ interface TelegramNotificationsLike {
   }): Promise<boolean>;
 }
 
+interface AiServiceLike {
+  aiText(systemPrompt: string, userPrompt: string): Promise<string>;
+}
+
 interface NotificationHelpersOptions {
   copy: CopyCatalog;
   embeds: EmbedsApi;
@@ -90,6 +94,28 @@ interface NotificationHelpersOptions {
   ): ReleaseNoteGroups;
   getCurrentReleaseChangeGroups(commitMessage?: string | null): ReleaseNoteGroups;
   telegramNotifications?: TelegramNotificationsLike;
+  aiService?: AiServiceLike | null;
+}
+
+async function buildAiWelcomeLine(
+  aiService: AiServiceLike | null | undefined,
+  member: GuildMember,
+  familyTitle: string
+): Promise<string> {
+  if (!aiService) return '';
+
+  const fallbackTimer = new Promise<string>(resolve => setTimeout(() => resolve(''), 2500));
+  const request = aiService.aiText(
+    [
+      'Ты KLAIZ BOT, дружелюбный Discord-помощник.',
+      'Сделай одну короткую приветственную строку для нового участника.',
+      'Без @everyone/@here, без секретов, без длинного текста.',
+      'До 120 символов.'
+    ].join(' '),
+    `Новый участник: ${member.displayName}. Семья: ${familyTitle}.`
+  ).then(value => String(value || '').replace(/[\r\n]+/gu, ' ').trim().slice(0, 160)).catch(() => '');
+
+  return Promise.race([request, fallbackTimer]);
 }
 
 async function sendDirectNotification(
@@ -138,7 +164,8 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     deployCommitMessage,
     getUpdateChangeGroups,
     getCurrentReleaseChangeGroups,
-    telegramNotifications
+    telegramNotifications,
+    aiService
   } = options;
 
   async function sendAcceptanceDm({
@@ -466,11 +493,13 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       (await fetchTextChannel(member.guild, settings.channels.applications)) ||
       (await fetchTextChannel(member.guild, settings.channels.panel));
 
+    const aiWelcomeLine = await buildAiWelcomeLine(aiService, member, settings.familyTitle);
+    const welcomeMessage = [settings.welcome.message, aiWelcomeLine ? `\n${aiWelcomeLine}` : ''].join('').trim();
     const embed = embeds.buildWelcomeEmbed(
       member,
       settings.familyTitle,
       settings.visuals.applicationsBanner,
-      settings.welcome.message,
+      welcomeMessage,
       {
         rulesChannelId: settings.channels.rules,
         panelChannelId: settings.channels.panel,

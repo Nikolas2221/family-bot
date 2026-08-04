@@ -416,7 +416,8 @@ const {
   deployCommitMessage: DEPLOY_COMMIT_MESSAGE,
   getUpdateChangeGroups,
   getCurrentReleaseChangeGroups,
-  telegramNotifications
+  telegramNotifications,
+  aiService
 });
 
 const {
@@ -772,6 +773,10 @@ function getCommandModule(commandName: any) {
       return 'analytics';
     case 'ai':
     case 'aiadvisor':
+    case 'aimember':
+    case 'aidaily':
+    case 'aistaff':
+    case 'aiannounce':
     case 'law':
       return 'ai';
     case 'welcome':
@@ -849,6 +854,10 @@ function getHelpCatalog(interaction: any) {
   const adminPremium = [
     { name: 'activityreport', description: copy.commands.activityReportDescription },
     { name: 'aiadvisor', description: copy.commands.aiAdvisorDescription },
+    { name: 'aimember', description: 'AI-анализ участника по активности, баллам и рискам' },
+    { name: 'aidaily', description: 'AI-итоги дня по активности и рискам' },
+    { name: 'aistaff', description: 'AI-вопрос для старшего состава' },
+    { name: 'aiannounce', description: 'AI-шаблон объявления или события' },
     { name: 'blacklistadd', description: copy.commands.blacklistAddDescription },
     { name: 'blacklistremove', description: copy.commands.blacklistRemoveDescription },
     { name: 'blacklistlist', description: copy.commands.blacklistListDescription },
@@ -905,6 +914,10 @@ function canUseCommandInContext(commandName: any, interaction: any) {
     case 'setart':
     case 'debugconfig':
     case 'aiadvisor':
+    case 'aimember':
+    case 'aidaily':
+    case 'aistaff':
+    case 'aiannounce':
     case 'testaccept':
     case 'automod':
       return canDebugConfig(interaction);

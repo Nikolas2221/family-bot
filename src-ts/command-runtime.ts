@@ -241,6 +241,112 @@ function adminPanelReply(interaction: any, options: CommandRuntimeOptions, recor
   });
 }
 
+function formatAiMemberLabel(guild: any, memberId: string): string {
+  const member = guild.members?.cache?.get?.(memberId);
+  return member ? `<@${memberId}> (${member.displayName || member.user?.username || memberId})` : `<@${memberId}>`;
+}
+
+function formatAiTopEntries(guild: any, entries: Array<{ memberId: string; value: number }>, label: string): string {
+  const visible = entries
+    .filter(entry => entry.value > 0)
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 5);
+  return visible.length
+    ? visible.map((entry, index) => `${index + 1}. ${formatAiMemberLabel(guild, entry.memberId)} - ${entry.value} ${label}`).join('\n')
+    : 'Нет данных.';
+}
+
+function buildAiDailyPrompt(guild: any, guildStorage: any): string {
+  const day = guildStorage.getPeriodAnalytics?.(1) || {};
+  const week = guildStorage.getPeriodAnalytics?.(7) || {};
+  const members = Object.entries(day.members || {}) as Array<[string, any]>;
+  const weeklyMembers = Object.entries(week.members || {}) as Array<[string, any]>;
+  const applications = typeof guildStorage.listRecentApplications === 'function'
+    ? guildStorage.listRecentApplications(10)
+    : [];
+  const pendingApplications = applications.filter((application: any) => application.status === 'pending' || application.status === 'review').length;
+
+  return [
+    `Сервер: ${guild.name}`,
+    'Период: сегодня + контекст последних 7 дней.',
+    '',
+    'Сегодня:',
+    `Сообщения: ${Number(day.messagesTotal) || 0}`,
+    `Голосовые минуты: ${Number(day.voiceMinutesTotal) || 0}`,
+    `Реакции: ${Number(day.reactionsTotal) || 0}`,
+    `Новые участники: ${Number(day.joins) || 0}`,
+    `Ушли: ${Number(day.leaves) || 0}`,
+    `Заявки на рассмотрении из последних 10: ${pendingApplications}`,
+    '',
+    'Топ сообщений сегодня:',
+    formatAiTopEntries(guild, members.map(([memberId, stats]) => ({ memberId, value: Number(stats.messages) || 0 })), 'сообщ.'),
+    '',
+    'Топ голоса сегодня:',
+    formatAiTopEntries(guild, members.map(([memberId, stats]) => ({ memberId, value: Number(stats.voiceMinutes) || 0 })), 'мин.'),
+    '',
+    'Топ сообщений за 7 дней:',
+    formatAiTopEntries(guild, weeklyMembers.map(([memberId, stats]) => ({ memberId, value: Number(stats.messages) || 0 })), 'сообщ.'),
+    '',
+    'Сделай краткую управленческую сводку: что хорошо, кто активен, где риск, что проверить старшему составу завтра. Не выдумывай факты.'
+  ].join('\n');
+}
+
+function buildAiStaffPrompt(guild: any, guildStorage: any, question: string): string {
+  const week = guildStorage.getPeriodAnalytics?.(7) || {};
+  const members = Object.entries(week.members || {}) as Array<[string, any]>;
+  const applications = typeof guildStorage.listRecentApplications === 'function'
+    ? guildStorage.listRecentApplications(15)
+    : [];
+  return [
+    `Сервер: ${guild.name}`,
+    `Вопрос старшего состава: ${question}`,
+    '',
+    'Контекст за 7 дней:',
+    `Сообщения: ${Number(week.messagesTotal) || 0}`,
+    `Голосовые минуты: ${Number(week.voiceMinutesTotal) || 0}`,
+    `Новые/ушли: ${Number(week.joins) || 0}/${Number(week.leaves) || 0}`,
+    `Последние заявки: ${applications.length}`,
+    '',
+    'Активные по сообщениям:',
+    formatAiTopEntries(guild, members.map(([memberId, stats]) => ({ memberId, value: Number(stats.messages) || 0 })), 'сообщ.'),
+    '',
+    'Активные по голосу:',
+    formatAiTopEntries(guild, members.map(([memberId, stats]) => ({ memberId, value: Number(stats.voiceMinutes) || 0 })), 'мин.'),
+    '',
+    'Ответь как AI-помощник старшего состава: коротко, по делу, с 3-5 конкретными действиями. Не выдумывай личные факты.'
+  ].join('\n');
+}
+
+function buildAiAnnouncementPrompt(type: string, topic: string): string {
+  const typeLabel = type === 'event' ? 'событие' : type === 'chat' ? 'короткое сообщение в игровой чат' : 'объявление';
+  return [
+    `Нужно подготовить ${typeLabel} для семьи KLAIZ.`,
+    `Факты/черновик: ${topic}`,
+    '',
+    type === 'chat'
+      ? 'Сделай очень коротко, 1-3 строки, без лишнего оформления, чтобы можно было вставить в игровой чат.'
+      : 'Сделай аккуратный готовый текст для Discord/Telegram: заголовок, основной текст, время/место если указано, что нужно сделать участникам. Без @everyone/@here.'
+  ].join('\n');
+}
+
+function buildAiSystemPrompt(kind: 'daily' | 'staff' | 'announce'): string {
+  const base = [
+    'Ты KLAIZ BOT, AI-помощник Discord-семьи.',
+    'Отвечай по-русски, уверенно, коротко и полезно.',
+    'Не раскрывай токены, пароли, cookie, ключи API и приватные данные.',
+    'Не пингуй everyone/here.',
+    'Если данных мало, честно скажи, что вывод предварительный.'
+  ];
+  if (kind === 'daily') {
+    base.push('Формат: заголовок, 3-5 пунктов по итогам, риски, план на завтра.');
+  } else if (kind === 'staff') {
+    base.push('Формат: прямой ответ, аргументы по данным, конкретные следующие действия.');
+  } else {
+    base.push('Верни только готовый текст, без объяснения как ты его писал.');
+  }
+  return base.join(' ');
+}
+
 export async function handleCommandRuntime(interaction: any, options: CommandRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || !interaction.isChatInputCommand?.()) {
@@ -1397,6 +1503,114 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       await interaction.editReply({ embeds: [embed] });
     } catch (error: any) {
       await interaction.editReply({ content: copy.ai.unavailable(error?.message || copy.ai.advisorUnavailable) });
+    }
+    return true;
+  }
+
+  if (interaction.commandName === 'aimember') {
+    if (!isPremiumGuild(guildId)) {
+      await interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!canDebugConfig(interaction)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
+    const user = interaction.options.getUser(copy.commands.userOptionName, true);
+    const member = await fetchMemberFast(interaction.guild, user.id);
+    if (!member) {
+      await interaction.reply(ephemeral({ content: copy.profile.notFound }));
+      return true;
+    }
+
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const embed = await buildAiAdvisorEmbed(interaction.guild, member);
+      const question = String(interaction.options.getString('question') || '').trim();
+      if (!question) {
+        await interaction.editReply({ embeds: [embed] });
+        return true;
+      }
+
+      const answer = await aiService.aiText(
+        buildAiSystemPrompt('staff'),
+        [
+          `Участник: ${member.displayName} (${member.id})`,
+          `Дополнительный вопрос: ${question}`,
+          'Дай короткий совет старшему составу по этому участнику. Не выдумывай факты, если статистики не хватает.'
+        ].join('\n')
+      );
+      await interaction.editReply({ content: String(answer).slice(0, 1900), embeds: [embed] });
+    } catch (error: any) {
+      await interaction.editReply({ content: copy.ai.unavailable(error?.message || copy.ai.advisorUnavailable) });
+    }
+    return true;
+  }
+
+  if (interaction.commandName === 'aidaily') {
+    if (!isPremiumGuild(guildId)) {
+      await interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!canDebugConfig(interaction)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const answer = await aiService.aiText(buildAiSystemPrompt('daily'), buildAiDailyPrompt(interaction.guild, guildStorage));
+      await interaction.editReply({ content: String(answer).slice(0, 1900), allowedMentions: { parse: [] } });
+    } catch (error: any) {
+      await interaction.editReply({ content: copy.ai.unavailable(error?.message || 'AI-итоги дня временно недоступны.') });
+    }
+    return true;
+  }
+
+  if (interaction.commandName === 'aistaff') {
+    if (!isPremiumGuild(guildId)) {
+      await interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!canDebugConfig(interaction)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
+    const question = interaction.options.getString(copy.commands.queryOptionName, true);
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const answer = await aiService.aiText(buildAiSystemPrompt('staff'), buildAiStaffPrompt(interaction.guild, guildStorage, question));
+      await interaction.editReply({ content: String(answer).slice(0, 1900), allowedMentions: { parse: [] } });
+    } catch (error: any) {
+      await interaction.editReply({ content: copy.ai.unavailable(error?.message || 'AI-помощник старшего состава временно недоступен.') });
+    }
+    return true;
+  }
+
+  if (interaction.commandName === 'aiannounce') {
+    if (!isPremiumGuild(guildId)) {
+      await interaction.reply(ephemeral({ content: copy.admin.premiumOnly }));
+      return true;
+    }
+
+    if (!canDebugConfig(interaction)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+
+    const type = interaction.options.getString('type', true);
+    const topic = interaction.options.getString(copy.commands.queryOptionName, true);
+    await interaction.deferReply({ flags: 64 });
+    try {
+      const answer = await aiService.aiText(buildAiSystemPrompt('announce'), buildAiAnnouncementPrompt(type, topic));
+      await interaction.editReply({ content: String(answer).slice(0, 1900), allowedMentions: { parse: [] } });
+    } catch (error: any) {
+      await interaction.editReply({ content: copy.ai.unavailable(error?.message || 'AI-шаблон объявления временно недоступен.') });
     }
     return true;
   }
