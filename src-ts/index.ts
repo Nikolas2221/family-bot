@@ -698,26 +698,41 @@ async function resolveMemberQuery(guild: any, query: any, fallbackUserId = '') {
   return findIn(fetchedMembers);
 }
 
+function getVisibleDiscordRoles(member: any, guild: any) {
+  const roleCache = member?.roles?.cache;
+  const roles = roleCache?.values
+    ? Array.from(roleCache.values()) as any[]
+    : [];
+  return roles
+    .filter((role: any) => role?.id && role.id !== guild.id && role.name !== '@everyone')
+    .sort((left: any, right: any) => (Number(right.position) || 0) - (Number(left.position) || 0));
+}
+
 async function buildAiAdvisorEmbed(guild: any, member: any) {
+  const freshMember = await guild.members.fetch(member.id).catch(() => member);
+  const memberForAnalysis = freshMember || member;
   const guildStorage = getGuildStorage(guild.id);
-  const memberData = guildStorage.ensureMemberRecord(member.id);
-  const rankInfo = getRankService(guild.id).describeMember(member);
+  const memberData = guildStorage.ensureMemberRecord(memberForAnalysis.id);
+  const rankInfo = getRankService(guild.id).describeMember(memberForAnalysis);
+  const discordRoles = getVisibleDiscordRoles(memberForAnalysis, guild);
+  const currentRoleName = rankInfo.currentRole?.name || discordRoles[0]?.name || copy.profile.noRoles;
   const analysis = await aiService.analyzeMember({
-    displayName: member.displayName,
-    currentRoleName: rankInfo.currentRole?.name || copy.profile.noRoles,
+    displayName: memberForAnalysis.displayName,
+    currentRoleName,
     autoTargetRoleName: rankInfo.autoTargetRole?.name || '',
-    activityScore: guildStorage.getActivityScore(member.id),
-    points: guildStorage.getPointsScore(member.id),
+    allRoleNames: discordRoles.map((role: any) => role.name),
+    activityScore: guildStorage.getActivityScore(memberForAnalysis.id),
+    points: guildStorage.getPointsScore(memberForAnalysis.id),
     warns: memberData.warns || 0,
     commends: memberData.commends || 0,
     messageCount: memberData.messageCount || 0,
-    voiceMinutes: getLiveVoiceMinutes(member),
+    voiceMinutes: getLiveVoiceMinutes(memberForAnalysis),
     lastSeenAt: memberData.lastSeenAt || 0
   });
 
   return new EmbedBuilder()
     .setColor(0x7c3aed)
-    .setTitle(copy.ai.advisorTitle(member.displayName))
+    .setTitle(copy.ai.advisorTitle(memberForAnalysis.displayName))
     .setDescription(analysis.slice(0, 3900))
     .setFooter({ text: copy.ai.advisorFooter })
     .setTimestamp();

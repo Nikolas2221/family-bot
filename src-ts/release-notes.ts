@@ -1,6 +1,17 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.83': {
+    added: [
+      'тест, который проверяет передачу фактических Discord-ролей участника в AI-анализ'
+    ],
+    updated: [
+      'AI-советник теперь перед анализом обновляет участника из Discord и передаёт модели список всех его ролей'
+    ],
+    fixed: [
+      'AI-советник больше не пишет "ролей нет", если роль есть в Discord, но не распознана ранговой лестницей'
+    ]
+  },
   '1.0.82': {
     added: [
       'новые AI-команды /aimember, /aidaily, /aistaff и /aiannounce для живого управления семьёй',

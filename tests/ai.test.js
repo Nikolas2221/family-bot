@@ -71,10 +71,42 @@ async function testExternalAiChatIsUsedWhenConfigured() {
   assert.equal(calls[0][1].content, 'question');
 }
 
+async function testMemberRolesArePassedToExternalAi() {
+  const calls = [];
+  const aiService = createAIService({
+    enabled: true,
+    chatCompletion: {
+      enabled: true,
+      async chat(messages) {
+        calls.push(messages);
+        return 'ok';
+      }
+    }
+  });
+
+  await aiService.analyzeMember({
+    displayName: 'RoleMember',
+    currentRoleName: 'KLAIZ Elite',
+    allRoleNames: ['KLAIZ Elite', 'KLAIZ Main', 'Family'],
+    activityScore: 10,
+    points: 5,
+    warns: 0,
+    commends: 0,
+    messageCount: 1,
+    voiceMinutes: 2,
+    lastSeenAt: Date.now()
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][1].content, /Текущая роль: KLAIZ Elite/u);
+  assert.match(calls[0][1].content, /Все роли Discord: KLAIZ Elite, KLAIZ Main, Family/u);
+}
+
 async function main() {
   await runTest('ai advisor suggests promotion for strong member', testAdvisorSuggestsPromotionForStrongMember);
   await runTest('ai advisor flags afk risk', testAdvisorFlagsAfkRisk);
   await runTest('external ai chat is used when configured', testExternalAiChatIsUsedWhenConfigured);
+  await runTest('member roles are passed to external ai', testMemberRolesArePassedToExternalAi);
   console.log('ALL AI TESTS PASSED');
 }
 

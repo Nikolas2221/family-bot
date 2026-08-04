@@ -264,6 +264,7 @@ export interface MemberRecommendationInput {
   lastSeenAt?: number;
   currentRoleName?: string;
   autoTargetRoleName?: string;
+  allRoleNames?: string[];
   displayName?: string;
   [key: string]: unknown;
 }

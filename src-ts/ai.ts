@@ -56,9 +56,13 @@ function formatApplicationForModel(application: ApplicationAnalysisInput): strin
 }
 
 function formatMemberForModel(profile: MemberRecommendationInput): string {
+  const allRoleNames = Array.isArray(profile.allRoleNames)
+    ? profile.allRoleNames.map(role => normalizeText(role)).filter(Boolean)
+    : [];
   return [
     `Участник: ${normalizeText(profile.displayName) || 'без имени'}`,
     `Текущая роль: ${normalizeText(profile.currentRoleName) || 'нет роли'}`,
+    `Все роли Discord: ${allRoleNames.length ? allRoleNames.join(', ') : 'нет ролей'}`,
     `Цель авто-ранга: ${normalizeText(profile.autoTargetRoleName) || 'нет'}`,
     `Актив-очки: ${Math.max(0, Number(profile.activityScore) || 0)}`,
     `Баллы/репутация: ${Math.max(0, Number(profile.points) || 0)}/100`,
@@ -243,6 +247,9 @@ function buildMemberRecommendation(profile: MemberRecommendationInput): string {
   const inactiveDays = inactiveDaysSince(profile.lastSeenAt);
   const currentRoleName = normalizeText(profile.currentRoleName) || 'Нет роли';
   const autoTargetRoleName = normalizeText(profile.autoTargetRoleName);
+  const allRoleNames = Array.isArray(profile.allRoleNames)
+    ? profile.allRoleNames.map(role => normalizeText(role)).filter(Boolean)
+    : [];
 
   const strengths: string[] = [];
   const weaknesses: string[] = [];
@@ -331,6 +338,7 @@ function buildMemberRecommendation(profile: MemberRecommendationInput): string {
   const summary = [
     `Участник: ${normalizeText(profile.displayName) || 'Без имени'}`,
     `Текущий ранг: ${currentRoleName}`,
+    `Роли Discord: ${allRoleNames.length ? allRoleNames.join(', ') : 'нет ролей'}`,
     `Очки активности: ${activityScore}`,
     `Репутация: ${points}/100`,
     `Сообщения: ${messages}`,
