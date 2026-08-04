@@ -738,6 +738,12 @@ type DiscordRuleMatch = {
   defaultMuteMinutes: number;
 };
 
+type NaturalAnnouncementDraft = {
+  type: 'announcement' | 'event';
+  title: string;
+  text: string;
+};
+
 const DISCORD_RULES: Array<{
   title: string;
   detail: string;
@@ -847,10 +853,100 @@ function cleanNaturalAnnouncementText(prompt: string): string {
     .slice(0, 2500);
 }
 
+function inferAnnouncementType(prompt: string): 'announcement' | 'event' {
+  const text = String(prompt || '').toLowerCase();
+  return text.includes('собрани') || text.includes('ивент') || text.includes('мероприят') || text.includes('event')
+    ? 'event'
+    : 'announcement';
+}
+
+function extractTimeHint(prompt: string): string {
+  const text = String(prompt || '').toLowerCase();
+  const timeMatch = text.match(/(?:в\s*)?(\d{1,2})(?::(\d{2}))?\s*(вечера|утра)?/u);
+  if (!timeMatch) return text.includes('завтра') ? 'завтра' : '';
+  let hour = Math.max(0, Math.min(23, Number(timeMatch[1]) || 0));
+  const minute = timeMatch[2] || '00';
+  const dayPart = timeMatch[3] || '';
+  if (dayPart === 'вечера' && hour < 12) hour += 12;
+  const formatted = `${String(hour).padStart(2, '0')}:${minute}`;
+  return text.includes('завтра') ? `завтра в ${formatted}` : `в ${formatted}`;
+}
+
+function cleanupAnnouncementRequest(prompt: string): string {
+  return cleanNaturalAnnouncementText(prompt)
+    .replace(/\b(красивое|красиво|красивый|аккуратное|сам|сама|придумай|оформи|иконку|значок)\b/giu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function buildLocalNaturalAnnouncementDraft(prompt: string): NaturalAnnouncementDraft {
+  const type = inferAnnouncementType(prompt);
+  const cleaned = cleanupAnnouncementRequest(prompt);
+  const timeHint = extractTimeHint(prompt);
+  if (type === 'event' && String(prompt || '').toLowerCase().includes('собрани')) {
+    const when = timeHint || 'в назначенное время';
+    return {
+      type,
+      title: '📅 Семейное собрание',
+      text: [
+        `Семейное собрание состоится ${when}.`,
+        '',
+        'Просьба всем участникам быть на месте заранее и не опаздывать.',
+        'Если не сможете присутствовать, предупредите старший состав.'
+      ].join('\n')
+    };
+  }
+
+  return {
+    type,
+    title: type === 'event' ? '📅 Семейное событие' : '📢 Семейное объявление',
+    text: cleaned || 'Следите за новостями и не пропускайте важные обновления.'
+  };
+}
+
+function parseAnnouncementDraftJson(value: string): NaturalAnnouncementDraft | null {
+  const raw = String(value || '').trim()
+    .replace(/^```json\s*/iu, '')
+    .replace(/^```\s*/iu, '')
+    .replace(/```$/u, '')
+    .trim();
+  const match = raw.match(/\{[\s\S]*\}/u);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]);
+    const type = parsed?.type === 'event' ? 'event' : 'announcement';
+    const title = String(parsed?.title || '').trim().slice(0, 90);
+    const text = String(parsed?.text || '').trim().slice(0, 2200);
+    if (!title || !text) return null;
+    return { type, title, text };
+  } catch {
+    return null;
+  }
+}
+
+async function buildNaturalAnnouncementDraft(
+  prompt: string,
+  aiService?: EventRuntimeOptions['aiService']
+): Promise<NaturalAnnouncementDraft> {
+  const fallback = buildLocalNaturalAnnouncementDraft(prompt);
+  if (!aiService) return fallback;
+
+  const systemPrompt = [
+    'Ты оформляешь объявление для Discord и Telegram семьи KLAIZ.',
+    'Верни строго JSON без markdown-блока: {"type":"announcement|event","title":"emoji + короткий заголовок","text":"готовый текст"}.',
+    'Если про собрание, type должен быть event. Если пользователь просит красиво, сам выбери уместную emoji-иконку и сделай текст аккуратным.',
+    'Не добавляй Источник, Автор, Дата, @everyone, @here и лишние технические поля.',
+    'Пиши на русском, коротко, понятно и без токсичности.'
+  ].join('\n');
+
+  const aiResult = await aiService.aiText(systemPrompt, prompt).catch(() => '');
+  return parseAnnouncementDraftJson(aiResult) || fallback;
+}
+
 async function handleNaturalAdminCommand(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'client' | 'announcementService' | 'familyAnnouncementRoleId'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId'>
 ): Promise<boolean> {
   const botId = options.client.user?.id || '';
   const action = parseNaturalModerationAction(prompt);
@@ -917,8 +1013,8 @@ async function handleNaturalAdminCommand(
     return true;
   }
 
-  const text = cleanNaturalAnnouncementText(prompt);
-  if (!text) {
+  const requestText = cleanNaturalAnnouncementText(prompt);
+  if (!requestText) {
     await message.channel.send?.({
       content: `<@${message.author.id}>, напиши текст оповещения. Например: собрание сегодня в 20:00, быть всем.`,
       allowedMentions: { parse: [], users: [message.author.id] }
@@ -926,10 +1022,12 @@ async function handleNaturalAdminCommand(
     return true;
   }
 
+  const draft = await buildNaturalAnnouncementDraft(prompt, options.aiService);
   const result = await options.announcementService.sendTelegramFromDiscord({
     guildId: message.guild?.id,
-    type: text.toLowerCase().includes('собрани') || text.toLowerCase().includes('ивент') ? 'event' : 'announcement',
-    text,
+    type: draft.type,
+    title: draft.title,
+    text: draft.text,
     authorId: message.author.id,
     authorName: message.author.globalName || message.author.username || message.author.id,
     fallbackDiscordChannelId: message.channel.id,

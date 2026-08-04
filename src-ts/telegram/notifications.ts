@@ -68,7 +68,7 @@ export interface TelegramNotificationService {
     };
     createdAt?: Date;
   }): Promise<boolean>;
-  sendAnnouncement(input: { guildId?: string; type: 'announcement' | 'event'; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string; error?: string }>;
+  sendAnnouncement(input: { guildId?: string; type: 'announcement' | 'event'; title?: string; text: string; authorName: string; createdAt?: Date }): Promise<{ ok: boolean; messageId: string; error?: string }>;
 }
 
 function clean(value: unknown, fallback = 'не указано', maxLength = 1000): string {
@@ -363,7 +363,7 @@ export function createTelegramNotificationService(options: {
     },
     sendAnnouncement(input) {
       if (!allowsGuild(input.guildId)) return Promise.resolve({ ok: false, messageId: '', error: 'guild is not allowed by TELEGRAM_ALLOWED_GUILD_IDS' });
-      const title = input.type === 'event' ? '📅 Семейное событие' : '📢 Семейное объявление';
+      const title = clean(input.title, input.type === 'event' ? '📅 Семейное событие' : '📢 Семейное объявление', 120);
       return sendWithResult(announcementsChatId, [
         title,
         '',

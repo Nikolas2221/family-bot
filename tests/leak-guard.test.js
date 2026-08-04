@@ -216,7 +216,7 @@ async function main() {
   await listeners.get('messageCreate')({
     ...baseMessage,
     id: 'message-4b',
-    content: '<@bot-1> сделай оповещение о собрании сегодня в 20:00',
+    content: '<@bot-1> сделай красивое оповещение о собрании завтра в 8 вечера',
     mentions: { users: { size: 1, has: id => id === 'bot-1' } },
     member: {
       ...baseMessage.member,
@@ -233,8 +233,9 @@ async function main() {
   });
   assert.equal(naturalAnnouncements.length, 1);
   assert.equal(naturalAnnouncements[0].type, 'event');
+  assert.equal(naturalAnnouncements[0].title, '📅 Семейное собрание');
   assert.equal(naturalAnnouncements[0].pingRoleId, 'family-role');
-  assert.match(naturalAnnouncements[0].text, /собрании сегодня/u);
+  assert.match(naturalAnnouncements[0].text, /20:00/u);
 
   await listeners.get('messageCreate')({
     ...baseMessage,

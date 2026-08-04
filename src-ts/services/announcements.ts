@@ -20,6 +20,7 @@ interface DiscordClientLike {
 type AnnouncementInput = {
   guildId?: string;
   type: 'announcement' | 'event';
+  title?: string;
   text: string;
   authorId: string;
   authorName: string;
@@ -151,10 +152,11 @@ export function createAnnouncementService(options: {
 
   async function publishDiscord(channel: DiscordChannelLike, input: AnnouncementInput, source: 'Telegram' | 'Discord', createdAt: string): Promise<string> {
     const pingRoleId = String(input.pingRoleId || '').trim();
+    const messageTitle = safeText(input.title, 120) || title(input.type);
     const message = await channel.send({
       content: [
         pingRoleId ? `<@&${pingRoleId}>` : null,
-        title(input.type),
+        messageTitle,
         '',
         safeText(input.text),
         '',
@@ -208,6 +210,7 @@ export function createAnnouncementService(options: {
     const telegramResult: any = await telegramNotifications.sendAnnouncement({
       guildId: input.guildId,
       type: input.type,
+      title: input.title,
       text: input.text,
       authorName: input.authorName,
       createdAt: new Date(record.createdAt)
