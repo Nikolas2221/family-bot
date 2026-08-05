@@ -32,7 +32,8 @@ function createOptions(calls) {
         ai: { unavailable: message => message, advisorUnavailable: 'ai unavailable' }
       },
       embeds: {
-        buildAiAdvisorModal: () => ({ customId: 'family_aiadvisor_modal' })
+        buildAiAdvisorModal: () => ({ customId: 'family_aiadvisor_modal' }),
+        buildAdminPanelEmbed: () => ({ title: 'admin panel' })
       },
       database: {},
       aiService: {},
@@ -163,6 +164,10 @@ async function main() {
   const aiButton = createButton('admin_aiadvisor', guild);
   await listenerBox.interactionCreate(aiButton);
   assert.equal(aiButton.modal.customId, 'family_aiadvisor_modal');
+
+  const adminPanelButton = createButton('admin_panel', guild);
+  await listenerBox.interactionCreate(adminPanelButton);
+  assert.deepEqual(adminPanelButton._replies.at(-1), { embeds: [{ title: 'admin panel' }] });
 
   const aiModal = createModal('family_aiadvisor_modal', guild);
   await listenerBox.interactionCreate(aiModal);

@@ -66,7 +66,7 @@ interface ChannelLike {
   sendTyping?(): Promise<unknown>;
   fetchWebhooks?(): Promise<any>;
   messages?: {
-    fetch(options?: Record<string, unknown>): Promise<any>;
+    fetch(options?: Record<string, unknown> | string): Promise<any>;
   };
   permissionOverwrites?: {
     edit(target: unknown, overwrite: Record<string, boolean | null>, options?: Record<string, unknown>): Promise<unknown>;
@@ -93,6 +93,10 @@ interface MessageLike {
   member?: MemberLike | null;
   channel: ChannelLike;
   mentions?: MentionsLike | null;
+  reference?: {
+    messageId?: string | null;
+    channelId?: string | null;
+  } | null;
   partial?: boolean;
   webhookId?: string | null;
   embeds?: Array<{
@@ -723,6 +727,59 @@ async function handleAiSoftConflict(
     content: '🕊️ Давайте спокойнее и по фактам. Если есть спорная ситуация, лучше оформить её через тикет или позвать старший состав.',
     allowedMentions: { parse: [] }
   }).catch(() => null);
+}
+
+function looksLikeBotInsult(value: string): boolean {
+  const text = String(value || '').toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return [
+    /сын\s+бля/iu,
+    /бля[дт]/iu,
+    /сука/u,
+    /еблан/u,
+    /долбо[её]б/u,
+    /у[её]б/u,
+    /пид[ао]р/u,
+    /чмо/u,
+    /тварь/u,
+    /мраз/u,
+    /иди\s+нах/u
+  ].some(pattern => pattern.test(text));
+}
+
+async function isReplyToBot(message: MessageLike, botId: string): Promise<boolean> {
+  const messageId = String(message.reference?.messageId || '').trim();
+  if (!messageId || !message.channel.messages?.fetch) return false;
+  const referenced = await message.channel.messages.fetch(messageId).catch(() => null);
+  return String(referenced?.author?.id || '') === botId;
+}
+
+async function enforceBotInsultGuard(
+  message: MessageLike,
+  options: Pick<EventRuntimeOptions, 'client' | 'canBypassScamGuard'>
+): Promise<boolean> {
+  const botId = options.client.user?.id || '';
+  if (!botId || !message.guild || !message.member || message.author.bot) return false;
+  if (options.canBypassScamGuard(message.member)) return false;
+  if (!looksLikeBotInsult(message.content)) return false;
+
+  const targetsBot = botWasMentioned(message, botId) || await isReplyToBot(message, botId);
+  if (!targetsBot) return false;
+
+  const durationMs = 2 * 60 * 1000;
+  const muted = await message.member.timeout?.(durationMs, 'Bot insult guard: insult directed at bot')
+    .then(() => true)
+    .catch(() => false) || false;
+
+  await message.channel.send?.({
+    content: muted
+      ? `<@${message.author.id}>, за оскорбление бота выдан мут на 2 минуты.`
+      : `<@${message.author.id}>, оскорбление бота замечено, но Discord не дал выдать мут. Проверь права и иерархию роли бота.`,
+    allowedMentions: { parse: [], users: [message.author.id] }
+  }).catch(() => null);
+  return true;
 }
 
 function isAdminMember(member: MemberLike | null | undefined): boolean {
@@ -1403,6 +1460,14 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
     guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
     await handleCustomTriggerMessage(message).catch(() => null);
+
+    if (await enforceBotInsultGuard(message, {
+      client,
+      canBypassScamGuard
+    })) {
+      return;
+    }
+
     await handleAiSoftConflict(message, aiConflictCooldowns, { aiMention }).catch(() => null);
 
     if (await handleAiMentionMessage(message, aiMentionCooldowns, {

@@ -57,6 +57,7 @@ async function main() {
   const telegramScamReports = [];
   const aiReplies = [];
   const naturalAnnouncements = [];
+  let botInsultTimeoutMs = 0;
   const client = {
     user: { id: 'bot-1', bot: true },
     channels: {
@@ -188,6 +189,31 @@ async function main() {
   assert.equal(scamMuted, true);
   assert.equal(telegramScamReports.length, 1);
   assert.match(securityLogs[2], /Scam guard/);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-3a',
+    content: 'ты сын бляди',
+    reference: { messageId: 'bot-reply' },
+    channel: {
+      id: 'channel-1',
+      messages: {
+        fetch: async id => (id === 'bot-reply' ? { author: { id: 'bot-1', bot: true } } : null)
+      },
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    member: {
+      ...baseMessage.member,
+      timeout: async ms => { botInsultTimeoutMs = ms; }
+    },
+    delete: async () => {}
+  });
+  assert.equal(botInsultTimeoutMs, 2 * 60 * 1000);
+  assert.match(aiReplies.at(-1), /мут на 2 минуты/u);
+  aiReplies.length = 0;
 
   await listeners.get('messageCreate')({
     ...baseMessage,

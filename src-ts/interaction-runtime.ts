@@ -709,6 +709,18 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
     return true;
   }
 
+  if (interaction.customId === 'admin_panel') {
+    if (!(await requireAdministrator())) return true;
+
+    await interaction.reply(options.ephemeral({
+      embeds: [options.embeds.buildAdminPanelEmbed({
+        guildName: interaction.guild.name,
+        record: options.getGuildRecord(interaction.guild)
+      })]
+    }));
+    return true;
+  }
+
   if (interaction.customId === 'admin_activityreport') {
     if (!(await requireAdministrator())) return true;
 
