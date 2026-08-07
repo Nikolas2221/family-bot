@@ -42,6 +42,35 @@ function extractPerson(raw: string): { nickname: string; staticId: number } | nu
   return { nickname: match[1].trim(), staticId: Number(match[2]) || 0 };
 }
 
+function parseTextFallback(text: string): FamilyCabinetAction | null {
+  const cleaned = String(text || '').replace(/\s+/gu, ' ').trim();
+  if (!cleaned) return null;
+  const dateMatch = cleaned.match(/(\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2})/u);
+  const datetime = dateMatch ? toMoscowIso(dateMatch[1]) : new Date().toISOString();
+  const raw = dateMatch ? cleaned.replace(dateMatch[1], '').trim() : cleaned;
+  if (!raw) return null;
+
+  const people = Array.from(cleaned.matchAll(/([^\s#][^#]{1,40}?)\s*#(\d{3,10})/gu))
+    .map(match => ({ nickname: match[1].trim(), staticId: Number(match[2]) || 0 }))
+    .filter(person => person.staticId);
+  const type = actionType(raw);
+  return {
+    externalLogId: externalId([datetime, raw]),
+    datetime,
+    actionRaw: raw,
+    actionType: type,
+    member: people[0] || { nickname: '', staticId: 0 },
+    initiator: people[1] || null,
+    quantity: null,
+    unit: null,
+    direction: null,
+    contract: null,
+    amount: null,
+    balanceAfter: null,
+    status: type === 'unknown' ? 'unparsed' : 'parsed'
+  };
+}
+
 function externalId(parts: string[]): string {
   return `majestic-${crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 16)}`;
 }
@@ -94,7 +123,12 @@ async function parseRows(page: any): Promise<FamilyCabinetAction[]> {
     const desktopRow = row.locator('div.hidden.items-start.xl\\:flex');
     const cols = desktopRow.locator('> div');
     const colCount = await cols.count().catch(() => 0);
-    if (colCount < 4) continue;
+    if (colCount < 4) {
+      const fallbackText = await row.innerText().catch(() => '');
+      const fallbackAction = parseTextFallback(fallbackText);
+      if (fallbackAction) logs.push(fallbackAction);
+      continue;
+    }
 
     const read = async (colIndex: number): Promise<string> => {
       const spans = await cols.nth(colIndex).locator('span').allTextContents().catch(() => []);

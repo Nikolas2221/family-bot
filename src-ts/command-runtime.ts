@@ -571,10 +571,12 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
         const result = await familyCabinetService.runSync('manual');
         await interaction.editReply({
           content: [
-            result.status === 'ok' ? '✅ Синхронизация кабинета завершена.' : '⚠️ Синхронизация кабинета не выполнена.',
+            result.status === 'ok' && !result.errorMessage ? '✅ Синхронизация кабинета завершена.' : '⚠️ Синхронизация кабинета требует внимания.',
             `Получено: ${result.logsReceived}`,
             `Новых: ${result.logsCreated}`,
             `Пропущено: ${result.logsSkipped}`,
+            `Отправлено в Discord: ${result.logsDelivered ?? 0}`,
+            result.logsDeliveryFailed ? `Не отправлено: ${result.logsDeliveryFailed}` : '',
             result.errorMessage ? `Причина: ${result.errorMessage}` : ''
           ].filter(Boolean).join('\n')
         });

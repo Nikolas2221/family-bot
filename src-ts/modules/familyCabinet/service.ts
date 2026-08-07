@@ -20,6 +20,11 @@ function safeLimit(value: unknown, fallback = 10): number {
   return Math.max(1, Math.min(50, Number(value) || fallback));
 }
 
+function canSendToChannel(channel: any): boolean {
+  if (!channel || typeof channel.send !== 'function') return false;
+  return typeof channel.isTextBased === 'function' ? Boolean(channel.isTextBased()) : true;
+}
+
 function personLabel(person?: { nickname?: string; staticId?: number } | null): string {
   if (!person) return 'Не указан';
   return person.staticId ? `${person.nickname || 'Без ника'} #${person.staticId}` : (person.nickname || 'Не указан');
@@ -87,9 +92,10 @@ export class FamilyCabinetService {
       `Файл данных: ${this.config.dataFile}`,
       `Scraper: ${this.config.scraperModulePath ? this.config.scraperModulePath : 'встроенный Playwright scraper'}`,
       lastRun
-        ? `Последний запуск: ${lastRun.status}, новых: ${lastRun.logsCreated}, ${formatDateTime(lastRun.finishedAt)}`
-        : 'Последний запуск: ещё не было'
-    ];
+        ? `Последний запуск: ${lastRun.status}, новых: ${lastRun.logsCreated}, отправлено: ${lastRun.logsDelivered ?? 0}, ${formatDateTime(lastRun.finishedAt)}`
+        : 'Последний запуск: ещё не было',
+      lastRun?.errorMessage ? `Последняя причина: ${lastRun.errorMessage}` : ''
+    ].filter(Boolean);
   }
 
   startAutoSync(): void {
@@ -119,7 +125,11 @@ export class FamilyCabinetService {
       return this.recordRun('disabled', 0, 0, 0, 'FAMILY_CABINET_ENABLED не true.');
     }
     if (this.running) {
-      throw new Error('Синхронизация кабинета уже выполняется.');
+      const run = this.recordRun('failed', 0, 0, 0, 'Синхронизация кабинета уже выполняется. Дождись завершения текущего запуска.');
+      await this.sendSyncSummary(run, reason).catch(error => {
+        console.warn('[family-cabinet] failed to send running summary:', error);
+      });
+      return run;
     }
     this.running = true;
     const startedAt = new Date().toISOString();
@@ -128,18 +138,39 @@ export class FamilyCabinetService {
       const existing = new Set(this.state.actions.map(action => action.externalLogId));
       const normalized = logs.map(normalizeAction).filter(Boolean) as FamilyCabinetAction[];
       const created = normalized.filter(action => !existing.has(action.externalLogId));
+      let delivery: { sent: number; failed: number; errorMessage?: string } = { sent: 0, failed: 0 };
 
       if (created.length) {
         this.state.actions = [...created, ...this.state.actions].slice(0, 5000);
         this.saveState();
-        await this.sendNewLogs(created, reason).catch(error => {
-          console.warn('[family-cabinet] failed to send sync logs:', error);
-        });
+        delivery = await this.sendNewLogs(created, reason);
       }
 
-      return this.recordRun('ok', normalized.length, created.length, normalized.length - created.length);
+      const deliveryError = delivery.errorMessage
+        ? `Доставка логов: ${delivery.errorMessage}`
+        : delivery.failed > 0
+          ? `Доставка логов: не отправлено ${delivery.failed}.`
+          : '';
+      const run = this.recordRun(
+        'ok',
+        normalized.length,
+        created.length,
+        normalized.length - created.length,
+        deliveryError,
+        startedAt,
+        delivery.sent,
+        delivery.failed
+      );
+      await this.sendSyncSummary(run, reason).catch(error => {
+        console.warn('[family-cabinet] failed to send sync summary:', error);
+      });
+      return run;
     } catch (error: any) {
-      return this.recordRun('failed', 0, 0, 0, error?.message || String(error), startedAt);
+      const run = this.recordRun('failed', 0, 0, 0, error?.message || String(error), startedAt);
+      await this.sendSyncSummary(run, reason).catch(summaryError => {
+        console.warn('[family-cabinet] failed to send failure summary:', summaryError);
+      });
+      return run;
     } finally {
       this.running = false;
     }
@@ -184,7 +215,9 @@ export class FamilyCabinetService {
     logsCreated: number,
     logsSkipped: number,
     errorMessage = '',
-    startedAt = new Date().toISOString()
+    startedAt = new Date().toISOString(),
+    logsDelivered = 0,
+    logsDeliveryFailed = 0
   ): FamilyCabinetSyncRun {
     const run: FamilyCabinetSyncRun = {
       startedAt,
@@ -193,6 +226,8 @@ export class FamilyCabinetService {
       logsReceived,
       logsCreated,
       logsSkipped,
+      logsDelivered,
+      logsDeliveryFailed,
       errorMessage: errorMessage || undefined
     };
     this.state.syncRuns.unshift(run);
@@ -216,17 +251,84 @@ export class FamilyCabinetService {
       .setTimestamp();
   }
 
-  private async sendNewLogs(actions: FamilyCabinetAction[], reason: string): Promise<void> {
-    if (!this.config.syncChannelId) return;
-    const channel = await this.client.channels.fetch(this.config.syncChannelId).catch(() => null);
-    if (!channel?.isTextBased?.()) return;
+  private async fetchSendableChannel(channelId: string, label: string): Promise<{ channel: any | null; errorMessage: string }> {
+    if (!channelId) {
+      return { channel: null, errorMessage: `${label} не задан.` };
+    }
+    const channel = await this.client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      return { channel: null, errorMessage: `${label} не найден или бот не видит канал ${channelId}.` };
+    }
+    if (!canSendToChannel(channel)) {
+      return { channel: null, errorMessage: `${label} не является текстовым каналом или бот не может туда писать.` };
+    }
+    return { channel, errorMessage: '' };
+  }
 
-    for (const action of actions.slice(0, 10).reverse()) {
+  private async sendNewLogs(actions: FamilyCabinetAction[], reason: string): Promise<{ sent: number; failed: number; errorMessage?: string }> {
+    const resolved = await this.fetchSendableChannel(this.config.syncChannelId, 'FAMILY_CABINET_SYNC_CHANNEL_ID');
+    if (!resolved.channel) {
+      console.warn(`[family-cabinet] sync channel unavailable: ${resolved.errorMessage}`);
+      return { sent: 0, failed: actions.length, errorMessage: resolved.errorMessage };
+    }
+    const channel = resolved.channel;
+    let sent = 0;
+    let failed = 0;
+
+    if (actions.length > 10) {
       await channel.send({
-        content: reason === 'manual' ? undefined : '',
-        embeds: [this.buildActionEmbed(action)]
+        content: `📘 Family Cabinet: найдено ${actions.length} новых логов. Показываю последние 10, остальные сохранены в базе.`
       }).catch(() => null);
     }
+
+    for (const action of actions.slice(0, 10).reverse()) {
+      const ok = await channel.send({
+        content: reason === 'manual' ? undefined : '',
+        embeds: [this.buildActionEmbed(action)]
+      }).then(() => true).catch((error: unknown) => {
+        failed += 1;
+        console.warn('[family-cabinet] failed to send one cabinet log:', error);
+        return false;
+      });
+      if (ok) sent += 1;
+    }
+
+    return { sent, failed };
+  }
+
+  private buildSyncSummaryEmbed(run: FamilyCabinetSyncRun, reason: string): EmbedBuilder {
+    const ok = run.status === 'ok' && !run.errorMessage;
+    return new EmbedBuilder()
+      .setColor(ok ? 0x57f287 : 0xf59e0b)
+      .setTitle(ok ? '✅ Синхронизация Majestic завершена' : '⚠️ Синхронизация Majestic требует внимания')
+      .addFields(
+        { name: 'Запуск', value: reason || 'unknown', inline: true },
+        { name: 'Статус', value: run.status, inline: true },
+        { name: 'Получено', value: String(run.logsReceived), inline: true },
+        { name: 'Новых', value: String(run.logsCreated), inline: true },
+        { name: 'Пропущено', value: String(run.logsSkipped), inline: true },
+        { name: 'Отправлено', value: `${run.logsDelivered ?? 0}/${run.logsCreated}`, inline: true },
+        { name: 'Дата', value: formatDateTime(run.finishedAt), inline: false },
+        ...(run.errorMessage ? [{ name: 'Причина', value: run.errorMessage.slice(0, 1000), inline: false }] : [])
+      )
+      .setFooter({ text: 'KLAIZ • Majestic Sync' })
+      .setTimestamp();
+  }
+
+  private async sendSyncSummary(run: FamilyCabinetSyncRun, reason: string): Promise<void> {
+    const shouldSend = reason === 'manual' || run.status !== 'ok' || run.logsCreated > 0 || Boolean(run.errorMessage);
+    if (!shouldSend) return;
+
+    const targetChannelId = this.config.logChannelId || this.config.syncChannelId;
+    const resolved = await this.fetchSendableChannel(targetChannelId, this.config.logChannelId ? 'FAMILY_CABINET_LOG_CHANNEL_ID' : 'FAMILY_CABINET_SYNC_CHANNEL_ID');
+    if (!resolved.channel) {
+      console.warn(`[family-cabinet] summary channel unavailable: ${resolved.errorMessage}`);
+      return;
+    }
+
+    await resolved.channel.send({
+      embeds: [this.buildSyncSummaryEmbed(run, reason)]
+    });
   }
 
   private loadState(): FamilyCabinetState {

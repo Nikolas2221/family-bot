@@ -30,6 +30,8 @@ export interface FamilyCabinetSyncRun {
   logsReceived: number;
   logsCreated: number;
   logsSkipped: number;
+  logsDelivered?: number;
+  logsDeliveryFailed?: number;
   errorMessage?: string;
 }
 
