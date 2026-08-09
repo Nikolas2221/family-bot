@@ -184,6 +184,17 @@ function compactSnippet(text: string, limit = 220): string {
   return String(text || '').replace(/\s+/gu, ' ').trim().slice(0, limit);
 }
 
+function looksLikeLoginPage(text: string): boolean {
+  const compact = compactSnippet(text, 1000).toLowerCase();
+  return (
+    compact.includes('добро пожаловать в личный кабинет') ||
+    compact.includes('войдите в аккаунт') ||
+    compact.includes('majestic id') && compact.includes('регистрац') ||
+    compact.includes('забыли пароль') ||
+    compact.includes('данные от игры сюда не подходят')
+  );
+}
+
 function tabLabels(tab: string): string[] {
   if (tab === 'finance' || tab === 'finances') return ['Финансы', 'Finance', 'Finances'];
   if (tab === 'logs' || tab === 'actions') return ['Действия', 'Логи', 'Actions', 'Logs'];
@@ -337,6 +348,10 @@ async function scrapeTab(
   await waitForCabinetContent(page);
   if (String(page.url()).includes('login')) {
     throw new Error('Сессия кабинета истекла. Нужно обновить SESSION_STORAGE_PATH.');
+  }
+  const initialText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+  if (looksLikeLoginPage(initialText)) {
+    throw new Error('Сессия кабинета истекла: Majestic показывает страницу входа вместо кабинета семьи. Обнови CABINET_SESSION_B64 или SESSION_STORAGE_PATH.');
   }
   await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
   await expandRows(page, target);

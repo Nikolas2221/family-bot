@@ -1,6 +1,17 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.93': {
+    added: [
+      'Majestic sync теперь распознаёт тихий разлогин: если вместо кабинета семьи открылась страница входа Majestic ID, бот пишет понятную причину'
+    ],
+    updated: [
+      'ошибка синхронизации кабинета теперь прямо просит обновить CABINET_SESSION_B64 или SESSION_STORAGE_PATH, когда сессия истекла'
+    ],
+    fixed: [
+      'страница входа Majestic больше не отображается как "строки логов не найдены"'
+    ]
+  },
   '1.0.92': {
     added: [
       'расширенная диагностика Majestic sync: если кабинет открывается без строк логов, бот показывает URL, title, длину текста и короткий фрагмент страницы',
