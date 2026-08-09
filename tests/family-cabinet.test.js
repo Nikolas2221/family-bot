@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { createFamilyCabinetService } = require('../dist-ts/modules/familyCabinet');
+const { __familyCabinetScraperInternals } = require('../dist-ts/modules/familyCabinet/scraper');
 
 function writeScraperModule(dir) {
   const file = path.join(dir, 'cabinet-scraper.js');
@@ -65,6 +66,38 @@ function baseConfig(dir, scraperModulePath, patch = {}) {
 }
 
 async function main() {
+  const parsedActions = __familyCabinetScraperInternals.parseTextDump(`
+08.08.2026, 18:22
+Вернул авто speedtail владельцу
+—
+Luffy Klaiz #206656
+08.08.2026, 00:26
+Премия $100000
+Slyflower Klaiz #15717
+Luffy Klaiz #206656
+  `);
+  assert.equal(parsedActions.length, 2);
+  assert.equal(parsedActions[0].actionType, 'transport_added');
+  assert.equal(parsedActions[1].actionType, 'bonus');
+
+  const parsedFinance = __familyCabinetScraperInternals.parseTextDump(`
+08.08.2026, 18:22
+-$2 000 000
+$2 364 000,39
+Взято из баланса семьи
+Luffy Klaiz #206656
+08.08.2026, 00:10
+$10 000 000
+$14 464 000,39
+Пополнен баланс семьи
+Luffy Klaiz #206656
+  `, true);
+  assert.equal(parsedFinance.length, 2);
+  assert.equal(parsedFinance[0].actionType, 'finance_withdraw');
+  assert.equal(parsedFinance[0].amount, -2000000);
+  assert.equal(parsedFinance[1].actionType, 'finance_deposit');
+  assert.equal(parsedFinance[1].balanceAfter, 14464000.39);
+
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-cabinet-'));
   const scraperModulePath = writeScraperModule(dir);
   const syncMessages = [];

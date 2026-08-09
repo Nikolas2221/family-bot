@@ -34,7 +34,7 @@ function actionType(raw: string): string {
   if (/(пополнил|вн[её]с|зачисл|положил|доход).*(баланс|казн|банк|сч[её]т|семь)/u.test(lower)) return 'finance_deposit';
   if (/(доставил|прин[её]с|сдал|положил).*(товар|склад|материал|ресурс)/u.test(lower)) return 'warehouse_deposit';
   if (/(забрал|взял|изъял|выдал).*(товар|склад|материал|ресурс)/u.test(lower)) return 'warehouse_withdraw';
-  if (lower.includes('транспорт')) return 'transport_added';
+  if (lower.includes('транспорт') || /(вернул|передал|добавил|выдал|забрал).*(авто|машин|speedtail|alphard|bdivo)/u.test(lower)) return 'transport_added';
   return 'unknown';
 }
 
@@ -146,11 +146,15 @@ function parseFinanceRowText(text: string): FamilyCabinetAction | null {
 
 function parseTextDump(text: string, finance = false): FamilyCabinetAction[] {
   const lines = normalizedLines(text);
+  const dateRe = /\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u;
   const logs: FamilyCabinetAction[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
-    if (!/\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u.test(lines[index])) continue;
-    const chunkLines = lines.slice(index, Math.min(lines.length, index + (finance ? 6 : 5)));
+    if (!dateRe.test(lines[index])) continue;
+    const nextDateOffset = lines.slice(index + 1).findIndex(line => dateRe.test(line));
+    const fallbackEnd = Math.min(lines.length, index + (finance ? 7 : 6));
+    const nextDateEnd = nextDateOffset >= 0 ? index + 1 + nextDateOffset : fallbackEnd;
+    const chunkLines = lines.slice(index, Math.min(fallbackEnd, nextDateEnd));
     const action = finance
       ? parseFinanceRowText(chunkLines.join('\n')) || parseTextFallback(chunkLines.join(' '))
       : parseTextFallback(chunkLines.join(' '));
@@ -203,7 +207,13 @@ function tabLabels(tab: string): string[] {
 
 async function clickTabByLabel(page: any, tab: string): Promise<boolean> {
   for (const label of tabLabels(tab)) {
-    const clicked = await page.getByText(label, { exact: true }).first().click({ timeout: 3000 }).then(() => true).catch(() => false);
+    const tabLike = page
+      .locator('button, a, [role="tab"], [data-state], [aria-controls]')
+      .filter({ hasText: new RegExp(`^\\s*${label}\\s*$`, 'u') })
+      .first();
+    const clicked = await tabLike.click({ timeout: 3000 }).then(() => true).catch(async () => (
+      await page.getByText(label, { exact: true }).first().click({ timeout: 3000 }).then(() => true).catch(() => false)
+    ));
     if (clicked) {
       await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       await page.waitForTimeout(800);
@@ -218,6 +228,33 @@ async function waitForCabinetContent(page: any): Promise<void> {
     const text = document.body?.innerText || '';
     return text.length > 700 || /Действия|Финансы|Все записи|Все операции|Выберите фильтр/u.test(text);
   }, null, { timeout: 20000 }).catch(() => null);
+}
+
+async function waitForTabRows(page: any): Promise<void> {
+  await page.waitForFunction(() => {
+    const text = document.body?.innerText || '';
+    return /\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u.test(text)
+      || /Нет\s+(?:записей|операций|данных)|No\s+(?:records|operations|data)/iu.test(text)
+      || document.querySelectorAll('div.overflow-hidden.rounded-lg.bg-background-tertiary').length > 0;
+  }, null, { timeout: 15000 }).catch(() => null);
+}
+
+async function scrollForDynamicRows(page: any): Promise<void> {
+  let previousTextLength = 0;
+  for (let index = 0; index < 6; index += 1) {
+    const currentTextLength = await page.locator('body').innerText({ timeout: 3000 })
+      .then((text: string) => text.length)
+      .catch(() => 0);
+    const hasDate = await page.locator('body').innerText({ timeout: 3000 })
+      .then((text: string) => /\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u.test(text))
+      .catch(() => false);
+    if (hasDate && currentTextLength === previousTextLength) break;
+    previousTextLength = currentTextLength;
+    await page.evaluate(() => window.scrollBy(0, Math.max(600, window.innerHeight || 800))).catch(() => null);
+    await page.waitForTimeout(700);
+  }
+  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => null);
+  await page.waitForTimeout(300);
 }
 
 function restoreSessionFromEnv(sessionStoragePath: string): boolean {
@@ -293,10 +330,13 @@ async function expandRows(page: any, target: number): Promise<void> {
 async function candidateRowTexts(page: any): Promise<string[]> {
   return await page.locator('body *').evaluateAll((elements: Element[]) => {
     const dateRe = /\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u;
+    function hasUsefulActionText(text: string): boolean {
+      return /приглас|исключ|уволен|контракт|баланс|попол|взят|аренд|преми|роял|склад|товар|семь|авто|машин|транспорт/u.test(text.toLowerCase());
+    }
     const texts = elements
       .map(element => (element as HTMLElement).innerText || '')
       .map(text => text.replace(/[ \t]+/gu, ' ').trim())
-      .filter(text => dateRe.test(text) && text.length < 900 && text.split(/\r?\n/u).length <= 12);
+      .filter(text => dateRe.test(text) && hasUsefulActionText(text) && text.length < 1800 && text.split(/\r?\n/u).length <= 24);
     return Array.from(new Set(texts));
   }).catch(() => []);
 }
@@ -391,6 +431,10 @@ async function scrapeTab(
   if (looksLikeLoginPage(initialText)) {
     throw new Error('Сессия кабинета истекла: Majestic показывает страницу входа вместо кабинета семьи. Обнови CABINET_SESSION_B64 или SESSION_STORAGE_PATH.');
   }
+
+  await clickTabByLabel(page, tab).catch(() => false);
+  await waitForTabRows(page);
+  await scrollForDynamicRows(page);
   await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
   await expandRows(page, target);
   let parsed = await parseRows(page, forceTextFallback);
@@ -409,6 +453,12 @@ async function scrapeTab(
   }
   return parsed;
 }
+
+export const __familyCabinetScraperInternals = {
+  parseFinanceRowText,
+  parseTextDump,
+  parseTextFallback
+};
 
 export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<FamilyCabinetAction[]> {
   if (!config.familyUrl) {
