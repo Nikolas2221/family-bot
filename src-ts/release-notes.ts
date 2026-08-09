@@ -1,6 +1,18 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.95': {
+    added: [
+      'cabinet:session:brave теперь ждёт реальные признаки кабинета семьи: вкладки "Обзор", "Участники", "Ранги", "Действия" или "Финансы"'
+    ],
+    updated: [
+      'захват Brave-сессии больше не считает URL /family успешным входом, если внутри страницы всё ещё показан Majestic login',
+      'скрипт дополнительно проверяет context.cookies() вместе с CDP cookies'
+    ],
+    fixed: [
+      'исправлено преждевременное сохранение пустой сессии с Cookies: 0, когда страница входа открывалась внутри family URL'
+    ]
+  },
   '1.0.94': {
     added: [
       'cabinet:session:brave теперь дополнительно забирает cookies напрямую через CDP, если Playwright storageState сохранил только origins'

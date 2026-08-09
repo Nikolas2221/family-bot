@@ -49,13 +49,36 @@ function mergeCookies(primary, extra) {
   return Array.from(merged.values());
 }
 
+function compactText(text) {
+  return String(text || '').replace(/\s+/gu, ' ').trim();
+}
+
+function looksLikeLoginPage(text) {
+  const compact = compactText(text).toLowerCase();
+  return (
+    compact.includes('добро пожаловать в личный кабинет') ||
+    compact.includes('войдите в аккаунт') ||
+    compact.includes('majestic id') && compact.includes('регистрац') ||
+    compact.includes('забыли пароль') ||
+    compact.includes('данные от игры сюда не подходят')
+  );
+}
+
+function looksLikeFamilyCabinet(text) {
+  return /Обзор|Участники|Ранги|Действия|Финансы|Все записи|Все операции/u.test(String(text || ''));
+}
+
 async function readCdpCookies(context, page) {
   const session = await context.newCDPSession(page);
   try {
+    const browserContextCookies = await context.cookies().catch(() => []);
     const network = await session.send('Network.getAllCookies').catch(() => ({ cookies: [] }));
     const storage = await session.send('Storage.getCookies').catch(() => ({ cookies: [] }));
     return mergeCookies(
-      (network.cookies || []).map(normalizeCookie).filter(Boolean),
+      mergeCookies(
+        browserContextCookies.map(normalizeCookie).filter(Boolean),
+        (network.cookies || []).map(normalizeCookie).filter(Boolean)
+      ),
       (storage.cookies || []).map(normalizeCookie).filter(Boolean)
     );
   } finally {
@@ -98,12 +121,16 @@ async function main() {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const url = String(page.url() || '').toLowerCase();
-      if (url && !url.includes('/login') && !url.includes('/auth')) {
+      const bodyText = await page.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+      if (url && !url.includes('/login') && !url.includes('/auth') && looksLikeFamilyCabinet(bodyText) && !looksLikeLoginPage(bodyText)) {
         const state = await saveStorageStateWithCdpCookies(context, page, sessionPath);
         console.log(`OK: session saved to ${sessionPath}`);
         console.log(`Cookies: ${Array.isArray(state.cookies) ? state.cookies.length : 0}`);
         console.log(`Origins: ${Array.isArray(state.origins) ? state.origins.length : 0}`);
         return;
+      }
+      if (looksLikeLoginPage(bodyText)) {
+        console.log('Still on Majestic login page. Log in in the opened Brave window...');
       }
       await page.waitForTimeout(1000);
     }
