@@ -36,6 +36,10 @@ function formatDateTime(value: string): string {
   return date.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function normalizeAction(input: any): FamilyCabinetAction | null {
   const externalLogId = String(input?.externalLogId || '').trim();
   const actionRaw = String(input?.actionRaw || '').trim();
@@ -321,13 +325,25 @@ export class FamilyCabinetService {
     let sent = 0;
     let failed = 0;
 
-    if (actions.length > 10) {
+    const batchSize = 10;
+    const batchDelayMs = 12000;
+    const maxPerSync = 100;
+    const actionsToSend = actions.slice(0, maxPerSync).reverse();
+
+    if (actions.length > batchSize) {
       await channel.send({
-        content: `📘 Family Cabinet: найдено ${actions.length} новых логов. Показываю последние 10, остальные сохранены в базе.`
+        content: `📘 Family Cabinet: найдено ${actions.length} новых логов. Отправляю пачками по ${batchSize} с паузой ${Math.round(batchDelayMs / 1000)} сек.`
       }).catch(() => null);
     }
 
-    for (const action of actions.slice(0, 10).reverse()) {
+    if (actions.length > maxPerSync) {
+      await channel.send({
+        content: `⚠️ За один sync отправлю первые ${maxPerSync} логов, остальные сохранены в базе и доступны через /cabinet logs.`
+      }).catch(() => null);
+    }
+
+    for (let index = 0; index < actionsToSend.length; index += 1) {
+      const action = actionsToSend[index];
       const ok = await channel.send({
         content: reason === 'manual' ? undefined : '',
         embeds: [this.buildActionEmbed(action)]
@@ -337,9 +353,13 @@ export class FamilyCabinetService {
         return false;
       });
       if (ok) sent += 1;
+
+      const sentInBatch = (index + 1) % batchSize === 0;
+      const hasMore = index + 1 < actionsToSend.length;
+      if (sentInBatch && hasMore) await wait(batchDelayMs);
     }
 
-    return { sent, failed };
+    return { sent, failed: failed + Math.max(0, actions.length - actionsToSend.length) };
   }
 
   private buildSyncSummaryEmbed(run: FamilyCabinetSyncRun, reason: string): EmbedBuilder {
