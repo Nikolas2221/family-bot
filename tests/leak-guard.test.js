@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits } = require('discord.js');
 
 const { createAccessApi } = require('../dist-ts/access');
 const { buildLeakScanText, registerEventRuntime } = require('../dist-ts/event-runtime');
@@ -57,12 +57,13 @@ async function main() {
   const telegramScamReports = [];
   const aiReplies = [];
   const naturalAnnouncements = [];
+  const channelSettingsPatches = [];
   let botInsultTimeoutMs = 0;
   const client = {
     user: { id: 'bot-1', bot: true },
     channels: {
-      fetch: async id => (id === '333333333333333333'
-        ? {
+      fetch: async id => {
+        if (id === '333333333333333333') return {
           id,
           messages: {
             fetch: async () => new Map([
@@ -71,8 +72,16 @@ async function main() {
               }]
             ])
           }
-        }
-        : null)
+        };
+        if (id === '444444444444444444') return {
+          id,
+          name: 'applications',
+          type: ChannelType.GuildText,
+          guild,
+          permissionsFor: () => ({ has: () => true })
+        };
+        return null;
+      }
     },
     removeAllListeners(name) {
       listeners.delete(name);
@@ -86,6 +95,9 @@ async function main() {
     aiMention: { enabled: true, cooldownSeconds: 30, maxChars: 700 },
     aiService: {
       aiText: async (_system, prompt) => `AI reply: ${prompt}`
+    },
+    database: {
+      updateGuildSettings: (_guildId, patch) => channelSettingsPatches.push(patch)
     },
     announcementService: {
       sendTelegramFromDiscord: async payload => {
@@ -120,7 +132,7 @@ async function main() {
     notifyTelegramSecurityAlert: async () => {},
     startVoiceSession() {}, stopVoiceSession() {}, enforceBlacklist: async () => false,
     sendWelcomeInvite: async () => {}, notifyTelegramMemberJoined: async member => telegramJoins.push(member.id), applyAutorole: async () => false,
-    resolveGuildSettings: () => ({ verification: { enabled: false } }),
+    resolveGuildSettings: () => ({ verification: { enabled: false }, channels: { rules: '333333333333333333' } }),
     findReactionRoleEntry: () => null, getReactionEmojiKey: () => '',
     canBypassChannelGuard: () => false, fetchDeletedChannelExecutor: async () => null,
     restoreDeletedChannel: async () => null, doPanelUpdate: async () => {},
@@ -246,7 +258,8 @@ async function main() {
     },
     delete: async () => {}
   });
-  assert.match(aiReplies.at(-1), /Кратко по правилам Discord/u);
+  assert.match(aiReplies.at(-1), /AI reply:/u);
+  assert.match(aiReplies.at(-1), /запрещены оскорбления/u);
 
   await listeners.get('messageCreate')({
     ...baseMessage,
@@ -264,6 +277,27 @@ async function main() {
   });
   assert.match(aiReplies.at(-1), /AI reply:/u);
   assert.match(aiReplies.at(-1), /запрещены оскорбления/u);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4channel',
+    content: '<@bot-1> сделай <#444444444444444444> каналом заявок',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.deepEqual(channelSettingsPatches.at(-1), { channels: { applications: '444444444444444444' } });
+  assert.match(aiReplies.at(-1), /теперь используется как \*\*заявки\*\*/u);
 
   await listeners.get('messageCreate')({
     ...baseMessage,

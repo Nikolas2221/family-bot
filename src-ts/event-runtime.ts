@@ -27,6 +27,10 @@ interface MemberLike {
     has(permission: unknown): boolean;
   } | null;
   roles: {
+    cache?: {
+      values?(): IterableIterator<{ id: string; name?: string; position?: number }>;
+      some?(callback: (role: { id: string; name?: string; position?: number }) => boolean): boolean;
+    };
     add(role: RoleLike, reason?: string): Promise<unknown>;
     remove(role: RoleLike, reason?: string): Promise<unknown>;
   };
@@ -40,9 +44,15 @@ interface GuildLike {
   name?: string;
   ownerId?: string | null;
   memberCount?: number;
+  channels?: {
+    cache?: {
+      values?(): IterableIterator<ChannelLike>;
+    };
+  };
   members: {
     cache: {
       get(id: string): MemberLike | undefined;
+      values?(): IterableIterator<MemberLike>;
     };
     fetch(id: string): Promise<MemberLike | null>;
   };
@@ -50,6 +60,7 @@ interface GuildLike {
     everyone?: RoleLike;
     cache: {
       get(id: string): RoleLike | undefined;
+      values?(): IterableIterator<{ id: string; name?: string; position?: number; managed?: boolean }>;
     };
     fetch(id: string): Promise<RoleLike | null>;
   };
@@ -60,11 +71,14 @@ interface ChannelLike {
   id: string;
   name?: string;
   type?: number;
+  parentId?: string | null;
+  topic?: string | null;
   archived?: boolean;
   guild?: GuildLike | null;
   send?(payload: Record<string, unknown>): Promise<NoticeLike | null>;
   sendTyping?(): Promise<unknown>;
   fetchWebhooks?(): Promise<any>;
+  permissionsFor?(target: unknown): { has(permission: unknown): boolean } | null;
   messages?: {
     fetch(options?: Record<string, unknown> | string): Promise<any>;
   };
@@ -303,6 +317,18 @@ interface WelcomeSettingsLike {
   verification: {
     enabled: boolean;
   };
+  familyTitle?: string;
+  channels?: Record<string, string>;
+  access?: {
+    applications?: string[];
+    discipline?: string[];
+    ranks?: string[];
+  };
+  modules?: Record<string, boolean>;
+}
+
+interface DatabaseLike {
+  updateGuildSettings(guildId: string, patch: Record<string, unknown>): unknown;
 }
 
 interface EventRuntimeOptions {
@@ -326,6 +352,7 @@ interface EventRuntimeOptions {
     sendTelegramFromDiscord(input: Record<string, any>): Promise<{ ok: boolean; code?: string; detail?: string }>;
   } | null;
   familyAnnouncementRoleId?: string;
+  database?: DatabaseLike | null;
   leakGuard: {
     enabled: boolean;
   };
@@ -351,6 +378,7 @@ interface EventRuntimeOptions {
   detectScamGift(content: string): { matched: boolean; reason: string };
   canBypassLeakGuard(member: MemberLike | null | undefined): boolean;
   canBypassScamGuard(member: MemberLike | null | undefined): boolean;
+  canBypassAutomod?(member: MemberLike | null | undefined): boolean;
   handleAutomodMessage(message: MessageLike): Promise<boolean>;
   handleCustomTriggerMessage(message: MessageLike): Promise<unknown>;
   sendSecurityLog(guild: GuildLike, content: string): Promise<unknown>;
@@ -885,9 +913,129 @@ function buildDiscordRulesSummary(): string {
   ].join('\n');
 }
 
+type RuleEnforcementMatch = {
+  rule: DiscordRuleMatch;
+  evidence: string;
+  timeoutMinutes: number;
+  action: 'timeout' | 'log';
+};
+
+const OBVIOUS_RULE_VIOLATIONS: Array<{
+  ruleTitle: string;
+  detail: string;
+  timeoutMinutes: number;
+  action: 'timeout' | 'log';
+  patterns: RegExp[];
+}> = [
+  {
+    ruleTitle: 'Уважение и недопустимость конфликтов',
+    detail: 'оскорбления через родителей и разжигание конфликта',
+    timeoutMinutes: 120,
+    action: 'timeout',
+    patterns: [
+      /(?:мам[аеуы]|мать|родител[еяий]|бат[яю])\s+(?:еб|шлю|сдох|оскорб|хуй|лох|твар)/iu,
+      /(?:сын|дочь)\s+(?:бля|шлю|хуй|твар)/iu
+    ]
+  },
+  {
+    ruleTitle: 'Оскорбления и нарушение уважения',
+    detail: 'прямое грубое оскорбление участника',
+    timeoutMinutes: 60,
+    action: 'timeout',
+    patterns: [
+      /(?:^|\s)(?:у[её]бок|долбо[её]б|пид[ао]р|мразь|тварь|чмо|еблан)(?:\s|$)/iu
+    ]
+  },
+  {
+    ruleTitle: 'Запрет на разглашение персональной информации',
+    detail: 'похоже на деанон или слив персональной информации',
+    timeoutMinutes: 1440,
+    action: 'log',
+    patterns: [
+      /(?:деанон|докс|dox|слив\s+(?:данных|адрес|телефон|пасп))/iu,
+      /(?:адрес|телефон|паспорт)\s*[:=]\s*[\p{L}\p{N}\s+.-]{8,}/iu
+    ]
+  },
+  {
+    ruleTitle: 'Запрет на угрозы и политические конфликты',
+    detail: 'похоже на угрозу в реальной жизни',
+    timeoutMinutes: 1440,
+    action: 'log',
+    patterns: [
+      /(?:найду\s+тебя|приеду\s+к\s+тебе|сломаю\s+(?:тебе|лицо)|убью\s+тебя)/iu
+    ]
+  }
+];
+
+function findObviousRuleViolation(content: string): RuleEnforcementMatch | null {
+  const text = String(content || '').trim();
+  if (!text || text.length > 1500) return null;
+  for (const entry of OBVIOUS_RULE_VIOLATIONS) {
+    const pattern = entry.patterns.find(candidate => candidate.test(text));
+    if (!pattern) continue;
+    return {
+      rule: {
+        title: entry.ruleTitle,
+        detail: entry.detail,
+        defaultMuteMinutes: entry.timeoutMinutes
+      },
+      evidence: safeLogExcerpt(text),
+      timeoutMinutes: entry.timeoutMinutes,
+      action: entry.action
+    };
+  }
+  return null;
+}
+
+async function enforceDiscordRuleGuard(
+  message: MessageLike,
+  options: Pick<EventRuntimeOptions, 'canBypassScamGuard' | 'canBypassAutomod' | 'sendSecurityLog'>
+): Promise<boolean> {
+  if (!message.guild || message.author?.bot || !message.member) return false;
+  if (options.canBypassScamGuard(message.member) || options.canBypassAutomod?.(message.member)) return false;
+
+  const violation = findObviousRuleViolation(message.content);
+  if (!violation) return false;
+
+  let muted = false;
+  let deleted = false;
+  if (violation.action === 'timeout') {
+    muted = await message.member.timeout?.(
+      violation.timeoutMinutes * 60 * 1000,
+      `Discord rules guard: ${violation.rule.title}`
+    ).then(() => true).catch(() => false) || false;
+    deleted = await message.delete().then(() => true).catch(() => false);
+  }
+
+  const logMessage = [
+    '⚖️ Rule guard: обнаружено нарушение правил Discord',
+    `Автор: <@${message.author.id}> (\`${message.author.id}\`)`,
+    `Канал: <#${message.channel.id}> (\`${message.channel.id}\`)`,
+    `Правило: ${violation.rule.title}`,
+    `Причина: ${violation.rule.detail}`,
+    `Действие: ${violation.action === 'timeout' ? (muted ? `мут ${violation.timeoutMinutes} мин.` : 'мут не выдан — проверь права бота') : 'только лог для ручной проверки'}`,
+    `Удаление: ${deleted ? 'сообщение удалено' : violation.action === 'timeout' ? 'не удалено' : 'не требуется'}`,
+    `Фрагмент: \`${violation.evidence}\``
+  ].join('\n');
+  await options.sendSecurityLog(message.guild, logMessage).catch(() => null);
+
+  await message.channel.send?.({
+    content: violation.action === 'timeout' && muted
+      ? `<@${message.author.id}>, нарушение правила **${violation.rule.title}**. Выдан мут на ${violation.timeoutMinutes} мин.`
+      : `<@${message.author.id}>, возможное нарушение правила **${violation.rule.title}** отправлено администрации на проверку.`,
+    allowedMentions: { parse: [], users: [message.author.id] }
+  }).catch(() => null);
+  return violation.action === 'timeout';
+}
+
 function parseMentionedChannelId(content: string): string {
-  const match = String(content || '').match(/<#(\d{16,20})>/u);
-  return match?.[1] || '';
+  const text = String(content || '');
+  const mention = text.match(/<#(\d{16,20})>/u);
+  if (mention?.[1]) return mention[1];
+  const link = text.match(/discord(?:app)?\.com\/channels\/\d{16,20}\/(\d{16,20})/iu);
+  if (link?.[1]) return link[1];
+  const raw = text.match(/\b(\d{16,20})\b/u);
+  return raw?.[1] || '';
 }
 
 function looksLikeRulesQuestion(prompt: string): boolean {
@@ -921,9 +1069,10 @@ function messageTextForRules(message: any): string {
 
 async function readMentionedRulesChannel(
   prompt: string,
-  client: EventRuntimeOptions['client']
+  client: EventRuntimeOptions['client'],
+  fallbackChannelId = ''
 ): Promise<{ channelId: string; text: string; error: string }> {
-  const channelId = parseMentionedChannelId(prompt);
+  const channelId = parseMentionedChannelId(prompt) || String(fallbackChannelId || '').trim();
   if (!channelId) return { channelId: '', text: '', error: '' };
   try {
     const channel = await client.channels?.fetch(channelId).catch(() => null);
@@ -945,11 +1094,13 @@ async function readMentionedRulesChannel(
 async function handleRulesQuestion(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiService'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'resolveGuildSettings'>
 ): Promise<boolean> {
   if (!looksLikeRulesQuestion(prompt)) return false;
 
-  const channelContext = await readMentionedRulesChannel(prompt, options.client);
+  const settings = message.guild?.id ? options.resolveGuildSettings(message.guild.id) : null;
+  const rulesChannelId = settings?.channels?.rules || '';
+  const channelContext = await readMentionedRulesChannel(prompt, options.client, rulesChannelId);
   const fallback = buildDiscordRulesSummary();
   let answer = fallback;
 
@@ -979,6 +1130,296 @@ async function handleRulesQuestion(
   await message.channel.send?.({
     content: `<@${message.author.id}>\n${answer}`.slice(0, 1900),
     allowedMentions: { parse: [], users: [message.author.id] }
+  }).catch(() => null);
+  return true;
+}
+
+type ChannelPurpose = 'panel' | 'applications' | 'welcome' | 'rules' | 'logs' | 'disciplineLogs' | 'updates' | 'reports' | 'automod';
+
+const CHANNEL_PURPOSES: Array<{
+  key: ChannelPurpose;
+  label: string;
+  description: string;
+  patterns: RegExp[];
+}> = [
+  {
+    key: 'applications',
+    label: 'заявки',
+    description: 'канал подачи и просмотра заявок',
+    patterns: [/заяв/u, /анкет/u, /при[её]м/u, /applications?/u]
+  },
+  {
+    key: 'panel',
+    label: 'панель семьи',
+    description: 'главная панель состава, профиля и активности',
+    patterns: [/панел/u, /состав/u, /главн/u, /family\s*panel/u]
+  },
+  {
+    key: 'welcome',
+    label: 'welcome',
+    description: 'канал приветствий и ожидания подтверждения',
+    patterns: [/welcome/u, /велком/u, /привет/u, /гост/u, /guests?/u]
+  },
+  {
+    key: 'rules',
+    label: 'правила',
+    description: 'канал с актуальными правилами сервера',
+    patterns: [/правил/u, /rules?/u]
+  },
+  {
+    key: 'disciplineLogs',
+    label: 'логи дисциплины',
+    description: 'логи выговоров, баллов и дисциплинарных действий',
+    patterns: [/дисцип/u, /выговор/u, /warn/u, /балл/u, /discipline/u]
+  },
+  {
+    key: 'automod',
+    label: 'логи automod',
+    description: 'логи автомодерации, scam/anti-leak и фильтров',
+    patterns: [/automod/u, /автомод/u, /скам/u, /scam/u, /anti[\s-]?leak/u, /слив/u]
+  },
+  {
+    key: 'updates',
+    label: 'обновления',
+    description: 'карточки обновлений бота',
+    patterns: [/обнов/u, /апдейт/u, /update/u, /release/u]
+  },
+  {
+    key: 'reports',
+    label: 'отчёты',
+    description: 'канал отчётов и сводок',
+    patterns: [/отч[её]т/u, /reports?/u]
+  },
+  {
+    key: 'logs',
+    label: 'общие логи',
+    description: 'общие системные логи бота',
+    patterns: [/лог/u, /logs?/u]
+  }
+];
+
+function inferChannelPurpose(prompt: string): typeof CHANNEL_PURPOSES[number] | null {
+  const text = String(prompt || '').toLowerCase();
+  return CHANNEL_PURPOSES.find(purpose => purpose.patterns.some(pattern => pattern.test(text))) || null;
+}
+
+function looksLikeChannelSetupRequest(prompt: string): boolean {
+  const text = String(prompt || '').toLowerCase();
+  return Boolean(parseMentionedChannelId(prompt))
+    && /(сделай|назначь|настрой|поставь|запиши|установи|используй|будет)/u.test(text)
+    && /(канал|сюда|этот|здесь|для)/u.test(text)
+    && Boolean(inferChannelPurpose(prompt));
+}
+
+function formatChannelName(channel: ChannelLike | null | undefined): string {
+  if (!channel?.id) return 'не найден';
+  return channel.name ? `#${channel.name} (${channel.id})` : channel.id;
+}
+
+function channelTypeLabel(type: unknown): string {
+  if (type === ChannelType.GuildText) return 'текстовый';
+  if (type === ChannelType.GuildAnnouncement) return 'новостной';
+  if (type === ChannelType.GuildVoice) return 'голосовой';
+  if (type === ChannelType.GuildCategory) return 'категория';
+  if (type === ChannelType.GuildForum) return 'форум';
+  return `тип ${String(type ?? 'unknown')}`;
+}
+
+function buildServerBrainSummary(guild: GuildLike, settings: WelcomeSettingsLike): string {
+  const configured = CHANNEL_PURPOSES
+    .map(purpose => {
+      const channelId = settings.channels?.[purpose.key] || '';
+      return channelId ? `• ${purpose.label}: <#${channelId}>` : `• ${purpose.label}: не настроен`;
+    })
+    .join('\n');
+  const roles = collectionValues<{ id: string; name?: string; position?: number; managed?: boolean }>(guild.roles?.cache)
+    .filter(role => role?.id)
+    .sort((left, right) => (Number(right.position) || 0) - (Number(left.position) || 0))
+    .slice(0, 20)
+    .map((role, index) => `${index + 1}. ${role.name || role.id} (${role.id})`)
+    .join('\n') || 'ролей в кеше нет';
+  const channels = collectionValues<ChannelLike>(guild.channels?.cache)
+    .filter(channel => channel?.id)
+    .slice(0, 30)
+    .map(channel => `• #${channel.name || channel.id} (${channel.id}) — ${channelTypeLabel(channel.type)}${channel.topic ? `, тема: ${String(channel.topic).slice(0, 80)}` : ''}`)
+    .join('\n') || 'каналов в кеше нет';
+
+  return [
+    '🧠 Карта сервера для AI:',
+    '',
+    `Сервер: ${guild.name || guild.id}`,
+    `Название семьи: ${settings.familyTitle || 'не задано'}`,
+    '',
+    'Настроенные назначения каналов:',
+    configured,
+    '',
+    'Роли сверху вниз:',
+    roles,
+    '',
+    'Каналы:',
+    channels
+  ].join('\n');
+}
+
+function formatMemberBrainLine(member: MemberLike | null | undefined): string {
+  if (!member?.id) return '';
+  const roleNames = collectionValues<{ id: string; name?: string; position?: number }>(member.roles?.cache)
+    .filter(role => role?.id)
+    .sort((left, right) => (Number(right.position) || 0) - (Number(left.position) || 0))
+    .map(role => role.name || role.id);
+  const isAdmin = isAdminMember(member);
+  return [
+    `Участник: <@${member.id}> (${member.id})`,
+    `Администратор: ${isAdmin ? 'да' : 'нет'}`,
+    `Роли: ${roleNames.length ? roleNames.join(', ') : 'нет ролей в кеше'}`
+  ].join('\n');
+}
+
+function parseTargetUserIds(content: string, botId: string): string[] {
+  return Array.from(String(content || '').matchAll(/<@!?(\d{16,20})>|\b(\d{16,20})\b/gu))
+    .map(match => match[1] || match[2] || '')
+    .filter(id => id && id !== botId);
+}
+
+function looksLikeServerBrainQuestion(prompt: string): boolean {
+  const text = String(prompt || '').toLowerCase();
+  return [
+    'проанализируй сервер',
+    'карта сервера',
+    'что настроено',
+    'какие каналы',
+    'какие роли',
+    'права участника',
+    'доступы участника',
+    'права у',
+    'доступы у'
+  ].some(marker => text.includes(marker));
+}
+
+async function handleServerBrainQuestion(
+  message: MessageLike,
+  prompt: string,
+  options: Pick<EventRuntimeOptions, 'client' | 'resolveGuildSettings' | 'aiService'>
+): Promise<boolean> {
+  if (!message.guild || !looksLikeServerBrainQuestion(prompt)) return false;
+  const settings = options.resolveGuildSettings(message.guild.id);
+  const botId = options.client.user?.id || '';
+  const targetIds = parseTargetUserIds(message.content, botId);
+  const targetBlocks: string[] = [];
+  for (const targetId of targetIds.slice(0, 3)) {
+    const member = await message.guild.members.fetch(targetId).catch(() => null);
+    const block = formatMemberBrainLine(member);
+    if (block) targetBlocks.push(block);
+  }
+
+  const context = [
+    buildServerBrainSummary(message.guild, settings),
+    targetBlocks.length ? `\nУчастники из запроса:\n${targetBlocks.join('\n\n')}` : ''
+  ].join('\n').slice(0, 8000);
+
+  let answer = [
+    context,
+    '',
+    'Я могу менять безопасные назначения каналов через сообщение вида:',
+    '<@бот> сделай <#канал> каналом заявок',
+    '<@бот> назначь <#канал> каналом правил',
+    '<@бот> сделай <#канал> каналом логов'
+  ].join('\n');
+
+  if (options.aiService) {
+    const systemPrompt = [
+      'Ты AI-мозг Discord-бота. По карте сервера кратко объясни, что настроено, что не настроено и что можно улучшить.',
+      'Не раскрывай секреты. Не выдумывай каналов и ролей сверх данных. Ответ до 1800 символов.'
+    ].join('\n');
+    const aiAnswer = await options.aiService.aiText(systemPrompt, `${prompt}\n\n${context}`).catch(() => '');
+    answer = String(aiAnswer || '').trim() || answer;
+  }
+
+  await message.channel.send?.({
+    content: `<@${message.author.id}>\n${answer}`.slice(0, 1900),
+    allowedMentions: { parse: [], users: [message.author.id] }
+  }).catch(() => null);
+  return true;
+}
+
+async function handleNaturalChannelSetup(
+  message: MessageLike,
+  prompt: string,
+  options: Pick<EventRuntimeOptions, 'client' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate'>
+): Promise<boolean> {
+  if (!message.guild || !looksLikeChannelSetupRequest(prompt)) return false;
+  if (!isAdminMember(message.member)) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, менять назначение каналов может только участник с правом Administrator.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  if (!options.database) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, база настроек недоступна, поэтому я не могу сохранить канал.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const purpose = inferChannelPurpose(prompt);
+  const channelId = parseMentionedChannelId(prompt);
+  const channel = channelId
+    ? await options.client.channels?.fetch(channelId).catch(() => null)
+    : null;
+
+  if (!purpose || !channel?.id) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, не понял канал или назначение. Пример: <@${options.client.user?.id || 'bot'}> сделай <#канал> каналом заявок.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  if (channel.guild?.id && channel.guild.id !== message.guild.id) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, этот канал находится на другом сервере, я не буду смешивать настройки.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const allowedChannelTypes = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum]);
+  if (!allowedChannelTypes.has(channel.type as any)) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, ${formatChannelName(channel)} не похож на текстовый/новостной/форум-канал. Для ${purpose.label} нужен канал, куда бот сможет писать.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  const botMember = options.client.user?.id ? await message.guild.members.fetch(options.client.user.id).catch(() => null) : null;
+  const canView = channel.permissionsFor?.(botMember || message.guild.id)?.has(PermissionFlagsBits.ViewChannel) !== false;
+  const canSend = channel.permissionsFor?.(botMember || message.guild.id)?.has(PermissionFlagsBits.SendMessages) !== false;
+  const canEmbed = channel.permissionsFor?.(botMember || message.guild.id)?.has(PermissionFlagsBits.EmbedLinks) !== false;
+  if (!canView || !canSend) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, я вижу запрос, но у меня нет доступа писать в ${formatChannelName(channel)}. Дай боту View Channel и Send Messages.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  options.database.updateGuildSettings(message.guild.id, { channels: { [purpose.key]: channel.id } });
+  if (purpose.key === 'panel') {
+    await options.doPanelUpdate(message.guild.id, true).catch(() => null);
+  }
+  const embedNote = canEmbed ? '' : '\n⚠️ Embed Links у бота в этом канале не видно, карточки могут отправляться обычным текстом.';
+  await message.channel.send?.({
+    content: [
+      `✅ Готово: <#${channel.id}> теперь используется как **${purpose.label}**.`,
+      `Назначение: ${purpose.description}.`,
+      'Я сохранил это в настройках сервера, Railway env менять не нужно.',
+      embedNote
+    ].filter(Boolean).join('\n'),
+    allowedMentions: { parse: [] }
   }).catch(() => null);
   return true;
 }
@@ -1119,8 +1560,12 @@ async function buildNaturalAnnouncementDraft(
 async function handleNaturalAdminCommand(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate'>
 ): Promise<boolean> {
+  if (await handleNaturalChannelSetup(message, prompt, options)) {
+    return true;
+  }
+
   const botId = options.client.user?.id || '';
   const action = parseNaturalModerationAction(prompt);
   const wantsAnnouncement = looksLikeAnnouncementRequest(prompt);
@@ -1227,7 +1672,7 @@ async function handleNaturalAdminCommand(
 async function handleAiMentionMessage(
   message: MessageLike,
   state: Map<string, number>,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate'>
 ): Promise<boolean> {
   const botId = options.client.user?.id || '';
   if (!message.guild || message.author?.bot || !botWasMentioned(message, botId)) return false;
@@ -1254,6 +1699,10 @@ async function handleAiMentionMessage(
   }
 
   if (await handleRulesQuestion(message, prompt, options)) {
+    return true;
+  }
+
+  if (await handleServerBrainQuestion(message, prompt, options)) {
     return true;
   }
 
@@ -1324,6 +1773,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     detectScamGift,
     canBypassLeakGuard,
     canBypassScamGuard,
+    canBypassAutomod,
     handleAutomodMessage,
     handleCustomTriggerMessage,
     sendSecurityLog,
@@ -1468,6 +1918,14 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       return;
     }
 
+    if (await enforceDiscordRuleGuard(message, {
+      canBypassScamGuard,
+      canBypassAutomod,
+      sendSecurityLog
+    })) {
+      return;
+    }
+
     await handleAiSoftConflict(message, aiConflictCooldowns, { aiMention }).catch(() => null);
 
     if (await handleAiMentionMessage(message, aiMentionCooldowns, {
@@ -1475,7 +1933,10 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       aiMention,
       aiService,
       announcementService,
-      familyAnnouncementRoleId
+      familyAnnouncementRoleId,
+      database: options.database,
+      resolveGuildSettings,
+      doPanelUpdate
     })) {
       return;
     }
