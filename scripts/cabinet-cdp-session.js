@@ -12,6 +12,65 @@ function getSessionPath() {
   return env('SESSION_STORAGE_PATH', path.join(process.cwd(), 'data', '.browser-session'));
 }
 
+function normalizeSameSite(value) {
+  const text = String(value || '').toLowerCase();
+  if (text.includes('strict')) return 'Strict';
+  if (text.includes('lax')) return 'Lax';
+  if (text.includes('none') || text.includes('no_restriction')) return 'None';
+  return 'Lax';
+}
+
+function normalizeCookie(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = String(raw.name || '').trim();
+  const value = String(raw.value || '');
+  const domain = String(raw.domain || '').trim();
+  if (!name || !domain) return null;
+
+  const expires = Number(raw.expires ?? raw.expirationDate ?? -1);
+  return {
+    name,
+    value,
+    domain,
+    path: String(raw.path || '/'),
+    expires: Number.isFinite(expires) ? expires : -1,
+    httpOnly: Boolean(raw.httpOnly),
+    secure: raw.secure !== false,
+    sameSite: normalizeSameSite(raw.sameSite)
+  };
+}
+
+function mergeCookies(primary, extra) {
+  const merged = new Map();
+  for (const cookie of [...primary, ...extra]) {
+    if (!cookie) continue;
+    merged.set(`${cookie.name};${cookie.domain};${cookie.path}`, cookie);
+  }
+  return Array.from(merged.values());
+}
+
+async function readCdpCookies(context, page) {
+  const session = await context.newCDPSession(page);
+  try {
+    const network = await session.send('Network.getAllCookies').catch(() => ({ cookies: [] }));
+    const storage = await session.send('Storage.getCookies').catch(() => ({ cookies: [] }));
+    return mergeCookies(
+      (network.cookies || []).map(normalizeCookie).filter(Boolean),
+      (storage.cookies || []).map(normalizeCookie).filter(Boolean)
+    );
+  } finally {
+    await session.detach().catch(() => null);
+  }
+}
+
+async function saveStorageStateWithCdpCookies(context, page, sessionPath) {
+  const state = await context.storageState();
+  const cdpCookies = await readCdpCookies(context, page).catch(() => []);
+  state.cookies = mergeCookies(state.cookies || [], cdpCookies);
+  fs.writeFileSync(sessionPath, JSON.stringify(state, null, 2));
+  return state;
+}
+
 async function main() {
   const cdpUrl = env('CABINET_CDP_URL', 'http://127.0.0.1:9222');
   const familyUrl = env('MAJESTIC_FAMILY_URL');
@@ -40,8 +99,10 @@ async function main() {
     while (Date.now() < deadline) {
       const url = String(page.url() || '').toLowerCase();
       if (url && !url.includes('/login') && !url.includes('/auth')) {
-        await context.storageState({ path: sessionPath });
+        const state = await saveStorageStateWithCdpCookies(context, page, sessionPath);
         console.log(`OK: session saved to ${sessionPath}`);
+        console.log(`Cookies: ${Array.isArray(state.cookies) ? state.cookies.length : 0}`);
+        console.log(`Origins: ${Array.isArray(state.origins) ? state.origins.length : 0}`);
         return;
       }
       await page.waitForTimeout(1000);

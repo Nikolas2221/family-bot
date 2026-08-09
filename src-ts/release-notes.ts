@@ -1,6 +1,17 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.94': {
+    added: [
+      'cabinet:session:brave теперь дополнительно забирает cookies напрямую через CDP, если Playwright storageState сохранил только origins'
+    ],
+    updated: [
+      'после захвата Brave-сессии скрипт сразу показывает количество сохранённых Cookies и Origins'
+    ],
+    fixed: [
+      'исправлена ситуация, когда экспорт кабинета давал Cookies: 0 и Railway снова видел страницу входа Majestic'
+    ]
+  },
   '1.0.93': {
     added: [
       'Majestic sync теперь распознаёт тихий разлогин: если вместо кабинета семьи открылась страница входа Majestic ID, бот пишет понятную причину'
