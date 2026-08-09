@@ -180,6 +180,10 @@ function withTab(url: string, tab: string): string {
   return `${clean}?tab=${tab}`;
 }
 
+function compactSnippet(text: string, limit = 220): string {
+  return String(text || '').replace(/\s+/gu, ' ').trim().slice(0, limit);
+}
+
 function tabLabels(tab: string): string[] {
   if (tab === 'finance' || tab === 'finances') return ['Финансы', 'Finance', 'Finances'];
   if (tab === 'logs' || tab === 'actions') return ['Действия', 'Логи', 'Actions', 'Logs'];
@@ -196,6 +200,13 @@ async function clickTabByLabel(page: any, tab: string): Promise<boolean> {
     }
   }
   return false;
+}
+
+async function waitForCabinetContent(page: any): Promise<void> {
+  await page.waitForFunction(() => {
+    const text = document.body?.innerText || '';
+    return text.length > 700 || /Действия|Финансы|Все записи|Все операции|Выберите фильтр/u.test(text);
+  }, null, { timeout: 20000 }).catch(() => null);
 }
 
 function restoreSessionFromEnv(sessionStoragePath: string): boolean {
@@ -313,9 +324,17 @@ async function parseRows(page: any, forceTextFallback = false): Promise<FamilyCa
   return logs;
 }
 
-async function scrapeTab(page: any, familyUrl: string, tab: string, target: number, forceTextFallback = false): Promise<FamilyCabinetAction[]> {
+async function scrapeTab(
+  page: any,
+  familyUrl: string,
+  tab: string,
+  target: number,
+  forceTextFallback = false,
+  diagnostics: string[] = []
+): Promise<FamilyCabinetAction[]> {
   await page.goto(withTab(familyUrl, tab), { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
+  await waitForCabinetContent(page);
   if (String(page.url()).includes('login')) {
     throw new Error('Сессия кабинета истекла. Нужно обновить SESSION_STORAGE_PATH.');
   }
@@ -323,6 +342,7 @@ async function scrapeTab(page: any, familyUrl: string, tab: string, target: numb
   await expandRows(page, target);
   let parsed = await parseRows(page, forceTextFallback);
   if (parsed.length === 0 && await clickTabByLabel(page, tab)) {
+    await waitForCabinetContent(page);
     await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
     await expandRows(page, target);
     parsed = await parseRows(page, forceTextFallback);
@@ -330,7 +350,9 @@ async function scrapeTab(page: any, familyUrl: string, tab: string, target: numb
   if (parsed.length === 0) {
     const title = await page.title().catch(() => '');
     const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-    console.warn(`[family-cabinet] ${tab} tab parsed 0 rows. url=${page.url()} title=${title} textLength=${bodyText.length}`);
+    const diagnostic = `${tab}: url=${page.url()} title=${title} textLength=${bodyText.length} text="${compactSnippet(bodyText)}"`;
+    diagnostics.push(diagnostic);
+    console.warn(`[family-cabinet] ${tab} tab parsed 0 rows. ${diagnostic}`);
   }
   return parsed;
 }
@@ -350,9 +372,10 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
   try {
     context = await browser.newContext({ storageState: config.sessionStoragePath });
     const page = await context.newPage();
+    const diagnostics: string[] = [];
     const logs = [
-      ...await scrapeTab(page, config.familyUrl, 'logs', config.logsFetchTarget),
-      ...await scrapeTab(page, config.familyUrl, 'actions', config.logsFetchTarget).catch(error => {
+      ...await scrapeTab(page, config.familyUrl, 'logs', config.logsFetchTarget, false, diagnostics),
+      ...await scrapeTab(page, config.familyUrl, 'actions', config.logsFetchTarget, false, diagnostics).catch(error => {
         console.warn('[family-cabinet] actions tab scrape failed:', error);
         return [];
       })
@@ -360,11 +383,11 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
 
     if (config.financeTabEnabled) {
       const financeLogs = [
-        ...await scrapeTab(page, config.familyUrl, 'finance', config.financeFetchTarget, true).catch(error => {
+        ...await scrapeTab(page, config.familyUrl, 'finance', config.financeFetchTarget, true, diagnostics).catch(error => {
           console.warn('[family-cabinet] finance tab scrape failed:', error);
           return [];
         }),
-        ...await scrapeTab(page, config.familyUrl, 'finances', config.financeFetchTarget, true).catch(error => {
+        ...await scrapeTab(page, config.familyUrl, 'finances', config.financeFetchTarget, true, diagnostics).catch(error => {
           console.warn('[family-cabinet] finances tab scrape failed:', error);
           return [];
         })
@@ -374,7 +397,8 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
 
     const unique = uniqueActions(logs);
     if (unique.length === 0) {
-      throw new Error('Majestic открылся, но строки логов не найдены. Проверь MAJESTIC_FAMILY_URL, права аккаунта в кабинете или изменение разметки страницы.');
+      const detail = diagnostics.length ? ` Диагностика: ${diagnostics.join(' | ').slice(0, 900)}` : '';
+      throw new Error(`Majestic открылся, но строки логов не найдены. Похоже, страница кабинета загрузилась пустой или без данных вкладок. Проверь актуальность CABINET_SESSION_B64/SESSION_STORAGE_PATH, права аккаунта и MAJESTIC_FAMILY_URL.${detail}`);
     }
 
     return unique;

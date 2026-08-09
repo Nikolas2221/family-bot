@@ -1,6 +1,18 @@
 import type { ReleaseNoteGroups } from './types';
 
 export const releaseNotes: Record<string, ReleaseNoteGroups> = {
+  '1.0.92': {
+    added: [
+      'расширенная диагностика Majestic sync: если кабинет открывается без строк логов, бот показывает URL, title, длину текста и короткий фрагмент страницы',
+      'ожидание реального содержимого кабинета перед парсингом вкладок "Действия" и "Финансы"'
+    ],
+    updated: [
+      'ошибка пустого Majestic кабинета теперь прямо подсказывает проверить CABINET_SESSION_B64/SESSION_STORAGE_PATH, права аккаунта и MAJESTIC_FAMILY_URL'
+    ],
+    fixed: [
+      'sync больше не маскирует пустую оболочку Majestic под обычную ошибку парсинга без деталей'
+    ]
+  },
   '1.0.91': {
     added: [
       'Majestic scraper теперь кликает реальные вкладки "Действия" и "Финансы", если query-параметр tab не переключил страницу',
