@@ -103,6 +103,8 @@ function checkSession(targetPath) {
   console.log(`OK: ${targetPath}`);
   console.log(`Cookies: ${Array.isArray(data.cookies) ? data.cookies.length : 0}`);
   console.log(`Origins: ${Array.isArray(data.origins) ? data.origins.length : 0}`);
+  console.log(`SessionStorage: ${(data.origins || []).reduce((sum, origin) => sum + (Array.isArray(origin.sessionStorage) ? origin.sessionStorage.length : 0), 0)}`);
+  console.log(`IndexedDB origins: ${(data.origins || []).filter(origin => Array.isArray(origin.indexedDB) && origin.indexedDB.length).length}`);
 }
 
 function main() {

@@ -87,8 +87,21 @@ async function readCdpCookies(context, page) {
 }
 
 async function saveStorageStateWithCdpCookies(context, page, sessionPath) {
-  const state = await context.storageState();
+  const state = await context.storageState({ indexedDB: true }).catch(() => context.storageState());
   const cdpCookies = await readCdpCookies(context, page).catch(() => []);
+  const origin = new URL(page.url()).origin;
+  const sessionStorage = await page.evaluate(() => {
+    return Array.from({ length: window.sessionStorage.length }, (_value, index) => {
+      const name = window.sessionStorage.key(index) || '';
+      return { name, value: window.sessionStorage.getItem(name) || '' };
+    }).filter(item => item.name);
+  }).catch(() => []);
+  let originState = (state.origins || []).find(item => item.origin === origin);
+  if (!originState) {
+    originState = { origin, localStorage: [] };
+    state.origins = [...(state.origins || []), originState];
+  }
+  originState.sessionStorage = sessionStorage;
   state.cookies = mergeCookies(state.cookies || [], cdpCookies);
   fs.writeFileSync(sessionPath, JSON.stringify(state, null, 2));
   return state;
@@ -127,6 +140,7 @@ async function main() {
         console.log(`OK: session saved to ${sessionPath}`);
         console.log(`Cookies: ${Array.isArray(state.cookies) ? state.cookies.length : 0}`);
         console.log(`Origins: ${Array.isArray(state.origins) ? state.origins.length : 0}`);
+        console.log(`SessionStorage: ${(state.origins || []).reduce((sum, origin) => sum + (Array.isArray(origin.sessionStorage) ? origin.sessionStorage.length : 0), 0)}`);
         return;
       }
       if (looksLikeLoginPage(bodyText)) {

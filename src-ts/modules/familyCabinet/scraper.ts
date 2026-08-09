@@ -235,6 +235,44 @@ function restoreSessionFromEnv(sessionStoragePath: string): boolean {
   }
 }
 
+function readStorageState(sessionStoragePath: string): any {
+  return JSON.parse(fs.readFileSync(sessionStoragePath, 'utf8'));
+}
+
+function playwrightStorageState(storageState: any): any {
+  return {
+    cookies: Array.isArray(storageState.cookies) ? storageState.cookies : [],
+    origins: Array.isArray(storageState.origins)
+      ? storageState.origins.map((origin: any) => ({
+        origin: origin.origin,
+        localStorage: Array.isArray(origin.localStorage) ? origin.localStorage : [],
+        ...(Array.isArray(origin.indexedDB) ? { indexedDB: origin.indexedDB } : {})
+      }))
+      : []
+  };
+}
+
+async function installSessionStorageRestore(context: any, storageState: any): Promise<void> {
+  const origins = Array.isArray(storageState.origins)
+    ? storageState.origins
+      .map((origin: any) => ({
+        origin: String(origin.origin || ''),
+        sessionStorage: Array.isArray(origin.sessionStorage) ? origin.sessionStorage : []
+      }))
+      .filter((origin: any) => origin.origin && origin.sessionStorage.length)
+    : [];
+  if (!origins.length) return;
+
+  await context.addInitScript((payload: any[]) => {
+    const match = payload.find(item => item.origin === window.location.origin);
+    if (!match) return;
+    for (const entry of match.sessionStorage || []) {
+      if (!entry?.name) continue;
+      window.sessionStorage.setItem(entry.name, String(entry.value || ''));
+    }
+  }, origins);
+}
+
 async function expandRows(page: any, target: number): Promise<void> {
   const rowSelector = 'div.overflow-hidden.rounded-lg.bg-background-tertiary';
   const maxClicks = Math.ceil(Math.max(0, target - 50) / 50) + 1;
@@ -385,7 +423,9 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
   const browser = await chromium.launch({ headless: true });
   let context: any = null;
   try {
-    context = await browser.newContext({ storageState: config.sessionStoragePath });
+    const storageState = readStorageState(config.sessionStoragePath);
+    context = await browser.newContext({ storageState: playwrightStorageState(storageState) });
+    await installSessionStorageRestore(context, storageState);
     const page = await context.newPage();
     const diagnostics: string[] = [];
     const logs = [
