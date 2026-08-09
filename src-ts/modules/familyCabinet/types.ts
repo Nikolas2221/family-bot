@@ -26,7 +26,7 @@ export interface FamilyCabinetAction {
 export interface FamilyCabinetSyncRun {
   startedAt: string;
   finishedAt: string;
-  status: 'ok' | 'failed' | 'disabled';
+  status: 'ok' | 'failed' | 'disabled' | 'skipped';
   logsReceived: number;
   logsCreated: number;
   logsSkipped: number;

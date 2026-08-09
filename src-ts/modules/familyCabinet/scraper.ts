@@ -22,7 +22,7 @@ function toMoscowIso(value: string): string {
 function actionType(raw: string): string {
   const lower = raw.toLowerCase();
   if (lower.includes('контракт')) return 'contract_complete';
-  if (lower.includes('приглас')) return 'family_invite';
+  if (lower.includes('приглас') || lower.includes('приглаш')) return 'family_invite';
   if (lower.includes('покинул')) return 'family_leave';
   if (lower.includes('исключ')) return 'family_kick';
   if (lower.includes('ранг') || lower.includes('роль')) return 'rank_change';
@@ -30,8 +30,20 @@ function actionType(raw: string): string {
   if (lower.includes('роял')) return 'royalty_payment';
   if (lower.includes('попол')) return 'finance_deposit';
   if (lower.includes('взят') || lower.includes('списан')) return 'finance_withdraw';
+  if (/(снял|вывел|взял|изъял|потратил|расход|списал|выдал).*(баланс|казн|банк|сч[её]т|семь)/u.test(lower)) return 'finance_withdraw';
+  if (/(пополнил|вн[её]с|зачисл|положил|доход).*(баланс|казн|банк|сч[её]т|семь)/u.test(lower)) return 'finance_deposit';
+  if (/(доставил|прин[её]с|сдал|положил).*(товар|склад|материал|ресурс)/u.test(lower)) return 'warehouse_deposit';
+  if (/(забрал|взял|изъял|выдал).*(товар|склад|материал|ресурс)/u.test(lower)) return 'warehouse_withdraw';
   if (lower.includes('транспорт')) return 'transport_added';
   return 'unknown';
+}
+
+function parseMoneyAmount(raw: string): number | null {
+  const match = String(raw || '').match(/([+-]?\s*\d[\d\s.,]*)\s*\$/u);
+  if (!match) return null;
+  const normalized = match[1].replace(/\s+/gu, '').replace(',', '.');
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : null;
 }
 
 function extractPerson(raw: string): { nickname: string; staticId: number } | null {
@@ -65,10 +77,21 @@ function parseTextFallback(text: string): FamilyCabinetAction | null {
     unit: null,
     direction: null,
     contract: null,
-    amount: null,
+    amount: parseMoneyAmount(raw),
     balanceAfter: null,
     status: type === 'unknown' ? 'unparsed' : 'parsed'
   };
+}
+
+function uniqueActions(actions: FamilyCabinetAction[]): FamilyCabinetAction[] {
+  const seen = new Set<string>();
+  const unique: FamilyCabinetAction[] = [];
+  for (const action of actions) {
+    if (seen.has(action.externalLogId)) continue;
+    seen.add(action.externalLogId);
+    unique.push(action);
+  }
+  return unique;
 }
 
 function externalId(parts: string[]): string {
@@ -112,7 +135,7 @@ async function expandRows(page: any, target: number): Promise<void> {
   }
 }
 
-async function parseRows(page: any): Promise<FamilyCabinetAction[]> {
+async function parseRows(page: any, forceTextFallback = false): Promise<FamilyCabinetAction[]> {
   const rowSelector = 'div.overflow-hidden.rounded-lg.bg-background-tertiary';
   const rows = page.locator(rowSelector);
   const count = await rows.count().catch(() => 0);
@@ -120,6 +143,13 @@ async function parseRows(page: any): Promise<FamilyCabinetAction[]> {
 
   for (let index = 0; index < count; index += 1) {
     const row = rows.nth(index);
+    if (forceTextFallback) {
+      const fallbackText = await row.innerText().catch(() => '');
+      const fallbackAction = parseTextFallback(fallbackText);
+      if (fallbackAction) logs.push(fallbackAction);
+      continue;
+    }
+
     const desktopRow = row.locator('div.hidden.items-start.xl\\:flex');
     const cols = desktopRow.locator('> div');
     const colCount = await cols.count().catch(() => 0);
@@ -155,13 +185,24 @@ async function parseRows(page: any): Promise<FamilyCabinetAction[]> {
       unit: null,
       direction: null,
       contract: null,
-      amount: null,
+      amount: parseMoneyAmount(raw),
       balanceAfter: null,
       status: type === 'unknown' ? 'unparsed' : 'parsed'
     });
   }
 
   return logs;
+}
+
+async function scrapeTab(page: any, familyUrl: string, tab: string, target: number, forceTextFallback = false): Promise<FamilyCabinetAction[]> {
+  await page.goto(withTab(familyUrl, tab), { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
+  if (String(page.url()).includes('login')) {
+    throw new Error('Сессия кабинета истекла. Нужно обновить SESSION_STORAGE_PATH.');
+  }
+  await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
+  await expandRows(page, target);
+  return await parseRows(page, forceTextFallback);
 }
 
 export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<FamilyCabinetAction[]> {
@@ -179,14 +220,17 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
   try {
     context = await browser.newContext({ storageState: config.sessionStoragePath });
     const page = await context.newPage();
-    await page.goto(withTab(config.familyUrl, 'logs'), { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
-    if (String(page.url()).includes('login')) {
-      throw new Error('Сессия кабинета истекла. Нужно обновить SESSION_STORAGE_PATH.');
+    const logs = await scrapeTab(page, config.familyUrl, 'logs', config.logsFetchTarget);
+
+    if (config.financeTabEnabled) {
+      const financeLogs = await scrapeTab(page, config.familyUrl, 'finance', config.financeFetchTarget, true).catch(error => {
+        console.warn('[family-cabinet] finance tab scrape failed:', error);
+        return [];
+      });
+      logs.push(...financeLogs);
     }
-    await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
-    await expandRows(page, config.logsFetchTarget);
-    return await parseRows(page);
+
+    return uniqueActions(logs);
   } finally {
     if (context) await context.close().catch(() => null);
     await browser.close().catch(() => null);

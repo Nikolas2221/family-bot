@@ -32,6 +32,17 @@ exports.scrapeFamilyLogs = async () => [
   return file;
 }
 
+function writeSlowScraperModule(dir) {
+  const file = path.join(dir, 'slow-cabinet-scraper.js');
+  fs.writeFileSync(file, `
+exports.scrapeFamilyLogs = async () => {
+  await new Promise(resolve => setTimeout(resolve, 50));
+  return [];
+};
+`, 'utf8');
+  return file;
+}
+
 function baseConfig(dir, scraperModulePath, patch = {}) {
   return {
     enabled: true,
@@ -93,6 +104,16 @@ async function main() {
   assert.equal(broken.logsCreated, 2);
   assert.equal(broken.logsDelivered, 0);
   assert.match(broken.errorMessage, /FAMILY_CABINET_SYNC_CHANNEL_ID/u);
+
+  const slowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-cabinet-slow-'));
+  const slowService = createFamilyCabinetService(client, baseConfig(slowDir, writeSlowScraperModule(slowDir)));
+  const beforeAutoSkipSummaryCount = logMessages.length;
+  const running = slowService.runSync('manual');
+  const skippedAuto = await slowService.runSync('auto');
+  assert.equal(skippedAuto.status, 'skipped');
+  assert.equal(logMessages.length, beforeAutoSkipSummaryCount);
+  const completed = await running;
+  assert.equal(completed.status, 'ok');
 
   console.log('ALL FAMILY CABINET TESTS PASSED');
 }

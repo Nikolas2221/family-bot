@@ -70,6 +70,8 @@ export class FamilyCabinetService {
   private state: FamilyCabinetState;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private currentRunStartedAt = '';
+  private autoSkippedWhileRunning = 0;
 
   constructor(
     private readonly client: any,
@@ -91,6 +93,8 @@ export class FamilyCabinetService {
       `Канал live-sync: ${this.config.syncChannelId ? `<#${this.config.syncChannelId}>` : 'не задан'}`,
       `Файл данных: ${this.config.dataFile}`,
       `Scraper: ${this.config.scraperModulePath ? this.config.scraperModulePath : 'встроенный Playwright scraper'}`,
+      this.running ? `Текущий запуск: выполняется с ${formatDateTime(this.currentRunStartedAt || new Date().toISOString())}` : '',
+      this.autoSkippedWhileRunning > 0 ? `Auto-sync пропущен во время активного запуска: ${this.autoSkippedWhileRunning}` : '',
       lastRun
         ? `Последний запуск: ${lastRun.status}, новых: ${lastRun.logsCreated}, отправлено: ${lastRun.logsDelivered ?? 0}, ${formatDateTime(lastRun.finishedAt)}`
         : 'Последний запуск: ещё не было',
@@ -100,15 +104,27 @@ export class FamilyCabinetService {
 
   startAutoSync(): void {
     if (!this.config.enabled || !this.config.syncEnabled || this.timer) return;
-    this.timer = setInterval(() => {
+    void this.runSync('startup').catch(error => {
+      console.error('[family-cabinet] startup sync failed:', error);
+    }).finally(() => {
+      this.scheduleNextAutoSync();
+    });
+  }
+
+  private scheduleNextAutoSync(): void {
+    if (!this.config.enabled || !this.config.syncEnabled || this.timer) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
       void this.runSync('auto').catch(error => {
         console.error('[family-cabinet] auto sync failed:', error);
+      }).finally(() => {
+        this.scheduleNextAutoSync();
       });
     }, Math.max(60000, this.config.syncIntervalMs));
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
 
@@ -125,7 +141,12 @@ export class FamilyCabinetService {
       return this.recordRun('disabled', 0, 0, 0, 'FAMILY_CABINET_ENABLED не true.');
     }
     if (this.running) {
-      const run = this.recordRun('failed', 0, 0, 0, 'Синхронизация кабинета уже выполняется. Дождись завершения текущего запуска.');
+      if (reason === 'auto') {
+        this.autoSkippedWhileRunning += 1;
+        return this.buildBusyRun();
+      }
+
+      const run = this.recordRun('skipped', 0, 0, 0, 'Синхронизация кабинета уже выполняется. Дождись завершения текущего запуска.');
       await this.sendSyncSummary(run, reason).catch(error => {
         console.warn('[family-cabinet] failed to send running summary:', error);
       });
@@ -133,6 +154,7 @@ export class FamilyCabinetService {
     }
     this.running = true;
     const startedAt = new Date().toISOString();
+    this.currentRunStartedAt = startedAt;
     try {
       const logs = await this.scrape();
       const existing = new Set(this.state.actions.map(action => action.externalLogId));
@@ -173,7 +195,23 @@ export class FamilyCabinetService {
       return run;
     } finally {
       this.running = false;
+      this.currentRunStartedAt = '';
     }
+  }
+
+  private buildBusyRun(): FamilyCabinetSyncRun {
+    const now = new Date().toISOString();
+    return {
+      startedAt: this.currentRunStartedAt || now,
+      finishedAt: now,
+      status: 'skipped',
+      logsReceived: 0,
+      logsCreated: 0,
+      logsSkipped: 0,
+      logsDelivered: 0,
+      logsDeliveryFailed: 0,
+      errorMessage: 'Синхронизация кабинета уже выполняется. Следующий auto-запуск будет после завершения текущего.'
+    };
   }
 
   private async scrape(): Promise<any[]> {
@@ -237,16 +275,21 @@ export class FamilyCabinetService {
   }
 
   private buildActionEmbed(action: FamilyCabinetAction): EmbedBuilder {
+    const fields = [
+      { name: 'Тип', value: action.actionType || 'unknown', inline: true },
+      { name: 'Участник', value: personLabel(action.member), inline: true },
+      { name: 'Инициатор', value: personLabel(action.initiator), inline: true },
+      ...(action.amount !== null && action.amount !== undefined
+        ? [{ name: 'Сумма', value: `${action.amount}$`, inline: true }]
+        : []),
+      { name: 'Дата', value: formatDateTime(action.datetime), inline: false }
+    ];
+
     return new EmbedBuilder()
       .setColor(action.status === 'parsed' ? 0x57f287 : 0xf59e0b)
       .setTitle('📘 Лог семейного кабинета')
       .setDescription(action.actionRaw.slice(0, 1000))
-      .addFields(
-        { name: 'Тип', value: action.actionType || 'unknown', inline: true },
-        { name: 'Участник', value: personLabel(action.member), inline: true },
-        { name: 'Инициатор', value: personLabel(action.initiator), inline: true },
-        { name: 'Дата', value: formatDateTime(action.datetime), inline: false }
-      )
+      .addFields(fields)
       .setFooter({ text: 'KLAIZ • Family Cabinet' })
       .setTimestamp();
   }
