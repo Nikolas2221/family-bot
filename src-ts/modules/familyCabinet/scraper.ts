@@ -24,7 +24,7 @@ function actionType(raw: string): string {
   if (lower.includes('контракт')) return 'contract_complete';
   if (lower.includes('приглас') || lower.includes('приглаш')) return 'family_invite';
   if (lower.includes('покинул')) return 'family_leave';
-  if (lower.includes('исключ')) return 'family_kick';
+  if (lower.includes('исключ') || lower.includes('уволен')) return 'family_kick';
   if (lower.includes('ранг') || lower.includes('роль')) return 'rank_change';
   if (lower.includes('преми')) return 'bonus';
   if (lower.includes('роял')) return 'royalty_payment';
@@ -38,12 +38,26 @@ function actionType(raw: string): string {
   return 'unknown';
 }
 
+function parseMoneyAmounts(raw: string): number[] {
+  const matches = Array.from(String(raw || '').matchAll(/([+-]?)\s*\$\s*(\d[\d\s.,]*)|([+-]?)\s*(\d[\d\s.,]*)\s*\$/gu));
+  return matches
+    .map(match => {
+      const sign = match[1] || match[3] || '';
+      const value = match[2] || match[4] || '';
+      const normalized = value.replace(/\s+/gu, '').replace(',', '.');
+      const amount = Number(normalized);
+      if (!Number.isFinite(amount)) return null;
+      return sign === '-' ? -Math.abs(amount) : amount;
+    })
+    .filter((amount): amount is number => amount !== null);
+}
+
 function parseMoneyAmount(raw: string): number | null {
-  const match = String(raw || '').match(/([+-]?\s*\d[\d\s.,]*)\s*\$/u);
-  if (!match) return null;
-  const normalized = match[1].replace(/\s+/gu, '').replace(',', '.');
-  const amount = Number(normalized);
-  return Number.isFinite(amount) ? amount : null;
+  return parseMoneyAmounts(raw)[0] ?? null;
+}
+
+function parseBalanceAfter(raw: string): number | null {
+  return parseMoneyAmounts(raw)[1] ?? null;
 }
 
 function extractPerson(raw: string): { nickname: string; staticId: number } | null {
@@ -78,22 +92,68 @@ function parseTextFallback(text: string): FamilyCabinetAction | null {
     direction: null,
     contract: null,
     amount: parseMoneyAmount(raw),
-    balanceAfter: null,
+    balanceAfter: parseBalanceAfter(raw),
     status: type === 'unknown' ? 'unparsed' : 'parsed'
   };
 }
 
-function parseTextDump(text: string): FamilyCabinetAction[] {
-  const lines = String(text || '')
+function normalizedLines(text: string): string[] {
+  return String(text || '')
     .split(/\r?\n/u)
     .map(line => line.replace(/\s+/gu, ' ').trim())
     .filter(Boolean);
+}
+
+function parseFinanceRowText(text: string): FamilyCabinetAction | null {
+  const lines = normalizedLines(text);
+  const dateIndex = lines.findIndex(line => /\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u.test(line));
+  if (dateIndex < 0) return null;
+  const dateText = lines[dateIndex];
+  const moneyIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter(item => item.index > dateIndex && item.line.includes('$'));
+  const operationIndex = moneyIndexes.length >= 2 ? moneyIndexes[1].index + 1 : dateIndex + 1;
+  const operation = lines[operationIndex] || lines.slice(dateIndex + 1).find(line => !line.includes('$')) || '';
+  const actorText = lines.slice(operationIndex + 1).find(line => /#\d{3,10}/u.test(line)) || '';
+  const arrowPeople = actorText.split(/\s*[→>]\s*/u).map(extractPerson).filter(Boolean) as { nickname: string; staticId: number }[];
+  const people = arrowPeople.length
+    ? arrowPeople
+    : Array.from(`${operation} ${actorText}`.matchAll(/([^\s#][^#]{1,40}?)\s*#(\d{3,10})/gu))
+      .map(match => ({ nickname: match[1].trim(), staticId: Number(match[2]) || 0 }))
+      .filter(person => person.staticId);
+  const amountText = moneyIndexes[0]?.line || '';
+  const balanceText = moneyIndexes[1]?.line || '';
+  const raw = [operation, amountText, balanceText, actorText].filter(Boolean).join(' • ');
+  const type = actionType(raw);
+
+  if (!operation && !amountText) return null;
+  return {
+    externalLogId: externalId([dateText, operation, amountText, balanceText, actorText]),
+    datetime: toMoscowIso(dateText),
+    actionRaw: operation || raw,
+    actionType: type === 'unknown' && amountText ? (parseMoneyAmount(amountText) ?? 0) < 0 ? 'finance_withdraw' : 'finance_deposit' : type,
+    member: people[1] || { nickname: '', staticId: 0 },
+    initiator: people[0] || null,
+    quantity: null,
+    unit: null,
+    direction: null,
+    contract: null,
+    amount: parseMoneyAmount(amountText || raw),
+    balanceAfter: parseMoneyAmount(balanceText) ?? parseBalanceAfter(raw),
+    status: 'parsed'
+  };
+}
+
+function parseTextDump(text: string, finance = false): FamilyCabinetAction[] {
+  const lines = normalizedLines(text);
   const logs: FamilyCabinetAction[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     if (!/\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u.test(lines[index])) continue;
-    const chunk = lines.slice(index, Math.min(lines.length, index + 6)).join(' ');
-    const action = parseTextFallback(chunk);
+    const chunkLines = lines.slice(index, Math.min(lines.length, index + (finance ? 6 : 5)));
+    const action = finance
+      ? parseFinanceRowText(chunkLines.join('\n')) || parseTextFallback(chunkLines.join(' '))
+      : parseTextFallback(chunkLines.join(' '));
     if (action && action.actionRaw.length > 3) logs.push(action);
   }
 
@@ -118,6 +178,24 @@ function externalId(parts: string[]): string {
 function withTab(url: string, tab: string): string {
   const clean = String(url || '').replace(/\?.*$/u, '');
   return `${clean}?tab=${tab}`;
+}
+
+function tabLabels(tab: string): string[] {
+  if (tab === 'finance' || tab === 'finances') return ['Финансы', 'Finance', 'Finances'];
+  if (tab === 'logs' || tab === 'actions') return ['Действия', 'Логи', 'Actions', 'Logs'];
+  return [tab];
+}
+
+async function clickTabByLabel(page: any, tab: string): Promise<boolean> {
+  for (const label of tabLabels(tab)) {
+    const clicked = await page.getByText(label, { exact: true }).first().click({ timeout: 3000 }).then(() => true).catch(() => false);
+    if (clicked) {
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
+      await page.waitForTimeout(800);
+      return true;
+    }
+  }
+  return false;
 }
 
 function restoreSessionFromEnv(sessionStoragePath: string): boolean {
@@ -152,6 +230,17 @@ async function expandRows(page: any, target: number): Promise<void> {
   }
 }
 
+async function candidateRowTexts(page: any): Promise<string[]> {
+  return await page.locator('body *').evaluateAll((elements: Element[]) => {
+    const dateRe = /\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u;
+    const texts = elements
+      .map(element => (element as HTMLElement).innerText || '')
+      .map(text => text.replace(/[ \t]+/gu, ' ').trim())
+      .filter(text => dateRe.test(text) && text.length < 900 && text.split(/\r?\n/u).length <= 12);
+    return Array.from(new Set(texts));
+  }).catch(() => []);
+}
+
 async function parseRows(page: any, forceTextFallback = false): Promise<FamilyCabinetAction[]> {
   const rowSelector = 'div.overflow-hidden.rounded-lg.bg-background-tertiary';
   const rows = page.locator(rowSelector);
@@ -159,15 +248,23 @@ async function parseRows(page: any, forceTextFallback = false): Promise<FamilyCa
   const logs: FamilyCabinetAction[] = [];
 
   if (count === 0) {
+    for (const text of await candidateRowTexts(page)) {
+      const action = forceTextFallback
+        ? parseFinanceRowText(text) || parseTextFallback(text)
+        : parseTextFallback(text);
+      if (action) logs.push(action);
+    }
+    if (logs.length) return uniqueActions(logs);
+
     const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-    return parseTextDump(bodyText);
+    return parseTextDump(bodyText, forceTextFallback);
   }
 
   for (let index = 0; index < count; index += 1) {
     const row = rows.nth(index);
     if (forceTextFallback) {
       const fallbackText = await row.innerText().catch(() => '');
-      const fallbackAction = parseTextFallback(fallbackText);
+      const fallbackAction = parseFinanceRowText(fallbackText) || parseTextFallback(fallbackText);
       if (fallbackAction) logs.push(fallbackAction);
       continue;
     }
@@ -208,7 +305,7 @@ async function parseRows(page: any, forceTextFallback = false): Promise<FamilyCa
       direction: null,
       contract: null,
       amount: parseMoneyAmount(raw),
-      balanceAfter: null,
+      balanceAfter: parseBalanceAfter(raw),
       status: type === 'unknown' ? 'unparsed' : 'parsed'
     });
   }
@@ -224,7 +321,12 @@ async function scrapeTab(page: any, familyUrl: string, tab: string, target: numb
   }
   await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
   await expandRows(page, target);
-  const parsed = await parseRows(page, forceTextFallback);
+  let parsed = await parseRows(page, forceTextFallback);
+  if (parsed.length === 0 && await clickTabByLabel(page, tab)) {
+    await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
+    await expandRows(page, target);
+    parsed = await parseRows(page, forceTextFallback);
+  }
   if (parsed.length === 0) {
     const title = await page.title().catch(() => '');
     const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
@@ -248,13 +350,25 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
   try {
     context = await browser.newContext({ storageState: config.sessionStoragePath });
     const page = await context.newPage();
-    const logs = await scrapeTab(page, config.familyUrl, 'logs', config.logsFetchTarget);
+    const logs = [
+      ...await scrapeTab(page, config.familyUrl, 'logs', config.logsFetchTarget),
+      ...await scrapeTab(page, config.familyUrl, 'actions', config.logsFetchTarget).catch(error => {
+        console.warn('[family-cabinet] actions tab scrape failed:', error);
+        return [];
+      })
+    ];
 
     if (config.financeTabEnabled) {
-      const financeLogs = await scrapeTab(page, config.familyUrl, 'finance', config.financeFetchTarget, true).catch(error => {
-        console.warn('[family-cabinet] finance tab scrape failed:', error);
-        return [];
-      });
+      const financeLogs = [
+        ...await scrapeTab(page, config.familyUrl, 'finance', config.financeFetchTarget, true).catch(error => {
+          console.warn('[family-cabinet] finance tab scrape failed:', error);
+          return [];
+        }),
+        ...await scrapeTab(page, config.familyUrl, 'finances', config.financeFetchTarget, true).catch(error => {
+          console.warn('[family-cabinet] finances tab scrape failed:', error);
+          return [];
+        })
+      ];
       logs.push(...financeLogs);
     }
 

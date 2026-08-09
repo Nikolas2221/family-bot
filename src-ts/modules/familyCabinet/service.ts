@@ -282,6 +282,9 @@ export class FamilyCabinetService {
       ...(action.amount !== null && action.amount !== undefined
         ? [{ name: 'Сумма', value: `${action.amount}$`, inline: true }]
         : []),
+      ...(action.balanceAfter !== null && action.balanceAfter !== undefined
+        ? [{ name: 'Баланс после', value: `${action.balanceAfter}$`, inline: true }]
+        : []),
       { name: 'Дата', value: formatDateTime(action.datetime), inline: false }
     ];
 
