@@ -83,6 +83,23 @@ function parseTextFallback(text: string): FamilyCabinetAction | null {
   };
 }
 
+function parseTextDump(text: string): FamilyCabinetAction[] {
+  const lines = String(text || '')
+    .split(/\r?\n/u)
+    .map(line => line.replace(/\s+/gu, ' ').trim())
+    .filter(Boolean);
+  const logs: FamilyCabinetAction[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/\d{2}\.\d{2}\.\d{4}\D+\d{1,2}:\d{2}/u.test(lines[index])) continue;
+    const chunk = lines.slice(index, Math.min(lines.length, index + 6)).join(' ');
+    const action = parseTextFallback(chunk);
+    if (action && action.actionRaw.length > 3) logs.push(action);
+  }
+
+  return uniqueActions(logs);
+}
+
 function uniqueActions(actions: FamilyCabinetAction[]): FamilyCabinetAction[] {
   const seen = new Set<string>();
   const unique: FamilyCabinetAction[] = [];
@@ -140,6 +157,11 @@ async function parseRows(page: any, forceTextFallback = false): Promise<FamilyCa
   const rows = page.locator(rowSelector);
   const count = await rows.count().catch(() => 0);
   const logs: FamilyCabinetAction[] = [];
+
+  if (count === 0) {
+    const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+    return parseTextDump(bodyText);
+  }
 
   for (let index = 0; index < count; index += 1) {
     const row = rows.nth(index);
@@ -202,7 +224,13 @@ async function scrapeTab(page: any, familyUrl: string, tab: string, target: numb
   }
   await page.locator('div.overflow-hidden.rounded-lg.bg-background-tertiary').first().waitFor({ timeout: 15000 }).catch(() => null);
   await expandRows(page, target);
-  return await parseRows(page, forceTextFallback);
+  const parsed = await parseRows(page, forceTextFallback);
+  if (parsed.length === 0) {
+    const title = await page.title().catch(() => '');
+    const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+    console.warn(`[family-cabinet] ${tab} tab parsed 0 rows. url=${page.url()} title=${title} textLength=${bodyText.length}`);
+  }
+  return parsed;
 }
 
 export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<FamilyCabinetAction[]> {
@@ -230,7 +258,12 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
       logs.push(...financeLogs);
     }
 
-    return uniqueActions(logs);
+    const unique = uniqueActions(logs);
+    if (unique.length === 0) {
+      throw new Error('Majestic открылся, но строки логов не найдены. Проверь MAJESTIC_FAMILY_URL, права аккаунта в кабинете или изменение разметки страницы.');
+    }
+
+    return unique;
   } finally {
     if (context) await context.close().catch(() => null);
     await browser.close().catch(() => null);
