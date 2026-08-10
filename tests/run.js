@@ -36,6 +36,7 @@ async function main() {
   const { main: runRuntimeProfileModalsTests } = require('./runtime-profile-modals.test');
   const { main: runSecurityTests } = require('./security.test');
   const { main: runServerBackupsTests } = require('./server-backups.test');
+  const { main: runServerBrainTests } = require('./server-brain.test');
   const { main: runStorageTests } = require('./storage.test');
   const { main: runSupportTicketTests } = require('./support-tickets.test');
   const { main: runSupportTicketUiTests } = require('./support-ticket-ui.test');
@@ -83,6 +84,7 @@ async function main() {
   await runRuntimeProfileModalsTests();
   await runSecurityTests();
   await runServerBackupsTests();
+  await runServerBrainTests();
   await runStorageTests();
   await runSupportTicketTests();
   await runSupportTicketUiTests();

@@ -30,13 +30,14 @@ async function main() {
     resolveGuildSettings: () => ({ access: { applications: [], discipline: [], ranks: [] } })
   });
   let naturalTimeoutMs = 0;
+  let naturalBanned = false;
   const targetMember = {
     id: '222222222222222222',
     guild: null,
     roles: { add: async () => {}, remove: async () => {} },
     timeout: async ms => { naturalTimeoutMs = ms; },
     kick: async () => {},
-    ban: async () => {}
+    ban: async () => { naturalBanned = true; }
   };
   const guild = {
     id: 'guild-1',
@@ -296,7 +297,9 @@ async function main() {
     },
     delete: async () => {}
   });
-  assert.deepEqual(channelSettingsPatches.at(-1), { channels: { applications: '444444444444444444' } });
+  assert.deepEqual(channelSettingsPatches.at(-1).channels, { applications: '444444444444444444' });
+  assert.equal(channelSettingsPatches.at(-1).aiBrain.channels['444444444444444444'].purpose, 'applications');
+  assert.equal(channelSettingsPatches.at(-1).aiBrain.audit.at(-1).action, 'channel_assign');
   assert.match(aiReplies.at(-1), /теперь используется как \*\*заявки\*\*/u);
 
   await listeners.get('messageCreate')({
@@ -340,6 +343,49 @@ async function main() {
   });
   assert.equal(naturalTimeoutMs, null);
   assert.match(aiReplies.at(-1), /размучен/);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4ban-plan',
+    content: '<@bot-1> забань <@222222222222222222> за угрозы',
+    mentions: { users: { size: 2, has: id => id === 'bot-1' || id === targetMember.id } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(naturalBanned, false);
+  const confirmationCode = aiReplies.at(-1).match(/подтверждаю ([A-Z0-9]{6})/u)?.[1];
+  assert.ok(confirmationCode);
+
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4ban-confirm',
+    content: `<@bot-1> подтверждаю ${confirmationCode}`,
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        aiReplies.push(payload.content);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(naturalBanned, true);
+  assert.match(aiReplies.at(-1), /Подтверждено и выполнено/u);
 
   await listeners.get('messageCreate')({
     ...baseMessage,

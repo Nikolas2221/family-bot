@@ -1,6 +1,19 @@
 import { AuditLogEvent, ChannelType, PermissionFlagsBits } from 'discord.js';
 import { getActiveLockdown } from './services/security-lockdown';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
+import {
+  appendBrainAudit,
+  auditServerPermissions,
+  formatBrainAudit,
+  formatBrainMemory,
+  normalizeServerBrainSettings,
+  readRulesSnapshot,
+  rememberChannelPurpose,
+  riskForBrainAction,
+  snapshotServerMap,
+  withRulesSnapshot
+} from './services/server-brain';
+import type { BrainRisk, ServerBrainSettings } from './services/server-brain';
 
 interface UserLike {
   id: string;
@@ -27,6 +40,7 @@ interface MemberLike {
     has(permission: unknown): boolean;
   } | null;
   roles: {
+    highest?: { position?: number };
     cache?: {
       values?(): IterableIterator<{ id: string; name?: string; position?: number }>;
       some?(callback: (role: { id: string; name?: string; position?: number }) => boolean): boolean;
@@ -325,6 +339,8 @@ interface WelcomeSettingsLike {
     ranks?: string[];
   };
   modules?: Record<string, boolean>;
+  roles?: Record<string, string>;
+  aiBrain?: ServerBrainSettings;
 }
 
 interface DatabaseLike {
@@ -339,6 +355,11 @@ interface EventRuntimeOptions {
     };
     removeAllListeners(event: string): unknown;
     on(event: string, listener: (...args: any[]) => unknown): unknown;
+    guilds?: {
+      cache?: {
+        values?(): IterableIterator<GuildLike>;
+      };
+    };
   };
   aiMention: {
     enabled: boolean;
@@ -400,6 +421,18 @@ interface EventRuntimeOptions {
   handleDiscordTicketMessage(message: MessageLike): Promise<boolean>;
   handleAfkMessage(message: MessageLike): Promise<boolean>;
   handleVoiceRoomsVoiceStateUpdate?(oldState: VoiceStateLike, newState: VoiceStateLike): Promise<boolean>;
+}
+
+interface PendingBrainAction {
+  code: string;
+  guildId: string;
+  actorId: string;
+  action: 'ban' | 'kick';
+  targetId: string;
+  reason: string;
+  summary: string;
+  risk: BrainRisk;
+  expiresAt: number;
 }
 
 interface WelcomeInviteBatch {
@@ -708,6 +741,10 @@ function buildMentionCapabilitiesText(): string {
     '• показывать /online, /aionline и списки активности;',
     '• отвечать через AI: /ai, /aimember, /aidaily, /aistaff, /aiannounce;',
     '• анализировать участников, заявки и риски по активности;',
+    '• хранить постоянную карту каналов и ролей сервера и помнить их назначение;',
+    '• автоматически читать изменения в назначенном канале правил;',
+    '• проверять права каналов, опасные роли и иерархию роли бота;',
+    '• выполнять админ-команды через единый AI-центр с оценкой риска, подтверждением и журналом;',
     '• делать шаблоны объявлений и событий;',
     '• защищать сервер от scam/gift ссылок, invite-слива и опасных действий;',
     '• создавать backup структуры Discord в GitHub;',
@@ -1067,6 +1104,60 @@ function messageTextForRules(message: any): string {
   return [message?.content, ...embedText].filter(Boolean).join('\n').trim();
 }
 
+function saveBrainSettings(
+  guildId: string,
+  brain: ServerBrainSettings,
+  options: Pick<EventRuntimeOptions, 'database'>
+): void {
+  options.database?.updateGuildSettings(guildId, { aiBrain: brain });
+}
+
+function recordBrainAction(
+  guildId: string,
+  current: unknown,
+  entry: Parameters<typeof appendBrainAudit>[1],
+  options: Pick<EventRuntimeOptions, 'database'>
+): ServerBrainSettings {
+  const next = appendBrainAudit(current, entry);
+  saveBrainSettings(guildId, next, options);
+  return next;
+}
+
+async function syncRulesChannelMemory(
+  guild: GuildLike,
+  channelId: string,
+  actorId: string,
+  options: Pick<EventRuntimeOptions, 'client' | 'database' | 'resolveGuildSettings'>
+): Promise<{ changed: boolean; brain: ServerBrainSettings; error: string }> {
+  if (!channelId) {
+    return { changed: false, brain: normalizeServerBrainSettings(options.resolveGuildSettings(guild.id).aiBrain), error: 'Канал правил не назначен.' };
+  }
+  try {
+    const channel = await options.client.channels?.fetch(channelId).catch(() => null);
+    const snapshot = await readRulesSnapshot(channel);
+    const settings = options.resolveGuildSettings(guild.id);
+    const current = normalizeServerBrainSettings(settings.aiBrain);
+    const changed = current.rules.hash !== snapshot.hash || current.rules.channelId !== snapshot.channelId;
+    let next = withRulesSnapshot(current, snapshot);
+    next = appendBrainAudit(next, {
+      action: 'rules_sync',
+      risk: 'read',
+      status: 'completed',
+      actorId,
+      targetId: channelId,
+      summary: changed ? 'Правила обновлены из Discord.' : 'Правила проверены, изменений нет.'
+    });
+    saveBrainSettings(guild.id, next, options);
+    return { changed, brain: next, error: '' };
+  } catch (error: any) {
+    return {
+      changed: false,
+      brain: normalizeServerBrainSettings(options.resolveGuildSettings(guild.id).aiBrain),
+      error: String(error?.message || error || 'Не удалось синхронизировать правила.')
+    };
+  }
+}
+
 async function readMentionedRulesChannel(
   prompt: string,
   client: EventRuntimeOptions['client'],
@@ -1094,13 +1185,22 @@ async function readMentionedRulesChannel(
 async function handleRulesQuestion(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'resolveGuildSettings'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'database' | 'resolveGuildSettings'>
 ): Promise<boolean> {
   if (!looksLikeRulesQuestion(prompt)) return false;
 
   const settings = message.guild?.id ? options.resolveGuildSettings(message.guild.id) : null;
   const rulesChannelId = settings?.channels?.rules || '';
   const channelContext = await readMentionedRulesChannel(prompt, options.client, rulesChannelId);
+  if (message.guild && channelContext.channelId && channelContext.text) {
+    await syncRulesChannelMemory(message.guild, channelContext.channelId, message.author.id, options).catch(() => null);
+  }
+  const rememberedRules = normalizeServerBrainSettings(settings?.aiBrain).rules;
+  if (!channelContext.text && rememberedRules.text && rememberedRules.channelId === (channelContext.channelId || rulesChannelId)) {
+    channelContext.text = rememberedRules.text;
+    channelContext.channelId = rememberedRules.channelId;
+    channelContext.error = '';
+  }
   const fallback = buildDiscordRulesSummary();
   let answer = fallback;
 
@@ -1205,7 +1305,8 @@ function inferChannelPurpose(prompt: string): typeof CHANNEL_PURPOSES[number] | 
 
 function looksLikeChannelSetupRequest(prompt: string): boolean {
   const text = String(prompt || '').toLowerCase();
-  return Boolean(parseMentionedChannelId(prompt))
+  const targetsCurrentChannel = /(этот канал|текущий канал|здесь|сюда)/u.test(text);
+  return (Boolean(parseMentionedChannelId(prompt)) || targetsCurrentChannel)
     && /(сделай|назначь|настрой|поставь|запиши|установи|используй|будет)/u.test(text)
     && /(канал|сюда|этот|здесь|для)/u.test(text)
     && Boolean(inferChannelPurpose(prompt));
@@ -1292,17 +1393,42 @@ function looksLikeServerBrainQuestion(prompt: string): boolean {
     'права участника',
     'доступы участника',
     'права у',
-    'доступы у'
+    'доступы у',
+    'аудит прав',
+    'проверь права',
+    'проверь доступы',
+    'безопасность ролей',
+    'журнал ии',
+    'журнал ai',
+    'что делал бот'
   ].some(marker => text.includes(marker));
 }
 
 async function handleServerBrainQuestion(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'client' | 'resolveGuildSettings' | 'aiService'>
+  options: Pick<EventRuntimeOptions, 'client' | 'database' | 'resolveGuildSettings' | 'aiService'>
 ): Promise<boolean> {
   if (!message.guild || !looksLikeServerBrainQuestion(prompt)) return false;
-  const settings = options.resolveGuildSettings(message.guild.id);
+  if (!isAdminMember(message.member)) {
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, карта сервера и аудит прав доступны только участнику с правом Administrator.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+  const currentSettings = options.resolveGuildSettings(message.guild.id);
+  let brain = snapshotServerMap(message.guild, currentSettings, currentSettings.aiBrain);
+  brain = appendBrainAudit(brain, {
+    action: 'permissions_audit',
+    risk: 'read',
+    status: 'completed',
+    actorId: message.author.id,
+    targetId: message.guild.id,
+    summary: 'Карта сервера и права проверены через AI-помощника.'
+  });
+  saveBrainSettings(message.guild.id, brain, options);
+  const settings = { ...currentSettings, aiBrain: brain };
   const botId = options.client.user?.id || '';
   const targetIds = parseTargetUserIds(message.content, botId);
   const targetBlocks: string[] = [];
@@ -1312,8 +1438,21 @@ async function handleServerBrainQuestion(
     if (block) targetBlocks.push(block);
   }
 
+  const botMember = options.client.user?.id
+    ? await message.guild.members.fetch(options.client.user.id).catch(() => null)
+    : null;
+  const permissionAudit = auditServerPermissions(message.guild, settings, botMember);
   const context = [
     buildServerBrainSummary(message.guild, settings),
+    '',
+    'Постоянная память:',
+    formatBrainMemory(settings),
+    '',
+    'Аудит прав:',
+    permissionAudit.summary,
+    '',
+    'Последние AI-действия:',
+    formatBrainAudit(settings),
     targetBlocks.length ? `\nУчастники из запроса:\n${targetBlocks.join('\n\n')}` : ''
   ].join('\n').slice(0, 8000);
 
@@ -1365,7 +1504,7 @@ async function handleNaturalChannelSetup(
   }
 
   const purpose = inferChannelPurpose(prompt);
-  const channelId = parseMentionedChannelId(prompt);
+  const channelId = parseMentionedChannelId(prompt) || message.channel.id;
   const channel = channelId
     ? await options.client.channels?.fetch(channelId).catch(() => null)
     : null;
@@ -1407,7 +1546,23 @@ async function handleNaturalChannelSetup(
     return true;
   }
 
-  options.database.updateGuildSettings(message.guild.id, { channels: { [purpose.key]: channel.id } });
+  const currentSettings = options.resolveGuildSettings(message.guild.id);
+  let nextBrain = rememberChannelPurpose(currentSettings.aiBrain, channel, purpose.key, message.author.id);
+  nextBrain = appendBrainAudit(nextBrain, {
+    action: 'channel_assign',
+    risk: riskForBrainAction('channel_assign'),
+    status: 'completed',
+    actorId: message.author.id,
+    targetId: channel.id,
+    summary: `Канал назначен как ${purpose.label}.`
+  });
+  options.database.updateGuildSettings(message.guild.id, {
+    channels: { [purpose.key]: channel.id },
+    aiBrain: nextBrain
+  });
+  if (purpose.key === 'rules') {
+    await syncRulesChannelMemory(message.guild, channel.id, message.author.id, options).catch(() => null);
+  }
   if (purpose.key === 'panel') {
     await options.doPanelUpdate(message.guild.id, true).catch(() => null);
   }
@@ -1557,14 +1712,74 @@ async function buildNaturalAnnouncementDraft(
   return parseAnnouncementDraftJson(aiResult) || fallback;
 }
 
+function parseBrainConfirmationCode(prompt: string): string {
+  const match = String(prompt || '').toUpperCase().match(/(?:ПОДТВЕРЖДАЮ|ПОДТВЕРДИ|CONFIRM)\s+([A-Z0-9]{6})/u);
+  return match?.[1] || '';
+}
+
+function createBrainConfirmationCode(): string {
+  return Math.random().toString(36).slice(2, 8).toUpperCase().padEnd(6, 'X');
+}
+
+async function executePendingBrainAction(
+  message: MessageLike,
+  prompt: string,
+  pendingActions: Map<string, PendingBrainAction>,
+  options: Pick<EventRuntimeOptions, 'database' | 'resolveGuildSettings' | 'sendSecurityLog'>
+): Promise<boolean> {
+  const code = parseBrainConfirmationCode(prompt);
+  if (!code || !message.guild) return false;
+  const pending = pendingActions.get(code);
+  if (!pending || pending.guildId !== message.guild.id || pending.actorId !== message.author.id || pending.expiresAt < Date.now()) {
+    pendingActions.delete(code);
+    await message.channel.send?.({
+      content: `<@${message.author.id}>, подтверждение не найдено или истекло. Повтори исходную команду.`,
+      allowedMentions: { parse: [], users: [message.author.id] }
+    }).catch(() => null);
+    return true;
+  }
+
+  pendingActions.delete(code);
+  const targetMember = await message.guild.members.fetch(pending.targetId).catch(() => null);
+  let ok = false;
+  if (targetMember) {
+    ok = pending.action === 'ban'
+      ? await targetMember.ban?.({ reason: pending.reason }).then(() => true).catch(() => false) || false
+      : await targetMember.kick?.(pending.reason).then(() => true).catch(() => false) || false;
+  }
+  const settings = options.resolveGuildSettings(message.guild.id);
+  recordBrainAction(message.guild.id, settings.aiBrain, {
+    action: pending.action,
+    risk: pending.risk,
+    status: ok ? 'completed' : 'failed',
+    actorId: message.author.id,
+    targetId: pending.targetId,
+    summary: pending.summary
+  }, options);
+  const logText = `AI action ${pending.action}: actor=${message.author.id}, target=${pending.targetId}, risk=${pending.risk}, status=${ok ? 'completed' : 'failed'}`;
+  await options.sendSecurityLog(message.guild, logText).catch(() => null);
+  await message.channel.send?.({
+    content: ok
+      ? `✅ Подтверждено и выполнено: <@${pending.targetId}> ${pending.action === 'ban' ? 'забанен' : 'кикнут'}.\nРиск: **${pending.risk}**. Запись добавлена в журнал AI-действий.`
+      : `❌ Действие подтверждено, но Discord его не выполнил. Проверь права бота, иерархию ролей и доступность участника.`,
+    allowedMentions: { parse: [], users: [message.author.id, pending.targetId] }
+  }).catch(() => null);
+  return true;
+}
+
 async function handleNaturalAdminCommand(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog'>,
+  pendingActions: Map<string, PendingBrainAction>
 ): Promise<boolean> {
+  if (await executePendingBrainAction(message, prompt, pendingActions, options)) {
+    return true;
+  }
   if (await handleNaturalChannelSetup(message, prompt, options)) {
     return true;
   }
+  if (!message.guild) return false;
 
   const botId = options.client.user?.id || '';
   const action = parseNaturalModerationAction(prompt);
@@ -1598,33 +1813,90 @@ async function handleNaturalAdminCommand(
       return true;
     }
 
+    if (targetId === options.client.user?.id || targetId === message.guild?.ownerId) {
+      await message.channel.send?.({
+        content: `<@${message.author.id}>, это защищённая цель. AI-центр не применяет наказания к владельцу сервера или самому боту.`,
+        allowedMentions: { parse: [], users: [message.author.id] }
+      }).catch(() => null);
+      return true;
+    }
+
     const rule = findDiscordRule(prompt);
     const durationMs = parseMuteDurationMs(prompt, rule?.defaultMuteMinutes || 60);
     const reason = rule
       ? `Discord rule: ${rule.title}; moderator: ${message.author.id}`
       : `Natural AI moderation by ${message.author.id}`;
+    const risk = riskForBrainAction(action);
+    if ((action === 'ban' || action === 'kick') && isAdminMember(targetMember) && message.author.id !== message.guild?.ownerId) {
+      await message.channel.send?.({
+        content: `<@${message.author.id}>, я не буду применять **${action}** к другому администратору. Такое действие может подтвердить только владелец сервера.`,
+        allowedMentions: { parse: [], users: [message.author.id, targetId] }
+      }).catch(() => null);
+      return true;
+    }
+    if (action === 'ban' || action === 'kick') {
+      const code = createBrainConfirmationCode();
+      const summary = `${action === 'ban' ? 'Бан' : 'Кик'} участника ${targetId}: ${rule?.title || 'причина из команды администратора'}`;
+      pendingActions.set(code, {
+        code,
+        guildId: message.guild.id,
+        actorId: message.author.id,
+        action,
+        targetId,
+        reason,
+        summary,
+        risk,
+        expiresAt: Date.now() + 2 * 60 * 1000
+      });
+      const settings = options.resolveGuildSettings(message.guild.id);
+      recordBrainAction(message.guild.id, settings.aiBrain, {
+        action,
+        risk,
+        status: 'planned',
+        actorId: message.author.id,
+        targetId,
+        summary
+      }, options);
+      await message.channel.send?.({
+        content: [
+          `⚠️ **AI-центр подготовил действие**`,
+          `Действие: ${action === 'ban' ? 'бан' : 'кик'} <@${targetId}>`,
+          `Риск: **${risk}**`,
+          `Причина: ${rule?.title || 'указана администратором'}`,
+          '',
+          `Для выполнения в течение 2 минут напиши: <@${options.client.user?.id || 'bot'}> подтверждаю ${code}`
+        ].join('\n'),
+        allowedMentions: { parse: [], users: [message.author.id, targetId] }
+      }).catch(() => null);
+      return true;
+    }
     let ok = false;
-    if (action === 'ban') {
-      ok = await targetMember.ban?.({ reason }).then(() => true).catch(() => false) || false;
-    } else if (action === 'kick') {
-      ok = await targetMember.kick?.(reason).then(() => true).catch(() => false) || false;
-    } else if (action === 'unmute') {
+    if (action === 'unmute') {
       ok = await targetMember.timeout?.(null, reason).then(() => true).catch(() => false) || false;
     } else {
       ok = await targetMember.timeout?.(durationMs, reason).then(() => true).catch(() => false) || false;
     }
 
-    const actionLabel = action === 'ban'
-      ? 'забанен'
-      : action === 'kick'
-        ? 'кикнут'
-        : action === 'unmute'
-          ? 'размучен'
-          : `получил мут на ${formatDurationRu(durationMs)}`;
+    const actionLabel = action === 'unmute'
+      ? 'размучен'
+      : `получил мут на ${formatDurationRu(durationMs)}`;
+    const settings = options.resolveGuildSettings(message.guild.id);
+    recordBrainAction(message.guild.id, settings.aiBrain, {
+      action,
+      risk,
+      status: ok ? 'completed' : 'failed',
+      actorId: message.author.id,
+      targetId,
+      summary: `${actionLabel}${rule ? `: ${rule.title}` : ''}`
+    }, options);
+    await options.sendSecurityLog(
+      message.guild,
+      `AI action ${action}: actor=${message.author.id}, target=${targetId}, risk=${risk}, status=${ok ? 'completed' : 'failed'}`
+    ).catch(() => null);
     const ruleLine = rule ? `\n⚖️ Правило: ${rule.title}\nПричина: ${rule.detail}` : '';
     await message.channel.send?.({
       content: ok
-        ? `✅ <@${targetId}> ${actionLabel}.${ruleLine}\nМодератор: <@${message.author.id}>.`
+        ? `✅ <@${targetId}> ${actionLabel}.${ruleLine}\nМодератор: <@${message.author.id}>.\nРиск: **${risk}**. Действие записано в AI-журнал.`
         : `❌ Не удалось выполнить действие для <@${targetId}>. Проверь права и иерархию роли бота.`,
       allowedMentions: { parse: [], users: [message.author.id, targetId] }
     }).catch(() => null);
@@ -1660,9 +1932,27 @@ async function handleNaturalAdminCommand(
     pingRoleId: String(options.familyAnnouncementRoleId || '').trim()
   });
 
+  if (message.guild) {
+    const settings = options.resolveGuildSettings(message.guild.id);
+    const actionName = draft.type === 'event' ? 'event' : 'announce';
+    const risk = riskForBrainAction(actionName);
+    recordBrainAction(message.guild.id, settings.aiBrain, {
+      action: actionName,
+      risk,
+      status: result.ok ? 'completed' : 'failed',
+      actorId: message.author.id,
+      targetId: settings.channels?.updates || message.channel.id,
+      summary: `${draft.title}: ${draft.text}`.slice(0, 500)
+    }, options);
+    await options.sendSecurityLog(
+      message.guild,
+      `AI action ${actionName}: actor=${message.author.id}, risk=${risk}, status=${result.ok ? 'completed' : 'failed'}`
+    ).catch(() => null);
+  }
+
   await message.channel.send?.({
     content: result.ok
-      ? `✅ Оповещение отправлено в канал новостей и продублировано в Telegram.`
+      ? `✅ Оповещение отправлено в канал новостей и продублировано в Telegram.\nРиск: **medium**. Действие записано в AI-журнал.`
       : `❌ Не удалось отправить оповещение. Проверь канал новостей и Telegram-настройки.`,
     allowedMentions: { parse: [] }
   }).catch(() => null);
@@ -1672,7 +1962,8 @@ async function handleNaturalAdminCommand(
 async function handleAiMentionMessage(
   message: MessageLike,
   state: Map<string, number>,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate'>
+  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog'>,
+  pendingActions: Map<string, PendingBrainAction>
 ): Promise<boolean> {
   const botId = options.client.user?.id || '';
   if (!message.guild || message.author?.bot || !botWasMentioned(message, botId)) return false;
@@ -1694,7 +1985,7 @@ async function handleAiMentionMessage(
     return true;
   }
 
-  if (await handleNaturalAdminCommand(message, prompt, options)) {
+  if (await handleNaturalAdminCommand(message, prompt, options, pendingActions)) {
     return true;
   }
 
@@ -1799,6 +2090,28 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   const welcomeInviteBatches = new Map<string, WelcomeInviteBatch>();
   const aiMentionCooldowns = new Map<string, number>();
   const aiConflictCooldowns = new Map<string, number>();
+  const pendingAiActions = new Map<string, PendingBrainAction>();
+  const rulesSyncTimers = new Map<string, NodeJS.Timeout>();
+
+  function scheduleBrainSnapshot(guild: GuildLike, delayMs = 1000): void {
+    setTimeout(() => {
+      const settings = resolveGuildSettings(guild.id);
+      const brain = snapshotServerMap(guild, settings, settings.aiBrain);
+      saveBrainSettings(guild.id, brain, options);
+    }, delayMs);
+  }
+
+  function scheduleRulesMemorySync(guild: GuildLike, channelId: string, actorId = 'system'): void {
+    const settings = resolveGuildSettings(guild.id);
+    if (!channelId || settings.channels?.rules !== channelId) return;
+    const key = `${guild.id}:${channelId}`;
+    const current = rulesSyncTimers.get(key);
+    if (current) clearTimeout(current);
+    rulesSyncTimers.set(key, setTimeout(() => {
+      rulesSyncTimers.delete(key);
+      void syncRulesChannelMemory(guild, channelId, actorId, options).catch(() => null);
+    }, 1000));
+  }
 
   function scheduleWelcomeInvite(member: MemberLike): void {
     const guildId = member.guild.id;
@@ -1854,6 +2167,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   const managedEvents = [
     'messageCreate',
     'messageUpdate',
+    'messageDelete',
     'presenceUpdate',
     'voiceStateUpdate',
     'guildMemberAdd',
@@ -1862,9 +2176,11 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     'messageReactionRemove',
     'guildMemberUpdate',
     'channelCreate',
+    'channelUpdate',
     'channelDelete',
     'roleCreate',
     'roleUpdate',
+    'roleDelete',
     'webhooksUpdate'
   ];
 
@@ -1872,8 +2188,18 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     client.removeAllListeners(eventName);
   }
 
+  client.on('clientReady', () => {
+    for (const guild of collectionValues<GuildLike>(client.guilds?.cache)) {
+      scheduleBrainSnapshot(guild, 1500);
+      const rulesChannelId = resolveGuildSettings(guild.id).channels?.rules || '';
+      if (rulesChannelId) scheduleRulesMemorySync(guild, rulesChannelId, 'startup');
+    }
+  });
+
   client.on('messageCreate', async (message: MessageLike) => {
-    if (!message.guild || (message.author.bot && !message.webhookId)) return;
+    if (!message.guild) return;
+    scheduleRulesMemorySync(message.guild, message.channel.id, message.author?.id || 'system');
+    if (message.author.bot && !message.webhookId) return;
     if (await enforceScamGuard(message, {
       scamGuard,
       detectScamGift,
@@ -1936,8 +2262,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       familyAnnouncementRoleId,
       database: options.database,
       resolveGuildSettings,
-      doPanelUpdate
-    })) {
+      doPanelUpdate,
+      sendSecurityLog
+    }, pendingAiActions)) {
       return;
     }
 
@@ -1950,7 +2277,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     if (message.partial && typeof message.fetch === 'function') {
       message = await message.fetch().catch(() => message);
     }
-    if (!message.guild || (message.author.bot && !message.webhookId)) return;
+    if (!message.guild) return;
+    scheduleRulesMemorySync(message.guild, message.channel.id, message.author?.id || 'system');
+    if (message.author.bot && !message.webhookId) return;
     if (await enforceScamGuard(message, {
       scamGuard,
       detectScamGift,
@@ -1966,6 +2295,11 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       sendSecurityLog,
       copySecurity
     });
+  });
+
+  client.on('messageDelete', (message: MessageLike) => {
+    if (!message.guild) return;
+    scheduleRulesMemorySync(message.guild, message.channel.id, message.author?.id || 'system');
   });
 
   client.on('presenceUpdate', (_oldPresence: PresenceLike | null, presence: PresenceLike | null) => {
@@ -2067,6 +2401,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   });
 
   client.on('channelCreate', async (channel: ChannelLike) => {
+    if (channel.guild) scheduleBrainSnapshot(channel.guild);
     await applyActiveLockdownToNewChannel(channel, {
       sendSecurityLog,
       notifyTelegramSecurityAlert
@@ -2075,7 +2410,12 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     });
   });
 
+  client.on('channelUpdate', (_oldChannel: ChannelLike, newChannel: ChannelLike) => {
+    if (newChannel.guild) scheduleBrainSnapshot(newChannel.guild);
+  });
+
   client.on('channelDelete', async (channel: ChannelDeleteLike) => {
+    if (channel?.guild) scheduleBrainSnapshot(channel.guild);
     if (!channelGuard.enabled || !channel?.guild || !isPremiumGuild(channel.guild.id)) return;
 
     try {
@@ -2097,6 +2437,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   });
 
   client.on('roleCreate', async (role: RoleEventLike) => {
+    if (role.guild) scheduleBrainSnapshot(role.guild);
     await handleDangerousRoleCreate(role, {
       isPremiumGuild,
       isModuleEnabled,
@@ -2109,6 +2450,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   });
 
   client.on('roleUpdate', async (oldRole: RoleEventLike, newRole: RoleEventLike) => {
+    if (newRole.guild) scheduleBrainSnapshot(newRole.guild);
     await handleDangerousRoleUpdate(oldRole, newRole, {
       isPremiumGuild,
       isModuleEnabled,
@@ -2118,6 +2460,10 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }).catch(error => {
       console.error('Ошибка защиты ролей:', error);
     });
+  });
+
+  client.on('roleDelete', (role: RoleEventLike) => {
+    if (role.guild) scheduleBrainSnapshot(role.guild);
   });
 
   client.on('webhooksUpdate', async (channel: ChannelLike) => {

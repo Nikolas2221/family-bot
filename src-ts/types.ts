@@ -529,6 +529,52 @@ export interface GuildFeatures {
   channelGuardEnabled: boolean;
 }
 
+export interface ServerBrainChannelMemory {
+  id: string;
+  name: string;
+  type: number;
+  parentId: string;
+  purpose: string;
+  source: 'discord' | 'admin' | 'system';
+  configuredBy: string;
+  updatedAt: string;
+}
+
+export interface ServerBrainRoleMemory {
+  id: string;
+  name: string;
+  position: number;
+  permissions: string;
+  managed: boolean;
+  updatedAt: string;
+}
+
+export interface ServerBrainAuditEntry {
+  id: string;
+  action: string;
+  risk: 'read' | 'low' | 'medium' | 'high' | 'critical';
+  status: 'planned' | 'completed' | 'failed' | 'cancelled';
+  actorId: string;
+  targetId: string;
+  summary: string;
+  createdAt: string;
+}
+
+export interface ServerBrainSettings {
+  version: 1;
+  channels: Record<string, ServerBrainChannelMemory>;
+  roles: Record<string, ServerBrainRoleMemory>;
+  rules: {
+    channelId: string;
+    hash: string;
+    text: string;
+    messageIds: string[];
+    syncedAt: string;
+  };
+  audit: ServerBrainAuditEntry[];
+  lastMappedAt: string;
+}
+
 export interface GuildSettings {
   mode: BotMode;
   familyTitle: string;
@@ -548,6 +594,7 @@ export interface GuildSettings {
   automod: AutomodConfig;
   modules: ModuleFlags;
   features: GuildFeatures;
+  aiBrain: ServerBrainSettings;
 }
 
 export interface GuildMaintenance {

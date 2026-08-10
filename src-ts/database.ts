@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { BotMode, DatabaseApi, DatabaseState, GuildRecord, GuildSettings, ModuleFlags } from './types';
 import { normalizeAutomodConfig } from './automod';
+import { normalizeServerBrainSettings } from './services/server-brain';
 
 const EXTENDED_FAMILY_ROLE_KEYS = Array.from({ length: 10 }, (_, index) => `rank${15 - index}`);
 const REPORT_REQUEST_TYPES = ['up_rank', 'contracts', 'payouts'] as const;
@@ -287,7 +288,8 @@ function normalizeGuildRecord(guildId: string, guild: GuildRecordPatch = {}): Gu
         autoRanksEnabled: Boolean(guild.settings?.features?.autoRanksEnabled),
         leakGuardEnabled: Boolean(guild.settings?.features?.leakGuardEnabled),
         channelGuardEnabled: Boolean(guild.settings?.features?.channelGuardEnabled)
-      }
+      },
+      aiBrain: normalizeServerBrainSettings(guild.settings?.aiBrain)
     }
   };
 }
@@ -429,6 +431,9 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
           ...(guild.settings?.modules || {}),
           ...(patch?.modules || {})
         },
+        aiBrain: patch?.aiBrain
+          ? normalizeServerBrainSettings(patch.aiBrain)
+          : normalizeServerBrainSettings(guild.settings?.aiBrain),
         features: {
           ...(guild.settings?.features || {}),
           ...(patch?.features || {})
