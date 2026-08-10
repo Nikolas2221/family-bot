@@ -66,6 +66,23 @@ function baseConfig(dir, scraperModulePath, patch = {}) {
 }
 
 async function main() {
+  const sessionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'family-bot-session-'));
+  const sessionPath = path.join(sessionDirectory, 'storage-state.json');
+  const previousSession = { cookies: [{ name: 'old', value: 'expired' }], origins: [] };
+  const currentSession = { cookies: [{ name: 'current', value: 'valid' }], origins: [] };
+  fs.writeFileSync(sessionPath, JSON.stringify(previousSession));
+  const previousEncodedSession = process.env.CABINET_SESSION_B64;
+  process.env.CABINET_SESSION_B64 = Buffer.from(JSON.stringify(currentSession), 'utf8').toString('base64');
+  __familyCabinetScraperInternals.resetSessionEnvImportState();
+  assert.equal(__familyCabinetScraperInternals.restoreSessionFromEnv(sessionPath), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(sessionPath, 'utf8')), currentSession);
+  fs.writeFileSync(sessionPath, JSON.stringify(previousSession));
+  assert.equal(__familyCabinetScraperInternals.restoreSessionFromEnv(sessionPath), false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(sessionPath, 'utf8')), previousSession);
+  if (previousEncodedSession === undefined) delete process.env.CABINET_SESSION_B64;
+  else process.env.CABINET_SESSION_B64 = previousEncodedSession;
+  fs.rmSync(sessionDirectory, { recursive: true, force: true });
+
   const parsedActions = __familyCabinetScraperInternals.parseTextDump(`
 08.08.2026, 18:22
 Вернул авто speedtail владельцу

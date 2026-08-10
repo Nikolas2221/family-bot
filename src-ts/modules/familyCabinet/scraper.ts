@@ -257,15 +257,20 @@ async function scrollForDynamicRows(page: any): Promise<void> {
   await page.waitForTimeout(300);
 }
 
+const sessionEnvImportedPaths = new Set<string>();
+
 function restoreSessionFromEnv(sessionStoragePath: string): boolean {
   const encoded = String(process.env.CABINET_SESSION_B64 || '').trim();
-  if (!encoded || fs.existsSync(sessionStoragePath)) return false;
+  if (!encoded || sessionEnvImportedPaths.has(sessionStoragePath)) return false;
 
   try {
     const json = Buffer.from(encoded, 'base64').toString('utf8');
     JSON.parse(json);
     fs.mkdirSync(sessionStoragePath.replace(/[\\/][^\\/]+$/u, ''), { recursive: true });
-    fs.writeFileSync(sessionStoragePath, json);
+    const temporaryPath = `${sessionStoragePath}.tmp`;
+    fs.writeFileSync(temporaryPath, json);
+    fs.renameSync(temporaryPath, sessionStoragePath);
+    sessionEnvImportedPaths.add(sessionStoragePath);
     return true;
   } catch (error) {
     throw new Error(`CABINET_SESSION_B64 is invalid: ${error instanceof Error ? error.message : String(error)}`);
@@ -308,6 +313,36 @@ async function installSessionStorageRestore(context: any, storageState: any): Pr
       window.sessionStorage.setItem(entry.name, String(entry.value || ''));
     }
   }, origins);
+}
+
+async function persistRefreshedStorageState(
+  context: any,
+  page: any,
+  sessionStoragePath: string,
+  previousState: any
+): Promise<void> {
+  const refreshed = await context.storageState({ indexedDB: true }).catch(() => context.storageState());
+  const currentOrigin = await page.evaluate(() => window.location.origin).catch(() => '');
+  const currentSessionStorage = await page
+    .evaluate(() => Object.entries(window.sessionStorage).map(([name, value]) => ({ name, value })))
+    .catch(() => []);
+  const previousOrigins = Array.isArray(previousState?.origins) ? previousState.origins : [];
+  const refreshedOrigins = Array.isArray(refreshed?.origins) ? refreshed.origins : [];
+  const origins = refreshedOrigins.map((origin: any) => {
+    const previous = previousOrigins.find((item: any) => item?.origin === origin?.origin);
+    const sessionStorage = origin?.origin === currentOrigin
+      ? currentSessionStorage
+      : (Array.isArray(previous?.sessionStorage) ? previous.sessionStorage : []);
+    return sessionStorage.length ? { ...origin, sessionStorage } : origin;
+  });
+
+  for (const previous of previousOrigins) {
+    if (!refreshedOrigins.some((origin: any) => origin?.origin === previous?.origin)) origins.push(previous);
+  }
+
+  const temporaryPath = `${sessionStoragePath}.tmp`;
+  fs.writeFileSync(temporaryPath, JSON.stringify({ ...refreshed, origins }, null, 2));
+  fs.renameSync(temporaryPath, sessionStoragePath);
 }
 
 async function expandRows(page: any, target: number): Promise<void> {
@@ -457,7 +492,9 @@ async function scrapeTab(
 export const __familyCabinetScraperInternals = {
   parseFinanceRowText,
   parseTextDump,
-  parseTextFallback
+  parseTextFallback,
+  restoreSessionFromEnv,
+  resetSessionEnvImportState: () => sessionEnvImportedPaths.clear()
 };
 
 export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<FamilyCabinetAction[]> {
@@ -506,6 +543,8 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
       throw new Error(`Majestic открылся, но строки логов не найдены. Похоже, страница кабинета загрузилась пустой или без данных вкладок. Проверь актуальность CABINET_SESSION_B64/SESSION_STORAGE_PATH, права аккаунта и MAJESTIC_FAMILY_URL.${detail}`);
     }
 
+    await persistRefreshedStorageState(context, page, config.sessionStoragePath, storageState)
+      .catch(error => console.warn('[family-cabinet] refreshed session was not persisted:', error));
     return unique;
   } finally {
     if (context) await context.close().catch(() => null);
