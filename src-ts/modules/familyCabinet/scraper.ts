@@ -258,6 +258,13 @@ async function scrollForDynamicRows(page: any): Promise<void> {
 }
 
 const sessionEnvImportedPaths = new Set<string>();
+let persistentCabinetSession: {
+  browser: any;
+  context: any;
+  page: any;
+  sessionStoragePath: string;
+  storageState: any;
+} | null = null;
 
 function restoreSessionFromEnv(sessionStoragePath: string): boolean {
   const encoded = String(process.env.CABINET_SESSION_B64 || '').trim();
@@ -279,6 +286,14 @@ function restoreSessionFromEnv(sessionStoragePath: string): boolean {
 
 function readStorageState(sessionStoragePath: string): any {
   return JSON.parse(fs.readFileSync(sessionStoragePath, 'utf8'));
+}
+
+async function closePersistentCabinetSession(): Promise<void> {
+  const active = persistentCabinetSession;
+  persistentCabinetSession = null;
+  if (!active) return;
+  await active.context?.close?.().catch(() => null);
+  await active.browser?.close?.().catch(() => null);
 }
 
 function playwrightStorageState(storageState: any): any {
@@ -343,6 +358,33 @@ async function persistRefreshedStorageState(
   const temporaryPath = `${sessionStoragePath}.tmp`;
   fs.writeFileSync(temporaryPath, JSON.stringify({ ...refreshed, origins }, null, 2));
   fs.renameSync(temporaryPath, sessionStoragePath);
+}
+
+async function getPersistentCabinetSession(sessionStoragePath: string): Promise<NonNullable<typeof persistentCabinetSession>> {
+  const active = persistentCabinetSession;
+  if (
+    active
+    && active.sessionStoragePath === sessionStoragePath
+    && active.browser?.isConnected?.()
+    && !active.page?.isClosed?.()
+  ) {
+    return active;
+  }
+
+  await closePersistentCabinetSession();
+  const storageState = readStorageState(sessionStoragePath);
+  const chromium = getPlaywrightChromium();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ storageState: playwrightStorageState(storageState) });
+    await installSessionStorageRestore(context, storageState);
+    const page = await context.newPage();
+    persistentCabinetSession = { browser, context, page, sessionStoragePath, storageState };
+    return persistentCabinetSession;
+  } catch (error) {
+    await browser.close().catch(() => null);
+    throw error;
+  }
 }
 
 async function expandRows(page: any, target: number): Promise<void> {
@@ -494,7 +536,8 @@ export const __familyCabinetScraperInternals = {
   parseTextDump,
   parseTextFallback,
   restoreSessionFromEnv,
-  resetSessionEnvImportState: () => sessionEnvImportedPaths.clear()
+  resetSessionEnvImportState: () => sessionEnvImportedPaths.clear(),
+  closePersistentCabinetSession
 };
 
 export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<FamilyCabinetAction[]> {
@@ -506,14 +549,9 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
     throw new Error(`Сессия кабинета не найдена: ${config.sessionStoragePath}. Нужно один раз сохранить Playwright storageState.`);
   }
 
-  const chromium = getPlaywrightChromium();
-  const browser = await chromium.launch({ headless: true });
-  let context: any = null;
+  const active = await getPersistentCabinetSession(config.sessionStoragePath);
+  const { context, page, storageState } = active;
   try {
-    const storageState = readStorageState(config.sessionStoragePath);
-    context = await browser.newContext({ storageState: playwrightStorageState(storageState) });
-    await installSessionStorageRestore(context, storageState);
-    const page = await context.newPage();
     const diagnostics: string[] = [];
     const logs = [
       ...await scrapeTab(page, config.familyUrl, 'logs', config.logsFetchTarget, false, diagnostics),
@@ -545,9 +583,10 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
 
     await persistRefreshedStorageState(context, page, config.sessionStoragePath, storageState)
       .catch(error => console.warn('[family-cabinet] refreshed session was not persisted:', error));
+    active.storageState = readStorageState(config.sessionStoragePath);
     return unique;
-  } finally {
-    if (context) await context.close().catch(() => null);
-    await browser.close().catch(() => null);
+  } catch (error) {
+    await closePersistentCabinetSession();
+    throw error;
   }
 }

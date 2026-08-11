@@ -41,8 +41,19 @@ async function main() {
   };
   const guild = {
     id: 'guild-1',
+    name: 'Test Guild',
+    memberCount: 3,
     ownerId: 'owner-1',
-    members: { fetch: async id => (id === targetMember.id ? targetMember : null) }
+    channels: { cache: { values: () => [][Symbol.iterator]() } },
+    members: {
+      cache: {
+        values: () => [
+          { id: 'inactive-user', user: { id: 'inactive-user', bot: false }, presence: { status: 'offline' }, roles: { cache: { values: () => [][Symbol.iterator]() } } },
+          { id: 'active-user', user: { id: 'active-user', bot: false }, presence: { status: 'online' }, roles: { cache: { values: () => [][Symbol.iterator]() } } }
+        ][Symbol.iterator]()
+      },
+      fetch: async id => (id === targetMember.id ? targetMember : null)
+    }
   };
   targetMember.guild = guild;
   const permissions = { has: permission => permission === PermissionFlagsBits.ManageMessages };
@@ -57,6 +68,8 @@ async function main() {
   const telegramJoins = [];
   const telegramScamReports = [];
   const aiReplies = [];
+  const aiSystems = [];
+  const activityReplies = [];
   const naturalAnnouncements = [];
   const channelSettingsPatches = [];
   let botInsultTimeoutMs = 0;
@@ -95,7 +108,10 @@ async function main() {
     client,
     aiMention: { enabled: true, cooldownSeconds: 30, maxChars: 700 },
     aiService: {
-      aiText: async (_system, prompt) => `AI reply: ${prompt}`
+      aiText: async (system, prompt) => {
+        aiSystems.push(system);
+        return `AI reply: ${prompt}`;
+      }
     },
     database: {
       updateGuildSettings: (_guildId, patch) => channelSettingsPatches.push(patch)
@@ -117,11 +133,27 @@ async function main() {
       channelRestored: name => name
     },
     getGuildStorage: () => ({
-      recordAnalyticsMessage() {}, recordMessage() {}, recordPresence() {}, trackJoin() {}, trackLeave() {}, recordReaction() {}
+      recordAnalyticsMessage() {}, recordMessage() {}, recordPresence() {}, trackJoin() {}, trackLeave() {}, recordReaction() {},
+      getPeriodAnalytics: days => ({
+        dayCount: days || 7,
+        joins: 2,
+        leaves: 1,
+        messagesTotal: days === 1 ? 12 : 42,
+        reactionsTotal: days === 1 ? 3 : 9,
+        voiceMinutesTotal: days === 1 ? 60 : 300,
+        members: { 'active-user': { messages: 20, reactions: 5, voiceMinutes: 120 } },
+        channels: { 'channel-1': 42 },
+        voiceChannels: {}
+      }),
+      ensureMemberRecord: id => ({
+        lastSeenAt: id === 'inactive-user' ? Date.now() - 10 * 24 * 60 * 60 * 1000 : Date.now(),
+        lastMessageAt: 0,
+        lastVoiceAt: 0
+      })
     }),
     isPremiumGuild: () => true,
     isModuleEnabled: () => true,
-    hasFamilyRole: () => false,
+    hasFamilyRole: member => member?.id === 'inactive-user' || member?.id === 'active-user',
     containsDiscordInvite,
     detectScamGift,
     canBypassLeakGuard: () => false,
@@ -244,6 +276,51 @@ async function main() {
     delete: async () => {}
   });
   assert.equal(aiReplies[0], '<@user-1> AI reply: подскажи текст');
+  assert.match(aiSystems[0], /ФАКТИЧЕСКИЙ КОНТЕКСТ DISCORD-СЕРВЕРА/u);
+
+  const aiCallsBeforeStats = aiSystems.length;
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4stats',
+    content: '<@bot-1> дай мне статистику по активности в дс',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        activityReplies.push(payload);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(aiSystems.length, aiCallsBeforeStats);
+  assert.equal(activityReplies.length, 1);
+  assert.equal(activityReplies[0].embeds[0].data.title, '📊 Активность Discord');
+  assert.match(activityReplies[0].embeds[0].data.fields[0].value, /12/u);
+
+  const inactiveReplies = [];
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4inactive',
+    content: '<@bot-1> тегни всех неактивных за 7 дней',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        inactiveReplies.push(payload);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(inactiveReplies.length, 1);
+  assert.match(inactiveReplies[0].content, /<@inactive-user>/u);
+  assert.doesNotMatch(inactiveReplies[0].content, /<@active-user>/u);
+  assert.deepEqual(inactiveReplies[0].allowedMentions.users, ['inactive-user']);
 
   await listeners.get('messageCreate')({
     ...baseMessage,
