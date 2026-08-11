@@ -20,6 +20,7 @@ interface UserLike {
   bot?: boolean;
   username?: string;
   globalName?: string | null;
+  send?(payload: Record<string, unknown> | string): Promise<unknown>;
 }
 
 interface RoleLike {
@@ -340,6 +341,11 @@ interface GuildStorageLike {
     voiceChannels: Record<string, number>;
   };
   ensureMemberRecord(memberId: string): {
+    messageCount?: number;
+    voiceMinutes?: number;
+    points?: number;
+    warns?: number;
+    commends?: number;
     lastSeenAt?: number;
     lastMessageAt?: number;
     lastVoiceAt?: number;
@@ -773,6 +779,29 @@ function buildMentionCapabilitiesText(): string {
   ].join('\n');
 }
 
+async function buildAiToolSummary(
+  aiService: EventRuntimeOptions['aiService'],
+  systemPrompt: string,
+  dataPrompt: string,
+  fallback: string
+): Promise<string> {
+  if (!aiService) return fallback;
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    const answer = await Promise.race([
+      aiService.aiText(systemPrompt, dataPrompt),
+      new Promise<string>(resolve => {
+        timeout = setTimeout(() => resolve(''), 6000);
+      })
+    ]);
+    return String(answer || '').trim().slice(0, 700) || fallback;
+  } catch {
+    return fallback;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 function looksLikeLiveActivityQuestion(value: string): boolean {
   const text = String(value || '').toLowerCase().replace(/ё/gu, 'е');
   const asksForStats = /статист|стат[ау]\b|активност|аналитик|топ актив/u.test(text);
@@ -787,9 +816,19 @@ function requestedActivityDays(value: string): number {
   return 7;
 }
 
-function looksLikeInactivePingRequest(value: string): boolean {
+function looksLikeInactiveMembersRequest(value: string): boolean {
   const text = String(value || '').toLowerCase().replace(/ё/gu, 'е');
-  return /(тегни|упомяни|позови|пингани|пингани)/u.test(text) && /(неактив|давно не заход|пропал)/u.test(text);
+  const asksForMembers = /(тегни|упомяни|позови|пингани|покажи|найди|кто|список|дай|выведи|отправ|напиши|разошли|предупреди)/u.test(text);
+  return asksForMembers && /(неактив|давно не заход|пропал)/u.test(text);
+}
+
+function shouldPingInactiveMembers(value: string): boolean {
+  return /(тегни|упомяни|позови|пингани)/u.test(String(value || '').toLowerCase().replace(/ё/gu, 'е'));
+}
+
+function shouldMessageInactiveMembers(value: string): boolean {
+  const text = String(value || '').toLowerCase().replace(/ё/gu, 'е');
+  return /(отправ|напиши|разошли|предупреди)/u.test(text) && /(лс|личн|dm|сообщен)/u.test(text);
 }
 
 function requestedInactiveDays(value: string): number {
@@ -801,12 +840,12 @@ function requestedInactiveDays(value: string): number {
   return 7;
 }
 
-async function handleInactivePingRequest(
+async function handleInactiveMembersRequest(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'database' | 'resolveGuildSettings' | 'sendSecurityLog'>
+  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'database' | 'resolveGuildSettings' | 'sendSecurityLog' | 'aiService'>
 ): Promise<boolean> {
-  if (!message.guild || !looksLikeInactivePingRequest(prompt)) return false;
+  if (!message.guild || !looksLikeInactiveMembersRequest(prompt)) return false;
   if (!isAdminMember(message.member)) {
     await message.channel.send?.({
       content: `<@${message.author.id}>, массово упоминать неактивных участников может только администратор.`,
@@ -816,6 +855,8 @@ async function handleInactivePingRequest(
   }
 
   const days = requestedInactiveDays(prompt);
+  const pingMembers = shouldPingInactiveMembers(prompt);
+  const messageMembers = shouldMessageInactiveMembers(prompt);
   const threshold = Date.now() - days * 24 * 60 * 60 * 1000;
   const guildStorage = options.getGuildStorage(message.guild.id);
   const inactive = collectionValues<MemberLike>(message.guild.members?.cache)
@@ -840,33 +881,93 @@ async function handleInactivePingRequest(
   }
 
   const ids = inactive.map(item => item.member.id).slice(0, 100);
-  const batches: string[][] = [];
-  for (let index = 0; index < ids.length; index += 25) batches.push(ids.slice(index, index + 25));
-  for (let index = 0; index < batches.length; index += 1) {
-    const batch = batches[index];
+  const inactiveAiProfiles = inactive.slice(0, 100).map(({ member, data }, index) => {
+    const lastActivity = Math.max(Number(data.lastSeenAt) || 0, Number(data.lastMessageAt) || 0, Number(data.lastVoiceAt) || 0);
+    const inactiveForDays = lastActivity ? Math.max(0, Math.floor((Date.now() - lastActivity) / (24 * 60 * 60 * 1000))) : -1;
+    const publicName = member.displayName || member.user?.globalName || member.user?.username || member.id;
+    return `${index + 1}) ${publicName}; Discord ID=${member.id}; сообщений=${Number(data.messageCount) || 0}; голос=${Number(data.voiceMinutes) || 0} мин; баллы=${Number(data.points) || 0}; выговоры=${Number(data.warns) || 0}; похвалы=${Number(data.commends) || 0}; неактивность=${inactiveForDays < 0 ? 'нет данных' : `${inactiveForDays} дн.`}`;
+  }).join('\n');
+  const aiSummary = await buildAiToolSummary(
+    options.aiService,
+    messageMembers
+      ? 'Ты KLAIZ BOT. Составь одно вежливое, но ясное личное предупреждение неактивному участнику семьи. Попроси проявить активность или сообщить администрации причину отсутствия. Не добавляй имя, mention, ссылку, угрозы и выдуманные правила. Верни только готовый текст сообщения.'
+      : 'Ты аналитик KLAIZ BOT. По переданным агрегированным данным дай одно короткое дружелюбное сообщение без выдуманных цифр, команд сторонних ботов и упоминаний пользователей.',
+    messageMembers
+      ? `Порог неактивности: более ${days} дней. Администратор попросил самостоятельно сформировать предупреждение и отправить его в личные сообщения. Публичные профили получателей:\n${inactiveAiProfiles}`
+      : `Найдено неактивных семейных участников: ${ids.length}. Порог неактивности: ${days} дней. Действие: ${pingMembers ? 'администратор попросил упомянуть их' : 'администратор запросил список'}. Публичные профили и активность:\n${inactiveAiProfiles}`,
+    messageMembers
+      ? `Здравствуйте! Мы заметили, что вы не проявляли активность более ${days} дней. Пожалуйста, проявите активность или сообщите администрации причину отсутствия, чтобы мы понимали вашу текущую ситуацию.`
+      : `Найдено ${ids.length} неактивных семейных участников за период более ${days} дней.`
+  );
+  let delivered = 0;
+  let failed = 0;
+  if (messageMembers) {
+    for (const { member } of inactive.slice(0, 100)) {
+      const sent = await member.user?.send?.({
+        content: aiSummary,
+        allowedMentions: { parse: [] }
+      }).then(() => true).catch(() => false);
+      if (sent) delivered += 1;
+      else failed += 1;
+    }
     await message.channel.send?.({
       content: [
-        index === 0 ? `📣 Неактивные участники за ${days} дн. (${ids.length}):` : `Продолжение списка (${index + 1}/${batches.length}):`,
-        batch.map(id => `<@${id}>`).join(' '),
-        index === 0 ? 'Пожалуйста, отметьтесь и сообщите о своей активности.' : ''
-      ].filter(Boolean).join('\n'),
-      allowedMentions: { parse: [], users: batch }
+        '✅ Предупреждение неактивным участникам отправлено.',
+        `Доставлено: **${delivered}**`,
+        `Не доставлено: **${failed}**`,
+        '',
+        `**Текст сообщения:**\n${aiSummary}`
+      ].join('\n').slice(0, 1900),
+      allowedMentions: { parse: [] }
     }).catch(() => null);
+  } else if (pingMembers) {
+    const batches: string[][] = [];
+    for (let index = 0; index < ids.length; index += 25) batches.push(ids.slice(index, index + 25));
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index];
+      await message.channel.send?.({
+        content: [
+          index === 0 ? `📣 ${aiSummary}\nНеактивные участники за ${days} дн. (${ids.length}):` : `Продолжение списка (${index + 1}/${batches.length}):`,
+          batch.map(id => `<@${id}>`).join(' '),
+          index === 0 ? 'Пожалуйста, отметьтесь и сообщите о своей активности.' : ''
+        ].filter(Boolean).join('\n'),
+        allowedMentions: { parse: [], users: batch }
+      }).catch(() => null);
+    }
+  } else {
+    const lines = inactive.slice(0, 40).map(({ member, data }, index) => {
+      const lastActivity = Math.max(
+        Number(data.lastSeenAt) || 0,
+        Number(data.lastMessageAt) || 0,
+        Number(data.lastVoiceAt) || 0
+      );
+      const inactiveDays = Math.max(1, Math.floor((Date.now() - lastActivity) / (24 * 60 * 60 * 1000)));
+      return `${index + 1}. <@${member.id}> — нет активности ${inactiveDays} дн.`;
+    });
+    if (inactive.length > lines.length) lines.push(`…и ещё ${inactive.length - lines.length} участник(ов).`);
+    const embed = new EmbedBuilder()
+      .setColor(0xf59e0b)
+      .setTitle('💤 Неактивные участники')
+      .setDescription(`${aiSummary}\n\nСемейные участники без активности более **${days} дн.**: **${inactive.length}**`)
+      .addFields({ name: 'Список', value: lines.join('\n').slice(0, 1024) })
+      .setFooter({ text: 'KLAIZ • Живые данные бота' })
+      .setTimestamp();
+    await message.channel.send?.({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
   }
 
   const currentSettings = options.resolveGuildSettings(message.guild.id);
   const brain = appendBrainAudit(normalizeServerBrainSettings(currentSettings.aiBrain), {
-    action: 'inactive_ping',
-    risk: 'medium',
+    action: messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list'),
+    risk: messageMembers || pingMembers ? 'medium' : 'read',
     status: 'completed',
     actorId: message.author.id,
     targetId: message.channel.id,
-    summary: `Упомянуты неактивные участники: ${ids.length}; период: ${days} дн.`
+    summary: `${messageMembers ? `ЛС доставлено ${delivered}, ошибок ${failed}` : (pingMembers ? 'Упомянуты' : 'Показаны')} неактивные участники: ${ids.length}; период: ${days} дн.`
   });
   saveBrainSettings(message.guild.id, brain, options);
   await options.sendSecurityLog(
     message.guild,
-    `AI action inactive_ping: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, days=${days}, risk=medium, status=completed`
+    `AI action ${messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list')}: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, delivered=${delivered}, failed=${failed}, days=${days}, risk=${messageMembers || pingMembers ? 'medium' : 'read'}, status=completed`
   ).catch(() => null);
   return true;
 }
@@ -883,7 +984,7 @@ function formatActivityMemberLine(
 async function handleLiveActivityQuestion(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole'>
+  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'aiService'>
 ): Promise<boolean> {
   if (!message.guild || !looksLikeLiveActivityQuestion(prompt)) return false;
 
@@ -910,6 +1011,29 @@ async function handleLiveActivityQuestion(
     .slice(0, 5)
     .map(([channelId, count], index) => `${index + 1}. <#${channelId}> (${channelNames.get(channelId) || channelId}) — ${count}`);
   const periodLabel = days === 1 ? 'Сегодня' : `За ${days} дней`;
+  const perMemberActivity = Object.entries(period.members || {})
+    .slice(0, 100)
+    .map(([memberId, stats], index) => {
+      const member = cachedMembers.find(item => item.id === memberId);
+      const publicName = member?.displayName || member?.user?.globalName || member?.user?.username || memberId;
+      return `${index + 1}) ${publicName}; Discord ID=${memberId}; сообщения=${stats.messages || 0}; реакции=${stats.reactions || 0}; голос=${stats.voiceMinutes || 0} мин.`;
+    })
+    .join('\n');
+  const aiSummary = await buildAiToolSummary(
+    options.aiService,
+    'Ты аналитик KLAIZ BOT. Дай краткий вывод по реальной агрегированной статистике Discord. Не выдумывай данные, не говори об отсутствии доступа и не советуй сторонних ботов.',
+    [
+      `Период: ${days} дней.`,
+      `Участников сервера: ${message.guild.memberCount ?? cachedMembers.length}.`,
+      `Сообщения: ${period.messagesTotal || 0}.`,
+      `Реакции: ${period.reactionsTotal || 0}.`,
+      `Голосовые минуты: ${period.voiceMinutesTotal || 0}.`,
+      `Входы: ${period.joins || 0}. Выходы: ${period.leaves || 0}.`,
+      `Участников с зафиксированной активностью: ${Object.keys(period.members || {}).length}.`,
+      perMemberActivity ? `Публичные профили и активность каждого участника:\n${perMemberActivity}` : ''
+    ].join(' '),
+    `За ${days} дн. зафиксировано ${period.messagesTotal || 0} сообщений, ${period.reactionsTotal || 0} реакций и ${((period.voiceMinutesTotal || 0) / 60).toFixed(1)} ч голосовой активности.`
+  );
 
   const embed = new EmbedBuilder()
     .setColor(0x7c3aed)
@@ -918,7 +1042,9 @@ async function handleLiveActivityQuestion(
       `Сервер: **${message.guild.name || message.guild.id}**`,
       `Участников: **${message.guild.memberCount ?? cachedMembers.length}**`,
       `Семейных участников в кеше: **${familyMembers.length}**`,
-      `Сейчас онлайн: **${onlineMembers.length}**`
+      `Сейчас онлайн: **${onlineMembers.length}**`,
+      '',
+      `🤖 **AI-сводка:** ${aiSummary}`
     ].join('\n'))
     .addFields(
       {
@@ -959,10 +1085,11 @@ async function handleLiveActivityQuestion(
 
 function buildAggregateServerContext(
   message: MessageLike,
-  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'resolveGuildSettings'>
+  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'resolveGuildSettings' | 'hasFamilyRole'>
 ): string {
   if (!message.guild) return '';
-  const stats = options.getGuildStorage(message.guild.id).getPeriodAnalytics(7);
+  const guildStorage = options.getGuildStorage(message.guild.id);
+  const stats = guildStorage.getPeriodAnalytics(7);
   const settings = options.resolveGuildSettings(message.guild.id);
   const channels = Object.values(settings.aiBrain?.channels || {})
     .slice(0, 25)
@@ -974,6 +1101,39 @@ function buildAggregateServerContext(
     .map(role => role.name)
     .join(', ');
   const rules = String(settings.aiBrain?.rules?.text || '').trim().slice(0, 1200);
+  const requestedIds = new Set(parseTargetUserIds(message.content, ''));
+  const memberProfiles = collectionValues<MemberLike>(message.guild.members?.cache)
+    .filter(member => !member.user?.bot && options.hasFamilyRole(member))
+    .sort((left, right) => Number(requestedIds.has(right.id)) - Number(requestedIds.has(left.id)))
+    .slice(0, 100)
+    .map((member, index) => {
+      const record = guildStorage.ensureMemberRecord(member.id);
+      const weekly = stats.members?.[member.id] || { messages: 0, reactions: 0, voiceMinutes: 0 };
+      const lastAt = Math.max(Number(record.lastSeenAt) || 0, Number(record.lastMessageAt) || 0, Number(record.lastVoiceAt) || 0);
+      const inactiveDays = lastAt ? Math.max(0, Math.floor((Date.now() - lastAt) / (24 * 60 * 60 * 1000))) : -1;
+      const roleNames = collectionValues<{ id: string; name?: string; position?: number }>(member.roles?.cache)
+        .sort((left, right) => (Number(right.position) || 0) - (Number(left.position) || 0))
+        .map(role => role.name || '')
+        .filter(Boolean)
+        .slice(0, 5);
+      const publicName = member.displayName || member.user?.globalName || member.user?.username || member.id;
+      return [
+        requestedIds.has(member.id) ? `ЦЕЛЕВОЙ УЧАСТНИК (профиль ${index + 1})` : `Участник ${index + 1}`,
+        `display name=${publicName}`,
+        `username=${member.user?.username || 'не указан'}`,
+        `Discord ID=${member.id}`,
+        `роли=${roleNames.join('/') || 'нет'}`,
+        `всего сообщений=${Number(record.messageCount) || 0}`,
+        `всего голос=${Number(record.voiceMinutes) || 0} мин`,
+        `7д сообщения=${weekly.messages || 0}`,
+        `7д реакции=${weekly.reactions || 0}`,
+        `7д голос=${weekly.voiceMinutes || 0} мин`,
+        `баллы=${Number(record.points) || 0}`,
+        `выговоры=${Number(record.warns) || 0}`,
+        `похвалы=${Number(record.commends) || 0}`,
+        `неактивность=${inactiveDays < 0 ? 'нет данных' : `${inactiveDays} дн.`}`
+      ].join('; ');
+    });
   return [
     'ФАКТИЧЕСКИЙ КОНТЕКСТ DISCORD-СЕРВЕРА:',
     `Сервер: ${message.guild.name || message.guild.id}; участников: ${message.guild.memberCount ?? 'неизвестно'}.`,
@@ -981,8 +1141,9 @@ function buildAggregateServerContext(
     channels ? `Каналы и назначения: ${channels}.` : '',
     roles ? `Роли сверху вниз: ${roles}.` : '',
     rules ? `Актуальные правила из настроенного канала:\n${rules}` : '',
+    memberProfiles.length ? `ПУБЛИЧНЫЕ DISCORD-ПРОФИЛИ И СТАТИСТИКА КАЖДОГО СЕМЕЙНОГО УЧАСТНИКА:\n${memberProfiles.join('\n')}` : '',
     'Не утверждай, что у тебя нет доступа к серверу. Используй этот контекст и встроенные функции бота. Не выдумывай отсутствующие данные.'
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean).join('\n').slice(0, 30000);
 }
 
 const conflictMarkers = [
@@ -2220,7 +2381,7 @@ async function handleAiMentionMessage(
     return true;
   }
 
-  if (await handleInactivePingRequest(message, prompt, options)) {
+  if (await handleInactiveMembersRequest(message, prompt, options)) {
     return true;
   }
 

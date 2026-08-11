@@ -39,6 +39,7 @@ async function main() {
     kick: async () => {},
     ban: async () => { naturalBanned = true; }
   };
+  const inactiveDms = [];
   const guild = {
     id: 'guild-1',
     name: 'Test Guild',
@@ -48,8 +49,8 @@ async function main() {
     members: {
       cache: {
         values: () => [
-          { id: 'inactive-user', user: { id: 'inactive-user', bot: false }, presence: { status: 'offline' }, roles: { cache: { values: () => [][Symbol.iterator]() } } },
-          { id: 'active-user', user: { id: 'active-user', bot: false }, presence: { status: 'online' }, roles: { cache: { values: () => [][Symbol.iterator]() } } }
+          { id: 'inactive-user', displayName: 'Inactive Member', user: { id: 'inactive-user', username: 'inactive_public', bot: false, send: async payload => inactiveDms.push(payload) }, presence: { status: 'offline' }, roles: { cache: { values: () => [{ id: 'family-role', name: 'KLAIZ', position: 10 }][Symbol.iterator]() } } },
+          { id: 'active-user', displayName: 'Active Member', user: { id: 'active-user', username: 'active_public', bot: false }, presence: { status: 'online' }, roles: { cache: { values: () => [{ id: 'family-role', name: 'KLAIZ', position: 10 }][Symbol.iterator]() } } }
         ][Symbol.iterator]()
       },
       fetch: async id => (id === targetMember.id ? targetMember : null)
@@ -69,6 +70,7 @@ async function main() {
   const telegramScamReports = [];
   const aiReplies = [];
   const aiSystems = [];
+  const aiPrompts = [];
   const activityReplies = [];
   const naturalAnnouncements = [];
   const channelSettingsPatches = [];
@@ -110,6 +112,7 @@ async function main() {
     aiService: {
       aiText: async (system, prompt) => {
         aiSystems.push(system);
+        aiPrompts.push(prompt);
         return `AI reply: ${prompt}`;
       }
     },
@@ -148,7 +151,12 @@ async function main() {
       ensureMemberRecord: id => ({
         lastSeenAt: id === 'inactive-user' ? Date.now() - 10 * 24 * 60 * 60 * 1000 : Date.now(),
         lastMessageAt: 0,
-        lastVoiceAt: 0
+        lastVoiceAt: 0,
+        messageCount: id === 'inactive-user' ? 4 : 20,
+        voiceMinutes: id === 'inactive-user' ? 15 : 120,
+        points: id === 'inactive-user' ? 2 : 8,
+        warns: id === 'inactive-user' ? 1 : 0,
+        commends: id === 'inactive-user' ? 0 : 2
       })
     }),
     isPremiumGuild: () => true,
@@ -277,6 +285,11 @@ async function main() {
   });
   assert.equal(aiReplies[0], '<@user-1> AI reply: подскажи текст');
   assert.match(aiSystems[0], /ФАКТИЧЕСКИЙ КОНТЕКСТ DISCORD-СЕРВЕРА/u);
+  assert.match(aiSystems[0], /ПУБЛИЧНЫЕ DISCORD-ПРОФИЛИ/u);
+  assert.match(aiSystems[0], /display name=Inactive Member/u);
+  assert.match(aiSystems[0], /username=inactive_public/u);
+  assert.match(aiSystems[0], /Discord ID=inactive-user/u);
+  assert.match(aiSystems[0], /роли=KLAIZ/u);
 
   const aiCallsBeforeStats = aiSystems.length;
   await listeners.get('messageCreate')({
@@ -293,7 +306,9 @@ async function main() {
     },
     delete: async () => {}
   });
-  assert.equal(aiSystems.length, aiCallsBeforeStats);
+  assert.equal(aiSystems.length, aiCallsBeforeStats + 1);
+  assert.match(aiSystems.at(-1), /аналитик KLAIZ BOT/u);
+  assert.match(aiPrompts.at(-1), /Active Member; Discord ID=active-user/u);
   assert.equal(activityReplies.length, 1);
   assert.equal(activityReplies[0].embeds[0].data.title, '📊 Активность Discord');
   assert.match(activityReplies[0].embeds[0].data.fields[0].value, /12/u);
@@ -321,6 +336,56 @@ async function main() {
   assert.match(inactiveReplies[0].content, /<@inactive-user>/u);
   assert.doesNotMatch(inactiveReplies[0].content, /<@active-user>/u);
   assert.deepEqual(inactiveReplies[0].allowedMentions.users, ['inactive-user']);
+
+  const inactiveListReplies = [];
+  const aiCallsBeforeInactiveList = aiSystems.length;
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4inactive-list',
+    content: '<@bot-1> покажи конкретный список неактивных участников',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        inactiveListReplies.push(payload);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(aiSystems.length, aiCallsBeforeInactiveList + 1);
+  assert.match(aiPrompts.at(-1), /Inactive Member; Discord ID=inactive-user/u);
+  assert.equal(inactiveListReplies[0].embeds[0].data.title, '💤 Неактивные участники');
+  assert.match(inactiveListReplies[0].embeds[0].data.fields[0].value, /<@inactive-user>/u);
+  assert.doesNotMatch(inactiveListReplies[0].embeds[0].data.fields[0].value, /<@active-user>/u);
+
+  const inactiveDmReplies = [];
+  await listeners.get('messageCreate')({
+    ...baseMessage,
+    id: 'message-4inactive-dm',
+    content: '<@bot-1> отправь всем неактивным за 7 дней предупреждение в лс и сам придумай текст',
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    member: {
+      ...baseMessage.member,
+      permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+    },
+    channel: {
+      id: 'channel-1',
+      send: async payload => {
+        inactiveDmReplies.push(payload);
+        return null;
+      }
+    },
+    delete: async () => {}
+  });
+  assert.equal(inactiveDms.length, 1);
+  assert.match(inactiveDms[0].content, /AI reply:/u);
+  assert.match(inactiveDmReplies[0].content, /Доставлено: \*\*1\*\*/u);
+  assert.match(securityLogs.at(-1), /inactive_dm/u);
 
   await listeners.get('messageCreate')({
     ...baseMessage,
