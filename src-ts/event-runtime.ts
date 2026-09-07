@@ -73,6 +73,7 @@ interface GuildLike {
       values?(): IterableIterator<MemberLike>;
     };
     fetch(id: string): Promise<MemberLike | null>;
+    fetch(): Promise<{ values(): IterableIterator<MemberLike> }>;
   };
   roles: {
     everyone?: RoleLike;
@@ -323,6 +324,8 @@ interface RoleEventLike {
 }
 
 interface GuildStorageLike {
+  getCooldown?(memberId: string): number;
+  setCooldown?(memberId: string, value: number): unknown;
   recordAnalyticsMessage(memberId: string, channelId: string): unknown;
   recordMessage(memberId: string): unknown;
   recordPresence(memberId: string): unknown;
@@ -789,7 +792,7 @@ async function buildAiToolSummary(
   let timeout: NodeJS.Timeout | null = null;
   try {
     const answer = await Promise.race([
-      aiService.aiText(systemPrompt, dataPrompt),
+      aiService.aiText(`${systemPrompt}\nЕсли внешняя модель недоступна, верни пустую строку. [tool-result-only]`, dataPrompt),
       new Promise<string>(resolve => {
         timeout = setTimeout(() => resolve(''), 6000);
       })
@@ -828,7 +831,7 @@ function shouldPingInactiveMembers(value: string): boolean {
 
 function shouldMessageInactiveMembers(value: string): boolean {
   const text = String(value || '').toLowerCase().replace(/ё/gu, 'е');
-  return /(отправ|напиши|разошли|предупреди)/u.test(text) && /(лс|личн|dm|сообщен)/u.test(text);
+  return /(отправ|напиши|разошли|предупреди)/u.test(text) && /(?:лс|личн|\bdm\b)/u.test(text);
 }
 
 function requestedInactiveDays(value: string): number {
@@ -838,6 +841,12 @@ function requestedInactiveDays(value: string): number {
   if (/месяц/u.test(text)) return 30;
   if (/недел/u.test(text)) return 7;
   return 7;
+}
+
+async function loadActivityMembers(guild: GuildLike): Promise<MemberLike[]> {
+  const fetched = await guild.members.fetch();
+  if (!fetched?.values) throw new Error('Не удалось получить полный список участников Discord. Проверь Server Members Intent.');
+  return collectionValues<MemberLike>(fetched);
 }
 
 async function handleInactiveMembersRequest(
@@ -857,9 +866,13 @@ async function handleInactiveMembersRequest(
   const days = requestedInactiveDays(prompt);
   const pingMembers = shouldPingInactiveMembers(prompt);
   const messageMembers = shouldMessageInactiveMembers(prompt);
+  if (/(отправ|напиши|разошли|предупреди)/u.test(prompt.toLowerCase()) && !messageMembers && !pingMembers) {
+    await message.channel.send?.({ content: 'Укажи место отправки: «отправь неактивным в ЛС». Для списка: «покажи неактивных».', allowedMentions: { parse: [] } });
+    return true;
+  }
   const threshold = Date.now() - days * 24 * 60 * 60 * 1000;
   const guildStorage = options.getGuildStorage(message.guild.id);
-  const inactive = collectionValues<MemberLike>(message.guild.members?.cache)
+  const inactive = (await loadActivityMembers(message.guild))
     .filter(member => member.id !== message.author.id && !member.user?.bot && options.hasFamilyRole(member))
     .map(member => ({ member, data: guildStorage.ensureMemberRecord(member.id) }))
     .filter(({ data }) => {
@@ -880,8 +893,8 @@ async function handleInactiveMembersRequest(
     return true;
   }
 
-  const ids = inactive.map(item => item.member.id).slice(0, 100);
-  const inactiveAiProfiles = inactive.slice(0, 100).map(({ member, data }, index) => {
+  const ids = inactive.map(item => item.member.id);
+  const inactiveAiProfiles = inactive.map(({ member, data }, index) => {
     const lastActivity = Math.max(Number(data.lastSeenAt) || 0, Number(data.lastMessageAt) || 0, Number(data.lastVoiceAt) || 0);
     const inactiveForDays = lastActivity ? Math.max(0, Math.floor((Date.now() - lastActivity) / (24 * 60 * 60 * 1000))) : -1;
     const publicName = member.displayName || member.user?.globalName || member.user?.username || member.id;
@@ -901,13 +914,22 @@ async function handleInactiveMembersRequest(
   );
   let delivered = 0;
   let failed = 0;
+  let skipped = 0;
   if (messageMembers) {
-    for (const { member } of inactive.slice(0, 100)) {
+    for (const { member } of inactive) {
+      const key = `inactive-dm:${member.id}`;
+      if (Date.now() - (guildStorage.getCooldown?.(key) || 0) < 86400000) {
+        skipped += 1;
+        continue;
+      }
       const sent = await member.user?.send?.({
         content: aiSummary,
         allowedMentions: { parse: [] }
       }).then(() => true).catch(() => false);
-      if (sent) delivered += 1;
+      if (sent) {
+        delivered += 1;
+        guildStorage.setCooldown?.(key, Date.now());
+      }
       else failed += 1;
     }
     await message.channel.send?.({
@@ -915,6 +937,7 @@ async function handleInactiveMembersRequest(
         '✅ Предупреждение неактивным участникам отправлено.',
         `Доставлено: **${delivered}**`,
         `Не доставлено: **${failed}**`,
+        `Уже предупреждены за последние 24 часа: **${skipped}**`,
         '',
         `**Текст сообщения:**\n${aiSummary}`
       ].join('\n').slice(0, 1900),
@@ -935,7 +958,7 @@ async function handleInactiveMembersRequest(
       }).catch(() => null);
     }
   } else {
-    const lines = inactive.slice(0, 40).map(({ member, data }, index) => {
+    const lines = inactive.map(({ member, data }, index) => {
       const lastActivity = Math.max(
         Number(data.lastSeenAt) || 0,
         Number(data.lastMessageAt) || 0,
@@ -949,10 +972,13 @@ async function handleInactiveMembersRequest(
       .setColor(0xf59e0b)
       .setTitle('💤 Неактивные участники')
       .setDescription(`${aiSummary}\n\nСемейные участники без активности более **${days} дн.**: **${inactive.length}**`)
-      .addFields({ name: 'Список', value: lines.join('\n').slice(0, 1024) })
+      .addFields({ name: 'Список', value: lines.slice(0, 10).join('\n') })
       .setFooter({ text: 'KLAIZ • Живые данные бота' })
       .setTimestamp();
     await message.channel.send?.({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
+    for (let offset = 10; offset < lines.length; offset += 10) {
+      await message.channel.send?.({ content: lines.slice(offset, offset + 10).join('\n'), allowedMentions: { parse: [] } });
+    }
   }
 
   const currentSettings = options.resolveGuildSettings(message.guild.id);
@@ -992,7 +1018,23 @@ async function handleLiveActivityQuestion(
   const guildStorage = options.getGuildStorage(message.guild.id);
   const today = guildStorage.getPeriodAnalytics(1);
   const period = guildStorage.getPeriodAnalytics(days);
-  const cachedMembers = collectionValues<MemberLike>(message.guild.members?.cache);
+  const cachedMembers = await loadActivityMembers(message.guild);
+  const targets = parseTargetUserIds(prompt, '');
+  if (targets.length) {
+    for (const id of targets) {
+      const member = cachedMembers.find(item => item.id === id);
+      if (!member) {
+        await message.channel.send?.({ content: `Участник <@${id}> не найден на этом сервере.`, allowedMentions: { parse: [] } });
+        continue;
+      }
+      const metrics = period.members[id];
+      const facts = metrics ? formatActivityMemberLine(id, metrics, 0) : 'За выбранный период активность не зафиксирована.';
+      const summary = await buildAiToolSummary(options.aiService, 'Проанализируй только указанного участника по предоставленным данным. Не придумывай события.', `Участник ${member.displayName || id}; период ${days} дн.\n${facts}`, facts);
+      const embed = new EmbedBuilder().setTitle('Активность участника').setDescription(`<@${id}> • ${days} дн.\n\n${summary}`).addFields({ name: 'Данные бота', value: facts });
+      await message.channel.send?.({ embeds: [embed], allowedMentions: { parse: [] } });
+    }
+    return true;
+  }
   const familyMembers = cachedMembers.filter(member => !member.user?.bot && options.hasFamilyRole(member));
   const onlineMembers = cachedMembers.filter(member => !member.user?.bot && member.presence?.status && member.presence.status !== 'offline');
   const topMembers = Object.entries(period.members || {})
@@ -1012,7 +1054,6 @@ async function handleLiveActivityQuestion(
     .map(([channelId, count], index) => `${index + 1}. <#${channelId}> (${channelNames.get(channelId) || channelId}) — ${count}`);
   const periodLabel = days === 1 ? 'Сегодня' : `За ${days} дней`;
   const perMemberActivity = Object.entries(period.members || {})
-    .slice(0, 100)
     .map(([memberId, stats], index) => {
       const member = cachedMembers.find(item => item.id === memberId);
       const publicName = member?.displayName || member?.user?.globalName || member?.user?.username || memberId;
@@ -1083,10 +1124,10 @@ async function handleLiveActivityQuestion(
   return true;
 }
 
-function buildAggregateServerContext(
+async function buildAggregateServerContext(
   message: MessageLike,
   options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'resolveGuildSettings' | 'hasFamilyRole'>
-): string {
+): Promise<string> {
   if (!message.guild) return '';
   const guildStorage = options.getGuildStorage(message.guild.id);
   const stats = guildStorage.getPeriodAnalytics(7);
@@ -1102,10 +1143,9 @@ function buildAggregateServerContext(
     .join(', ');
   const rules = String(settings.aiBrain?.rules?.text || '').trim().slice(0, 1200);
   const requestedIds = new Set(parseTargetUserIds(message.content, ''));
-  const memberProfiles = collectionValues<MemberLike>(message.guild.members?.cache)
-    .filter(member => !member.user?.bot && options.hasFamilyRole(member))
+  const memberProfiles = (await loadActivityMembers(message.guild))
+    .filter(member => !member.user?.bot)
     .sort((left, right) => Number(requestedIds.has(right.id)) - Number(requestedIds.has(left.id)))
-    .slice(0, 100)
     .map((member, index) => {
       const record = guildStorage.ensureMemberRecord(member.id);
       const weekly = stats.members?.[member.id] || { messages: 0, reactions: 0, voiceMinutes: 0 };
@@ -1143,7 +1183,7 @@ function buildAggregateServerContext(
     rules ? `Актуальные правила из настроенного канала:\n${rules}` : '',
     memberProfiles.length ? `ПУБЛИЧНЫЕ DISCORD-ПРОФИЛИ И СТАТИСТИКА КАЖДОГО СЕМЕЙНОГО УЧАСТНИКА:\n${memberProfiles.join('\n')}` : '',
     'Не утверждай, что у тебя нет доступа к серверу. Используй этот контекст и встроенные функции бота. Не выдумывай отсутствующие данные.'
-  ].filter(Boolean).join('\n').slice(0, 30000);
+  ].filter(Boolean).join('\n');
 }
 
 const conflictMarkers = [
@@ -2381,12 +2421,28 @@ async function handleAiMentionMessage(
     return true;
   }
 
-  if (await handleInactiveMembersRequest(message, prompt, options)) {
-    return true;
-  }
-
-  if (await handleLiveActivityQuestion(message, prompt, options)) {
-    return true;
+  if (looksLikeInactiveMembersRequest(prompt) || looksLikeLiveActivityQuestion(prompt)) {
+    const inactiveRequest = looksLikeInactiveMembersRequest(prompt);
+    if (inactiveRequest && !isAdminMember(message.member)) {
+      await message.channel.send?.({ content: 'Запросы списка и предупреждений неактивным доступны только администратору.', allowedMentions: { parse: [] } });
+      return true;
+    }
+    const key = inactiveRequest ? `activity:${message.guild.id}` : `activity:${message.guild.id}:${message.author.id}`;
+    const last = state.get(key) || 0;
+    if (Date.now() - last < 60000) {
+      await message.channel.send?.({ content: 'Предыдущий запрос активности ещё выполняется или был выполнен менее минуты назад.', allowedMentions: { parse: [] } });
+      return true;
+    }
+    state.set(key, Infinity);
+    try {
+      if (await handleInactiveMembersRequest(message, prompt, options)) return true;
+      if (await handleLiveActivityQuestion(message, prompt, options)) return true;
+    } catch (error) {
+      await message.channel.send?.({ content: `Не удалось выполнить запрос активности: ${String(error instanceof Error ? error.message : error).slice(0, 300)}`, allowedMentions: { parse: [] } });
+      return true;
+    } finally {
+      state.set(key, Date.now());
+    }
   }
 
   if (await handleRulesQuestion(message, prompt, options)) {
@@ -2430,7 +2486,7 @@ async function handleAiMentionMessage(
   await message.channel.sendTyping?.().catch(() => null);
 
   try {
-    const liveContext = buildAggregateServerContext(message, options);
+    const liveContext = await buildAggregateServerContext(message, options);
     const answer = await options.aiService.aiText(`${buildMentionSystemPrompt()}\n\n${liveContext}`, prompt);
     await message.channel.send?.({
       content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800)}`,

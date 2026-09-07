@@ -389,6 +389,7 @@ export function createAIService({
     ]);
     if (external) return external;
 
+    if (_systemPrompt.includes('[tool-result-only]')) return '';
     return buildOfflineReply(userPrompt);
   }
 

@@ -103,6 +103,8 @@ async function testMemberRolesArePassedToExternalAi() {
 }
 
 async function main() {
+  const unavailable = createAIService({ enabled: true, chatCompletion: { enabled: true, chat: async () => { throw new Error('network'); } } });
+  assert.equal(await unavailable.aiText('[tool-result-only]', 'Напиши предупреждение'), '');
   await runTest('ai advisor suggests promotion for strong member', testAdvisorSuggestsPromotionForStrongMember);
   await runTest('ai advisor flags afk risk', testAdvisorFlagsAfkRisk);
   await runTest('external ai chat is used when configured', testExternalAiChatIsUsedWhenConfigured);

@@ -308,6 +308,14 @@ async function testGuildPeriodAnalyticsAggregateMessagesVoiceReactionsAndMembers
 }
 
 async function main() {
+  const presenceStorage = createTempStorage();
+  const presenceMember = presenceStorage.ensureGuildMember('presence-guild', 'member');
+  presenceMember.lastSeenAt = 123;
+  presenceMember.afkWarningSentAt = '2026-09-01T00:00:00Z';
+  presenceStorage.trackGuildPresence('presence-guild', 'member');
+  assert.equal(presenceMember.lastSeenAt, 123);
+  assert.equal(presenceMember.afkWarningSentAt, '2026-09-01T00:00:00Z');
+  presenceStorage.flush();
   await runTest('commends increase points up to 100', testCommendsIncreasePointsUpToHundred);
   await runTest('warns do not drop points below zero', testWarnsDoNotDropPointsBelowZero);
   await runTest('voice minutes accumulate', testVoiceMinutesAccumulate);

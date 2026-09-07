@@ -386,10 +386,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
   }
 
   function trackGuildPresence(guildId: string, memberId: string): void {
-    const member = ensureGuildMember(guildId, memberId);
-    member.lastSeenAt = Date.now();
-    clearAfkWarning(member);
-    save();
+    // Presence changes are not participation and must not clear inactivity warnings.
+    ensureGuildMember(guildId, memberId);
   }
 
   function addGuildWarn(payload: { guildId: string; userId: string; moderatorId: string; reason: string }): void {

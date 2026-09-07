@@ -40,6 +40,8 @@ async function main() {
     ban: async () => { naturalBanned = true; }
   };
   const inactiveDms = [];
+  const warningCooldowns = new Map();
+  const additionalMembers = [];
   const guild = {
     id: 'guild-1',
     name: 'Test Guild',
@@ -50,10 +52,11 @@ async function main() {
       cache: {
         values: () => [
           { id: 'inactive-user', displayName: 'Inactive Member', user: { id: 'inactive-user', username: 'inactive_public', bot: false, send: async payload => inactiveDms.push(payload) }, presence: { status: 'offline' }, roles: { cache: { values: () => [{ id: 'family-role', name: 'KLAIZ', position: 10 }][Symbol.iterator]() } } },
-          { id: 'active-user', displayName: 'Active Member', user: { id: 'active-user', username: 'active_public', bot: false }, presence: { status: 'online' }, roles: { cache: { values: () => [{ id: 'family-role', name: 'KLAIZ', position: 10 }][Symbol.iterator]() } } }
+          { id: 'active-user', displayName: 'Active Member', user: { id: 'active-user', username: 'active_public', bot: false }, presence: { status: 'online' }, roles: { cache: { values: () => [{ id: 'family-role', name: 'KLAIZ', position: 10 }][Symbol.iterator]() } } },
+          ...additionalMembers
         ][Symbol.iterator]()
       },
-      fetch: async id => (id === targetMember.id ? targetMember : null)
+      fetch: async id => (id === undefined ? guild.members.cache : (id === targetMember.id ? targetMember : null))
     }
   };
   targetMember.guild = guild;
@@ -136,6 +139,8 @@ async function main() {
       channelRestored: name => name
     },
     getGuildStorage: () => ({
+      getCooldown: id => warningCooldowns.get(id) || 0,
+      setCooldown: (id, value) => warningCooldowns.set(id, value),
       recordAnalyticsMessage() {}, recordMessage() {}, recordPresence() {}, trackJoin() {}, trackLeave() {}, recordReaction() {},
       getPeriodAnalytics: days => ({
         dayCount: days || 7,
@@ -268,6 +273,9 @@ async function main() {
   assert.match(aiReplies.at(-1), /мут на 2 минуты/u);
   aiReplies.length = 0;
 
+  additionalMembers.push(...Array.from({ length: 101 }, (_, i) => ({
+    id: `public-${i}`, displayName: `Public Member ${i}`, user: { bot: false, username: `public_${i}` }, roles: { cache: new Map() }
+  })));
   await listeners.get('messageCreate')({
     ...baseMessage,
     id: 'message-4',
@@ -290,6 +298,8 @@ async function main() {
   assert.match(aiSystems[0], /username=inactive_public/u);
   assert.match(aiSystems[0], /Discord ID=inactive-user/u);
   assert.match(aiSystems[0], /роли=KLAIZ/u);
+  assert.match(aiSystems[0], /Discord ID=public-100/u);
+  additionalMembers.length = 0;
 
   const aiCallsBeforeStats = aiSystems.length;
   await listeners.get('messageCreate')({
@@ -339,6 +349,9 @@ async function main() {
 
   const inactiveListReplies = [];
   const aiCallsBeforeInactiveList = aiSystems.length;
+  const originalNow = Date.now;
+  let activityNow = originalNow() + 61000;
+  Date.now = () => activityNow;
   await listeners.get('messageCreate')({
     ...baseMessage,
     id: 'message-4inactive-list',
@@ -364,6 +377,7 @@ async function main() {
   assert.doesNotMatch(inactiveListReplies[0].embeds[0].data.fields[0].value, /<@active-user>/u);
 
   const inactiveDmReplies = [];
+  activityNow += 61000;
   await listeners.get('messageCreate')({
     ...baseMessage,
     id: 'message-4inactive-dm',
@@ -386,6 +400,28 @@ async function main() {
   assert.match(inactiveDms[0].content, /AI reply:/u);
   assert.match(inactiveDmReplies[0].content, /Доставлено: \*\*1\*\*/u);
   assert.match(securityLogs.at(-1), /inactive_dm/u);
+  const retryMessage = {
+    ...baseMessage, content: '<@bot-1> отправь неактивным в лс',
+    member: { ...baseMessage.member, permissions: { has: permission => permission === PermissionFlagsBits.Administrator } },
+    mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+    channel: { id: 'channel-1', send: async payload => inactiveDmReplies.push(payload) }
+  };
+  await listeners.get('messageCreate')(retryMessage);
+  assert.match(inactiveDmReplies.at(-1).content, /менее минуты/u);
+  activityNow += 61000;
+  await listeners.get('messageCreate')(retryMessage);
+  assert.equal(inactiveDms.length, 1, 'delivered warning must not be repeated within 24h');
+  assert.match(inactiveDmReplies.at(-1).content, /24 часа: \*\*1\*\*/u);
+  activityNow += 61000;
+  await listeners.get('messageCreate')({ ...retryMessage, content: '<@bot-1> отправь сообщение неактивным' });
+  assert.match(inactiveDmReplies.at(-1).content, /Укажи место/u);
+  assert.equal(inactiveDms.length, 1);
+  additionalMembers.push({ id: '123456789012345678', displayName: 'Requested User', user: { bot: false }, roles: { cache: new Map() } });
+  await listeners.get('messageCreate')({ ...retryMessage, content: '<@bot-1> проанализируй активность участника <@123456789012345678>' });
+  assert.equal(inactiveDmReplies.at(-1).embeds[0].data.title, 'Активность участника');
+  assert.match(inactiveDmReplies.at(-1).embeds[0].data.description, /123456789012345678/u);
+  additionalMembers.length = 0;
+  Date.now = originalNow;
 
   await listeners.get('messageCreate')({
     ...baseMessage,

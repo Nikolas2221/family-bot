@@ -1,4 +1,5 @@
 async function main() {
+  await require('./telegram-startup.test').main();
   const { main: runAfkLeaveTests } = require('./afk-leave.test');
   const { main: runAfkLeaveUiTests } = require('./afk-leave-ui.test');
   const { main: runOnlineMembersTests } = require('./online-members.test');
