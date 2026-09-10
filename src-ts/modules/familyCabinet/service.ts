@@ -76,6 +76,8 @@ export class FamilyCabinetService {
   private running = false;
   private currentRunStartedAt = '';
   private autoSkippedWhileRunning = 0;
+  private stopped = false;
+  private lastFailureNotice = { text: '', at: 0 };
 
   constructor(
     private readonly client: any,
@@ -108,6 +110,7 @@ export class FamilyCabinetService {
 
   startAutoSync(): void {
     if (!this.config.enabled || !this.config.syncEnabled || this.timer) return;
+    this.stopped = false;
     void this.runSync('startup').catch(error => {
       console.error('[family-cabinet] startup sync failed:', error);
     }).finally(() => {
@@ -116,7 +119,8 @@ export class FamilyCabinetService {
   }
 
   private scheduleNextAutoSync(): void {
-    if (!this.config.enabled || !this.config.syncEnabled || this.timer) return;
+    if (this.stopped || !this.config.enabled || !this.config.syncEnabled || this.timer) return;
+    const authenticationFailed = /Сессия кабинета (истекла|не найдена)/u.test(this.state.syncRuns[0]?.errorMessage || '');
     this.timer = setTimeout(() => {
       this.timer = null;
       void this.runSync('auto').catch(error => {
@@ -124,10 +128,11 @@ export class FamilyCabinetService {
       }).finally(() => {
         this.scheduleNextAutoSync();
       });
-    }, Math.max(60000, this.config.syncIntervalMs));
+    }, Math.max(authenticationFailed ? 1800000 : 60000, this.config.syncIntervalMs));
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
@@ -382,6 +387,10 @@ export class FamilyCabinetService {
   }
 
   private async sendSyncSummary(run: FamilyCabinetSyncRun, reason: string): Promise<void> {
+    if (run.status === 'ok' && !run.errorMessage) this.lastFailureNotice = { text: '', at: 0 };
+    const failureText = run.status === 'failed' ? run.errorMessage || 'unknown' : '';
+    if (reason !== 'manual' && failureText && this.lastFailureNotice.text === failureText
+      && Date.now() - this.lastFailureNotice.at < 3600000) return;
     const shouldSend = reason === 'manual' || run.status !== 'ok' || run.logsCreated > 0 || Boolean(run.errorMessage);
     if (!shouldSend) return;
 
@@ -395,6 +404,7 @@ export class FamilyCabinetService {
     await resolved.channel.send({
       embeds: [this.buildSyncSummaryEmbed(run, reason)]
     });
+    if (failureText) this.lastFailureNotice = { text: failureText, at: Date.now() };
   }
 
   private loadState(): FamilyCabinetState {

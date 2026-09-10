@@ -79,6 +79,24 @@ async function main() {
   fs.writeFileSync(sessionPath, JSON.stringify(previousSession));
   assert.equal(__familyCabinetScraperInternals.restoreSessionFromEnv(sessionPath), false);
   assert.deepEqual(JSON.parse(fs.readFileSync(sessionPath, 'utf8')), previousSession);
+  __familyCabinetScraperInternals.resetSessionEnvImportState();
+  assert.equal(__familyCabinetScraperInternals.restoreSessionFromEnv(sessionPath), false, 'restart must preserve refreshed file');
+  process.env.CABINET_SESSION_B64 = Buffer.from(JSON.stringify({ cookies: [], origins: [] })).toString('base64');
+  assert.equal(__familyCabinetScraperInternals.restoreSessionFromEnv(sessionPath), true, 'new export must replace old session');
+  let initScript;
+  let initPayload;
+  await __familyCabinetScraperInternals.installSessionStorageRestore({ addInitScript: async (fn, payload) => { initScript = fn; initPayload = payload; } }, {
+    origins: [{ origin: 'https://example.test', sessionStorage: [{ name: 'auth', value: 'old' }] }]
+  });
+  const previousWindow = global.window;
+  const values = new Map();
+  global.window = { location: { origin: 'https://example.test' }, sessionStorage: { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) } };
+  try {
+    initScript(initPayload);
+    values.set('auth', 'refreshed');
+    initScript(initPayload);
+    assert.equal(values.get('auth'), 'refreshed', 'navigation must preserve refreshed authentication');
+  } finally { global.window = previousWindow; }
   if (previousEncodedSession === undefined) delete process.env.CABINET_SESSION_B64;
   else process.env.CABINET_SESSION_B64 = previousEncodedSession;
   fs.rmSync(sessionDirectory, { recursive: true, force: true });
@@ -164,6 +182,18 @@ Luffy Klaiz #206656
   assert.equal(logMessages.length, beforeAutoSkipSummaryCount);
   const completed = await running;
   assert.equal(completed.status, 'ok');
+
+  const authService = createFamilyCabinetService(client, baseConfig(slowDir, scraperModulePath));
+  authService.scrape = async () => { throw new Error('Сессия кабинета истекла.'); };
+  const noticeCount = logMessages.length;
+  await authService.runSync('auto');
+  await authService.runSync('auto');
+  assert.equal(logMessages.length, noticeCount + 1, 'same authentication error must not spam Discord');
+  await authService.runSync('manual');
+  assert.equal(logMessages.length, noticeCount + 2, 'manual request must always return status');
+  authService.stop();
+  authService.scheduleNextAutoSync();
+  assert.equal(authService.timer, null, 'stopped scheduler must not restart itself');
 
   console.log('ALL FAMILY CABINET TESTS PASSED');
 }

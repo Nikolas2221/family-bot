@@ -264,11 +264,16 @@ let persistentCabinetSession: {
   page: any;
   sessionStoragePath: string;
   storageState: any;
+  fingerprint: string;
 } | null = null;
 
 function restoreSessionFromEnv(sessionStoragePath: string): boolean {
   const encoded = String(process.env.CABINET_SESSION_B64 || '').trim();
-  if (!encoded || sessionEnvImportedPaths.has(sessionStoragePath)) return false;
+  if (!encoded) return false;
+  const digest = crypto.createHash('sha256').update(encoded).digest('hex');
+  const markerPath = `${sessionStoragePath}.env-hash`;
+  if (fs.existsSync(sessionStoragePath) && fs.existsSync(markerPath)
+    && fs.readFileSync(markerPath, 'utf8') === digest) return false;
 
   try {
     const json = Buffer.from(encoded, 'base64').toString('utf8');
@@ -277,6 +282,7 @@ function restoreSessionFromEnv(sessionStoragePath: string): boolean {
     const temporaryPath = `${sessionStoragePath}.tmp`;
     fs.writeFileSync(temporaryPath, json);
     fs.renameSync(temporaryPath, sessionStoragePath);
+    fs.writeFileSync(markerPath, digest, { mode: 0o600 });
     sessionEnvImportedPaths.add(sessionStoragePath);
     return true;
   } catch (error) {
@@ -323,10 +329,13 @@ async function installSessionStorageRestore(context: any, storageState: any): Pr
   await context.addInitScript((payload: any[]) => {
     const match = payload.find(item => item.origin === window.location.origin);
     if (!match) return;
+    const marker = '__klaiz_session_restored';
+    if (window.sessionStorage.getItem(marker)) return;
     for (const entry of match.sessionStorage || []) {
-      if (!entry?.name) continue;
+      if (!entry?.name || entry.name === marker) continue;
       window.sessionStorage.setItem(entry.name, String(entry.value || ''));
     }
+    window.sessionStorage.setItem(marker, '1');
   }, origins);
 }
 
@@ -361,10 +370,12 @@ async function persistRefreshedStorageState(
 }
 
 async function getPersistentCabinetSession(sessionStoragePath: string): Promise<NonNullable<typeof persistentCabinetSession>> {
+  const fingerprint = crypto.createHash('sha256').update(fs.readFileSync(sessionStoragePath)).digest('hex');
   const active = persistentCabinetSession;
   if (
     active
     && active.sessionStoragePath === sessionStoragePath
+    && active.fingerprint === fingerprint
     && active.browser?.isConnected?.()
     && !active.page?.isClosed?.()
   ) {
@@ -379,7 +390,7 @@ async function getPersistentCabinetSession(sessionStoragePath: string): Promise<
     const context = await browser.newContext({ storageState: playwrightStorageState(storageState) });
     await installSessionStorageRestore(context, storageState);
     const page = await context.newPage();
-    persistentCabinetSession = { browser, context, page, sessionStoragePath, storageState };
+    persistentCabinetSession = { browser, context, page, sessionStoragePath, storageState, fingerprint };
     return persistentCabinetSession;
   } catch (error) {
     await browser.close().catch(() => null);
@@ -537,7 +548,8 @@ export const __familyCabinetScraperInternals = {
   parseTextFallback,
   restoreSessionFromEnv,
   resetSessionEnvImportState: () => sessionEnvImportedPaths.clear(),
-  closePersistentCabinetSession
+  closePersistentCabinetSession,
+  installSessionStorageRestore
 };
 
 export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<FamilyCabinetAction[]> {
@@ -584,6 +596,7 @@ export async function scrapeFamilyLogs(config: FamilyCabinetConfig): Promise<Fam
     await persistRefreshedStorageState(context, page, config.sessionStoragePath, storageState)
       .catch(error => console.warn('[family-cabinet] refreshed session was not persisted:', error));
     active.storageState = readStorageState(config.sessionStoragePath);
+    active.fingerprint = crypto.createHash('sha256').update(fs.readFileSync(config.sessionStoragePath)).digest('hex');
     return unique;
   } catch (error) {
     await closePersistentCabinetSession();
