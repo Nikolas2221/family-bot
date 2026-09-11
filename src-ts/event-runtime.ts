@@ -33,6 +33,8 @@ interface MemberRoleManagerLike {
 }
 
 interface MemberLike {
+  joinedTimestamp?: number | null;
+  voice?: { channelId?: string | null };
   id: string;
   displayName?: string;
   user?: UserLike | null;
@@ -344,6 +346,7 @@ interface GuildStorageLike {
     voiceChannels: Record<string, number>;
   };
   ensureMemberRecord(memberId: string): {
+    observedSince?: number;
     messageCount?: number;
     voiceMinutes?: number;
     points?: number;
@@ -401,6 +404,7 @@ interface EventRuntimeOptions {
     sendTelegramFromDiscord(input: Record<string, any>): Promise<{ ok: boolean; code?: string; detail?: string }>;
   } | null;
   familyAnnouncementRoleId?: string;
+  isActivityExempt?(guildId: string, userId: string): boolean;
   database?: DatabaseLike | null;
   leakGuard: {
     enabled: boolean;
@@ -852,7 +856,7 @@ async function loadActivityMembers(guild: GuildLike): Promise<MemberLike[]> {
 async function handleInactiveMembersRequest(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'database' | 'resolveGuildSettings' | 'sendSecurityLog' | 'aiService'>
+  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'database' | 'resolveGuildSettings' | 'sendSecurityLog' | 'aiService' | 'isActivityExempt'>
 ): Promise<boolean> {
   if (!message.guild || !looksLikeInactiveMembersRequest(prompt)) return false;
   if (!isAdminMember(message.member)) {
@@ -874,8 +878,11 @@ async function handleInactiveMembersRequest(
   const guildStorage = options.getGuildStorage(message.guild.id);
   const inactive = (await loadActivityMembers(message.guild))
     .filter(member => member.id !== message.author.id && !member.user?.bot && options.hasFamilyRole(member))
+    .filter(member => !member.voice?.channelId && !options.isActivityExempt?.(message.guild!.id, member.id))
     .map(member => ({ member, data: guildStorage.ensureMemberRecord(member.id) }))
-    .filter(({ data }) => {
+    .filter(({ member, data }) => {
+      const observed = data.observedSince || data.lastSeenAt || 0;
+      if (!observed || observed > threshold || (member.joinedTimestamp || 0) > threshold) return false;
       const lastActivity = Math.max(
         Number(data.lastSeenAt) || 0,
         Number(data.lastMessageAt) || 0,
@@ -2012,7 +2019,7 @@ async function handleNaturalChannelSetup(
 }
 
 function parseMuteDurationMs(prompt: string, fallbackMinutes = 60): number {
-  const match = String(prompt || '').toLowerCase().match(/(\d{1,4})\s*(мин|минут|m|ч|час|часа|h)\b/u);
+  const match = String(prompt || '').toLowerCase().match(/(\d{1,4})\s*(минут[а-я]*|мин|m|час[а-я]*|ч|h)(?=\s|$|[.,!?])/u);
   if (!match) return Math.max(1, fallbackMinutes) * 60 * 1000;
   const value = Math.max(1, Number(match[1]) || 1);
   const unit = match[2];
@@ -2029,6 +2036,7 @@ function formatDurationRu(durationMs: number): string {
 
 function parseNaturalModerationAction(prompt: string): 'ban' | 'kick' | 'mute' | 'unmute' | '' {
   const text = String(prompt || '').toLowerCase();
+  if (/(?:^|\s)(?:не|нельзя|зачем|почему|объясни|расскажи|что значит|как)(?:\s|$)/u.test(text)) return '';
   if (/(^|\s)(размуть|размут|unmute)(\s|$)/u.test(text)) return 'unmute';
   if (/(сними|снять|убери|убрать)\s+(мут|timeout|таймаут|наказание)/u.test(text)) return 'unmute';
   if (/(^|\s)(забань|бан|ban)(\s|$)/u.test(text)) return 'ban';
@@ -2040,7 +2048,10 @@ function parseNaturalModerationAction(prompt: string): 'ban' | 'kick' | 'mute' |
 
 function looksLikeAnnouncementRequest(prompt: string): boolean {
   const text = String(prompt || '').toLowerCase();
+  if (/(?:^|\s)(?:не|нельзя|зачем|почему|объясни|расскажи|как)(?:\s|$)/u.test(text)) return false;
   return (
+    /(?:^|\s)(?:сделай|создай|отправь|напиши|опубликуй)(?:\s|$)/u.test(text)
+    &&
     (text.includes('оповещ') || text.includes('объяв') || text.includes('анонс') || text.includes('собрани'))
     && !parseNaturalModerationAction(text)
   );
@@ -2227,6 +2238,11 @@ async function handleNaturalAdminCommand(
   }
 
   if (action) {
+    const targets = parseTargetUserIds(message.content, botId);
+    if (targets.length > 1) {
+      await message.channel.send?.({ content: 'Укажи одного участника для этого действия.', allowedMentions: { parse: [] } });
+      return true;
+    }
     const targetId = parseMentionedUserId(message.content, botId);
     if (!targetId) {
       await message.channel.send?.({
@@ -2394,7 +2410,7 @@ async function handleNaturalAdminCommand(
 async function handleAiMentionMessage(
   message: MessageLike,
   state: Map<string, number>,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog' | 'getGuildStorage' | 'hasFamilyRole'>,
+  options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog' | 'getGuildStorage' | 'hasFamilyRole' | 'isActivityExempt'>,
   pendingActions: Map<string, PendingBrainAction>
 ): Promise<boolean> {
   const botId = options.client.user?.id || '';
@@ -2712,6 +2728,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     await handleAiSoftConflict(message, aiConflictCooldowns, { aiMention }).catch(() => null);
 
     if (await handleAiMentionMessage(message, aiMentionCooldowns, {
+      isActivityExempt: options.isActivityExempt,
       client,
       aiMention,
       aiService,

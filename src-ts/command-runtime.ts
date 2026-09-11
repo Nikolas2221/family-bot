@@ -232,6 +232,7 @@ interface CommandRuntimeOptions {
   voiceRoomsService?: any;
   majesticApiService?: any;
   familyCabinetService?: any;
+  healthLines?(): string[];
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -548,6 +549,15 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
         content: `❌ Не удалось получить данные Majestic API.\nПричина: ${error?.message || String(error)}`
       });
     }
+    return true;
+  }
+
+  if (interaction.commandName === 'health') {
+    if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess }));
+      return true;
+    }
+    await interaction.reply(ephemeral({ content: (options.healthLines?.() || ['Диагностика не подключена.']).join('\n').slice(0, 1900) }));
     return true;
   }
 

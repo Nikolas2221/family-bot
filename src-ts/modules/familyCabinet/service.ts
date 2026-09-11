@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { EmbedBuilder } from 'discord.js';
 import { scrapeFamilyLogs } from './scraper';
@@ -77,6 +78,7 @@ export class FamilyCabinetService {
   private currentRunStartedAt = '';
   private autoSkippedWhileRunning = 0;
   private stopped = false;
+  private nextSyncAt = 0;
   private lastFailureNotice = { text: '', at: 0 };
 
   constructor(
@@ -96,6 +98,9 @@ export class FamilyCabinetService {
       `Статус: ${this.config.enabled ? 'включён' : 'выключен'}`,
       `Live-sync: ${this.config.syncEnabled ? 'включён' : 'выключен'}`,
       `Сохранено действий: ${this.state.actions.length}`,
+      `Ожидает доставки: ${this.state.pendingDelivery?.length || 0}`,
+      `Последняя успешная синхронизация: ${this.state.syncRuns.find(run => run.status === 'ok')?.finishedAt || 'нет'}`,
+      `Следующая попытка: ${this.nextSyncAt ? formatDateTime(new Date(this.nextSyncAt).toISOString()) : 'не назначена'}`,
       `Канал live-sync: ${this.config.syncChannelId ? `<#${this.config.syncChannelId}>` : 'не задан'}`,
       `Файл данных: ${this.config.dataFile}`,
       `Scraper: ${this.config.scraperModulePath ? this.config.scraperModulePath : 'встроенный Playwright scraper'}`,
@@ -121,6 +126,8 @@ export class FamilyCabinetService {
   private scheduleNextAutoSync(): void {
     if (this.stopped || !this.config.enabled || !this.config.syncEnabled || this.timer) return;
     const authenticationFailed = /Сессия кабинета (истекла|не найдена)/u.test(this.state.syncRuns[0]?.errorMessage || '');
+    const delay = Math.max(authenticationFailed ? 1800000 : 60000, this.config.syncIntervalMs);
+    this.nextSyncAt = Date.now() + delay;
     this.timer = setTimeout(() => {
       this.timer = null;
       void this.runSync('auto').catch(error => {
@@ -128,11 +135,12 @@ export class FamilyCabinetService {
       }).finally(() => {
         this.scheduleNextAutoSync();
       });
-    }, Math.max(authenticationFailed ? 1800000 : 60000, this.config.syncIntervalMs));
+    }, delay);
   }
 
   stop(): void {
     this.stopped = true;
+    this.nextSyncAt = 0;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
@@ -164,17 +172,27 @@ export class FamilyCabinetService {
     this.running = true;
     const startedAt = new Date().toISOString();
     this.currentRunStartedAt = startedAt;
+    let delivered = 0;
     try {
+      // Deliver persisted work even when the cabinet session is no longer valid.
+      const retried = await this.sendNewLogs(this.state.pendingDelivery || [], reason);
+      delivered = retried.sent;
       const logs = await this.scrape();
-      const existing = new Set(this.state.actions.map(action => action.externalLogId));
+      const existing = new Set([...this.state.actions, ...(this.state.pendingDelivery || [])].map(action => action.externalLogId));
       const normalized = logs.map(normalizeAction).filter(Boolean) as FamilyCabinetAction[];
-      const created = normalized.filter(action => !existing.has(action.externalLogId));
-      let delivery: { sent: number; failed: number; errorMessage?: string } = { sent: 0, failed: 0 };
+      const created = normalized.filter(action => {
+        if (existing.has(action.externalLogId)) return false;
+        existing.add(action.externalLogId);
+        return true;
+      });
+      let delivery = retried;
 
       if (created.length) {
         this.state.actions = [...created, ...this.state.actions].slice(0, 5000);
+        this.state.pendingDelivery = [...(this.state.pendingDelivery || []), ...created];
         this.saveState();
-        delivery = await this.sendNewLogs(created, reason);
+        const fresh = await this.sendNewLogs(created, reason);
+        delivery = { sent: retried.sent + fresh.sent, failed: (this.state.pendingDelivery || []).length, errorMessage: fresh.errorMessage || retried.errorMessage };
       }
 
       const deliveryError = delivery.errorMessage
@@ -197,7 +215,7 @@ export class FamilyCabinetService {
       });
       return run;
     } catch (error: any) {
-      const run = this.recordRun('failed', 0, 0, 0, error?.message || String(error), startedAt);
+      const run = this.recordRun('failed', 0, 0, 0, error?.message || String(error), startedAt, delivered, this.state.pendingDelivery?.length || 0);
       await this.sendSyncSummary(run, reason).catch(summaryError => {
         console.warn('[family-cabinet] failed to send failure summary:', summaryError);
       });
@@ -321,6 +339,7 @@ export class FamilyCabinetService {
   }
 
   private async sendNewLogs(actions: FamilyCabinetAction[], reason: string): Promise<{ sent: number; failed: number; errorMessage?: string }> {
+    if (!actions.length) return { sent: 0, failed: 0 };
     const resolved = await this.fetchSendableChannel(this.config.syncChannelId, 'FAMILY_CABINET_SYNC_CHANNEL_ID');
     if (!resolved.channel) {
       console.warn(`[family-cabinet] sync channel unavailable: ${resolved.errorMessage}`);
@@ -343,13 +362,15 @@ export class FamilyCabinetService {
 
     if (actions.length > maxPerSync) {
       await channel.send({
-        content: `⚠️ За один sync отправлю первые ${maxPerSync} логов, остальные сохранены в базе и доступны через /cabinet logs.`
+        content: `Оставшиеся логи сохранены в очереди и будут отправлены в следующих запусках.`
       }).catch(() => null);
     }
 
     for (let index = 0; index < actionsToSend.length; index += 1) {
       const action = actionsToSend[index];
       const ok = await channel.send({
+        nonce: crypto.createHash('sha256').update(action.externalLogId).digest('hex').slice(0, 24),
+        enforceNonce: true,
         content: reason === 'manual' ? undefined : '',
         embeds: [this.buildActionEmbed(action)]
       }).then(() => true).catch((error: unknown) => {
@@ -357,7 +378,11 @@ export class FamilyCabinetService {
         console.warn('[family-cabinet] failed to send one cabinet log:', error);
         return false;
       });
-      if (ok) sent += 1;
+      if (ok) {
+        sent += 1;
+        this.state.pendingDelivery = (this.state.pendingDelivery || []).filter(item => item.externalLogId !== action.externalLogId);
+        this.saveState();
+      }
 
       const sentInBatch = (index + 1) % batchSize === 0;
       const hasMore = index + 1 < actionsToSend.length;
@@ -369,6 +394,10 @@ export class FamilyCabinetService {
 
   private buildSyncSummaryEmbed(run: FamilyCabinetSyncRun, reason: string): EmbedBuilder {
     const ok = run.status === 'ok' && !run.errorMessage;
+    const retryDelay = Math.max(/Сессия кабинета (истекла|не найдена)/u.test(run.errorMessage || '') ? 1800000 : 60000, this.config.syncIntervalMs);
+    const nextAttempt = this.config.syncEnabled && !this.stopped
+      ? formatDateTime(new Date(this.timer && this.nextSyncAt ? this.nextSyncAt : Date.now() + retryDelay).toISOString())
+      : 'Автосинхронизация остановлена';
     return new EmbedBuilder()
       .setColor(ok ? 0x57f287 : 0xf59e0b)
       .setTitle(ok ? '✅ Синхронизация Majestic завершена' : '⚠️ Синхронизация Majestic требует внимания')
@@ -378,8 +407,10 @@ export class FamilyCabinetService {
         { name: 'Получено', value: String(run.logsReceived), inline: true },
         { name: 'Новых', value: String(run.logsCreated), inline: true },
         { name: 'Пропущено', value: String(run.logsSkipped), inline: true },
-        { name: 'Отправлено', value: `${run.logsDelivered ?? 0}/${run.logsCreated}`, inline: true },
+        { name: 'Отправлено / в очереди', value: `${run.logsDelivered ?? 0} / ${this.state.pendingDelivery?.length || 0}`, inline: true },
+        { name: 'Последний успех', value: this.state.syncRuns.find(item => item.status === 'ok')?.finishedAt || 'Ещё не было', inline: false },
         { name: 'Дата', value: formatDateTime(run.finishedAt), inline: false },
+        { name: 'Следующая попытка (план)', value: nextAttempt, inline: false },
         ...(run.errorMessage ? [{ name: 'Причина', value: run.errorMessage.slice(0, 1000), inline: false }] : [])
       )
       .setFooter({ text: 'KLAIZ • Majestic Sync' })
@@ -391,7 +422,7 @@ export class FamilyCabinetService {
     const failureText = run.status === 'failed' ? run.errorMessage || 'unknown' : '';
     if (reason !== 'manual' && failureText && this.lastFailureNotice.text === failureText
       && Date.now() - this.lastFailureNotice.at < 3600000) return;
-    const shouldSend = reason === 'manual' || run.status !== 'ok' || run.logsCreated > 0 || Boolean(run.errorMessage);
+    const shouldSend = Boolean(this.state.summaryMessageId) || reason === 'manual' || run.status !== 'ok' || run.logsCreated > 0 || Boolean(run.logsDelivered) || Boolean(run.errorMessage);
     if (!shouldSend) return;
 
     const targetChannelId = this.config.logChannelId || this.config.syncChannelId;
@@ -401,9 +432,16 @@ export class FamilyCabinetService {
       return;
     }
 
-    await resolved.channel.send({
-      embeds: [this.buildSyncSummaryEmbed(run, reason)]
-    });
+    const payload = { embeds: [this.buildSyncSummaryEmbed(run, reason)], allowedMentions: { parse: [] } };
+    const previous = this.state.summaryChannelId === targetChannelId && this.state.summaryMessageId
+      ? await resolved.channel.messages?.fetch(this.state.summaryMessageId).catch(() => null) : null;
+    if (previous) await previous.edit(payload);
+    else {
+      const sent = await resolved.channel.send(payload);
+      this.state.summaryMessageId = sent?.id;
+      this.state.summaryChannelId = targetChannelId;
+      this.saveState();
+    }
     if (failureText) this.lastFailureNotice = { text: failureText, at: Date.now() };
   }
 
@@ -415,7 +453,8 @@ export class FamilyCabinetService {
         ...defaultState(),
         ...parsed,
         actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-        syncRuns: Array.isArray(parsed.syncRuns) ? parsed.syncRuns : []
+        syncRuns: Array.isArray(parsed.syncRuns) ? parsed.syncRuns : [],
+        pendingDelivery: Array.isArray(parsed.pendingDelivery) ? parsed.pendingDelivery : []
       };
     } catch {
       return defaultState();
@@ -424,7 +463,9 @@ export class FamilyCabinetService {
 
   private saveState(): void {
     fs.mkdirSync(path.dirname(this.config.dataFile), { recursive: true });
-    fs.writeFileSync(this.config.dataFile, JSON.stringify(this.state, null, 2), 'utf8');
+    const temporary = `${this.config.dataFile}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify(this.state, null, 2), 'utf8');
+    fs.renameSync(temporary, this.config.dataFile);
   }
 }
 

@@ -172,6 +172,22 @@ Luffy Klaiz #206656
   assert.equal(broken.logsCreated, 2);
   assert.equal(broken.logsDelivered, 0);
   assert.match(broken.errorMessage, /FAMILY_CABINET_SYNC_CHANNEL_ID/u);
+  const recovered = createFamilyCabinetService(client, baseConfig(brokenDir, scraperModulePath));
+  const retry = await recovered.runSync('manual');
+  assert.equal(retry.logsCreated, 0, 'persisted history must not be reimported');
+  assert.equal(retry.logsDelivered, 2, 'failed delivery must survive restart');
+  assert.equal((await recovered.runSync('manual')).logsDelivered, 0, 'delivered queue must be cleared');
+
+  const cardDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-cabinet-card-'));
+  let cards = 0;
+  let edits = 0;
+  const cardClient = { channels: { fetch: async id => id === 'log-channel'
+    ? { send: async () => { cards++; return { id: 'status-card' }; }, messages: { fetch: async () => ({ edit: async () => { edits++; } }) } }
+    : { send: async () => ({ id: 'log' }) } } };
+  await createFamilyCabinetService(cardClient, baseConfig(cardDir, scraperModulePath)).runSync('auto');
+  await createFamilyCabinetService(cardClient, baseConfig(cardDir, scraperModulePath)).runSync('auto');
+  assert.equal(cards, 1, 'status message identity must survive restart');
+  assert.equal(edits, 1, 'subsequent sync must edit the existing card');
 
   const slowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'family-cabinet-slow-'));
   const slowService = createFamilyCabinetService(client, baseConfig(slowDir, writeSlowScraperModule(slowDir)));

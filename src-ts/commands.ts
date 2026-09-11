@@ -5,6 +5,7 @@ import type { CommandGuildLike, CommandJson } from './types';
 import { buildVoiceRoomsCommandData } from './modules/voiceRooms';
 
 const ADMIN_VISIBLE_COMMANDS = new Set([
+  'health',
   'setup',
   'adminpanel',
   'serverbackup',
@@ -56,6 +57,7 @@ function commandJsonWithDefaults(command: { toJSON(): unknown }): CommandJson {
 
 export function buildCommands(): CommandJson[] {
   return [
+    new SlashCommandBuilder().setName('health').setDescription('Состояние сервисов бота и очереди доставки'),
     new SlashCommandBuilder().setName('family').setDescription(copy.commands.familyDescription),
     new SlashCommandBuilder().setName('apply').setDescription(copy.commands.applyDescription),
     new SlashCommandBuilder().setName('applypanel').setDescription(copy.commands.applyPanelDescription),

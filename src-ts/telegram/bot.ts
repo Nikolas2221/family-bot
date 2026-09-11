@@ -6,6 +6,10 @@ export function createTelegramBot(token?: string): Telegraf | null {
 }
 
 const runs = new WeakMap<Telegraf, { stopped: boolean; timer?: ReturnType<typeof setTimeout>; pending: Promise<boolean> }>();
+const health = new WeakMap<Telegraf, string>();
+export function telegramHealth(bot: Telegraf | null): string {
+  return bot ? health.get(bot) || 'Не запущен' : 'Не настроен';
+}
 
 export async function startTelegramBot(bot: Telegraf | null): Promise<boolean> {
   if (!bot) return false;
@@ -17,11 +21,13 @@ export async function startTelegramBot(bot: Telegraf | null): Promise<boolean> {
   async function launch(): Promise<boolean> {
     if (state.stopped) return false;
     try {
-      await bot!.launch({ dropPendingUpdates: false }, () => { failures = 0; });
+      health.set(bot!, 'Подключение');
+      await bot!.launch({ dropPendingUpdates: false }, () => { failures = 0; health.set(bot!, 'Подключён'); });
       return true;
     } catch (error) {
       if (state.stopped) return false;
       const code = Number((error as { response?: { error_code?: number } })?.response?.error_code);
+      health.set(bot!, `Ошибка ${code || 'сети'}${code === 401 || code === 409 ? ': проверь токен или второй экземпляр' : ': повторное подключение'}`);
       console.error(`Telegram polling failed (code=${code || 'network'}).`);
       if (code === 401 || code === 409) return false;
       const delay = Math.min(300000, 5000 * 2 ** Math.min(failures++, 6));
@@ -36,6 +42,7 @@ export async function startTelegramBot(bot: Telegraf | null): Promise<boolean> {
 
 export function stopTelegramBot(bot: Telegraf | null, signal = 'shutdown'): void {
   if (!bot) return;
+  health.set(bot, 'Остановлен');
   const state = runs.get(bot);
   if (state) {
     state.stopped = true;

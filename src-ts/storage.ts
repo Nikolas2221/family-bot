@@ -96,6 +96,7 @@ function createEmptyMemberRecord(guildId: string, memberId: string): MemberRecor
     guildId,
     userId: memberId,
     messageCount: 0,
+    observedSince: Date.now(),
     lastSeenAt: Date.now(),
     lastMessageAt: 0,
     lastVoiceAt: 0,

@@ -1565,6 +1565,11 @@ client.once('clientReady', () => {
 });
 
 registerEventRuntime({
+  isActivityExempt: (guildId: string, userId: string) => storage.getStore().afkRequests.some((request: import('./types').AfkRequestRecord) => {
+    const date = (value: string) => { const [day, month, year] = value.split('.'); return Date.parse(`${year}-${month}-${day}T00:00:00+03:00`); };
+    return request.guildId === guildId && request.userId === userId && request.status === 'approved'
+      && date(request.startDate) <= Date.now() && date(request.endDate) + 86400000 > Date.now();
+  }),
   client,
   aiMention: {
     enabled: config.aiEnabled && config.aiMentionEnabled,
@@ -1755,7 +1760,14 @@ registerInteractionRuntime({
     serverBackupService,
     voiceRoomsService,
     majesticApiService,
-    familyCabinetService
+    familyCabinetService,
+    healthLines: () => [
+      `Discord: ${client.isReady() ? 'подключён' : 'нет соединения'}; ping ${client.ws.ping} мс`,
+      `Telegram: ${require('./telegram/bot').telegramHealth(telegramBot)}`,
+      `ИИ: ${config.aiEnabled ? 'включён; доступность провайдера проверяется при запросе' : 'выключен'}`,
+      `Хранилище: ${storage.getStore() ? 'загружено' : 'недоступно'}`,
+      ...familyCabinetService.statusLines().filter((line: string) => !line.startsWith('Файл') && !line.startsWith('Scraper'))
+    ]
   });
   },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,

@@ -5,6 +5,7 @@ import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './r
 import type { ApplicationsService, EmbedsApi, RoleDefinition } from './types';
 import type { TelegramNotificationService } from './telegram';
 import type { TicketService } from './services/tickets';
+const decisionLocks = new Set<string>();
 
 function ephemeral(payload: Record<string, any> = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -430,6 +431,8 @@ export function createApplicationsService({
   }
 
   async function accept(interaction: any, applicationId: string, userId: string, details: Record<string, any> = {}) {
+    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
+    if (!targetMessage) return interaction.reply(ephemeral({ content: 'Сообщение заявки не найдено. Решение не применено.' }));
     const application = storage.findApplication(applicationId);
     if (!application) {
       return interaction.reply(ephemeral({ content: copy.applications.notFound }));
@@ -448,6 +451,7 @@ export function createApplicationsService({
     if (acceptedRoleId) {
       const role = interaction.guild.roles.cache.get(acceptedRoleId)
         || await interaction.guild.roles.fetch(acceptedRoleId).catch(() => null);
+      if (!role) return interaction.reply(ephemeral({ content: `Роль ${acceptedRoleId} не найдена. Заявка не принята.` }));
       if (role) {
         const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: interaction.guild });
         if (unsafeReason) {
@@ -476,12 +480,6 @@ export function createApplicationsService({
 
     storage.setApplicationStatus(application, 'accepted', interaction.user.id);
     ticketService?.markDecision(application, 'approved', interaction.user.username || interaction.user.id);
-
-    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
-
-    if (!targetMessage) {
-      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
-    }
 
     const applicationUrl = messageUrl(interaction.guild.id, targetMessage.channel?.id || interaction.channel?.id, targetMessage.id);
     const accepted = embeds.buildApplicationEmbed({
@@ -562,6 +560,8 @@ export function createApplicationsService({
   }
 
   async function reject(interaction: any, applicationId: string, userId: string, details: { reason?: string; messageId?: string } = {}) {
+    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
+    if (!targetMessage) return interaction.reply(ephemeral({ content: 'Сообщение заявки не найдено. Решение не применено.' }));
     const application = storage.findApplication(applicationId);
     if (!application) {
       return interaction.reply(ephemeral({ content: copy.applications.notFound }));
@@ -578,12 +578,6 @@ export function createApplicationsService({
 
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);
     ticketService?.markDecision(application, 'rejected', interaction.user.username || interaction.user.id);
-
-    const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
-
-    if (!targetMessage) {
-      return interaction.reply(ephemeral({ content: copy.common.unknownError }));
-    }
 
     const user = await client.users?.fetch?.(userId).catch(() => null);
     const applicationUrl = messageUrl(interaction.guild.id, targetMessage.channel?.id || interaction.channel?.id, targetMessage.id);
@@ -729,12 +723,21 @@ export function createApplicationsService({
     return interaction.showModal(embeds.buildApplyDetailsModal());
   }
 
+  function guardedDecision<T extends typeof accept | typeof reject>(handler: T): T {
+    return (async (interaction: any, applicationId: string, ...args: any[]) => {
+      const key = `${interaction.guild.id}:${applicationId}`;
+      if (decisionLocks.has(key)) return interaction.reply(ephemeral({ content: 'Эта заявка уже обрабатывается. Дождись результата.' }));
+      decisionLocks.add(key);
+      try { return await (handler as any)(interaction, applicationId, ...args); }
+      finally { decisionLocks.delete(key); }
+    }) as T;
+  }
   return {
-    accept,
+    accept: guardedDecision(accept),
     closeTicket,
     getCooldownSecondsLeft,
     moveToReview,
-    reject,
+    reject: guardedDecision(reject),
     sendApplyPanel,
     continueApplication,
     submitApplication

@@ -639,6 +639,7 @@ export interface DatabaseApi {
 }
 
 export interface MemberRecord {
+  observedSince?: number;
   guildId?: string;
   userId?: string;
   messageCount: number;

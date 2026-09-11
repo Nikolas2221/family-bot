@@ -38,6 +38,9 @@ export interface FamilyCabinetSyncRun {
 export interface FamilyCabinetState {
   actions: FamilyCabinetAction[];
   syncRuns: FamilyCabinetSyncRun[];
+  pendingDelivery?: FamilyCabinetAction[];
+  summaryMessageId?: string;
+  summaryChannelId?: string;
 }
 
 export interface FamilyCabinetConfig {
