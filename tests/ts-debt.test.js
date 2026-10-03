@@ -28,9 +28,11 @@ async function main() {
   const cardStyle = fs.readFileSync(path.join(srcTsDir, 'card-style.ts'), 'utf8');
   assert.doesNotMatch(cardStyle, /\bany\b/, 'card-style must preserve factory types without any');
   const commandRuntime = fs.readFileSync(path.join(srcTsDir, 'command-runtime.ts'), 'utf8');
-  for (const service of ['copy', 'embeds', 'database', 'storage', 'applicationsService', 'rankService', 'aiService', 'announcementService', 'ticketService']) {
+  for (const service of ['copy', 'embeds', 'database', 'storage', 'applicationsService', 'rankService', 'aiService', 'announcementService', 'ticketService', 'guildStorage', 'resolveGuildSettings', 'serverBackupService', 'voiceRoomsService', 'majesticApiService', 'familyCabinetService']) {
     assert.doesNotMatch(commandRuntime, new RegExp(`\\b${service}:\\s*any\\b`), `${service} must have an explicit contract`);
   }
+  assert.doesNotMatch(fs.readFileSync(path.join(srcTsDir, 'telegram', 'notifications.ts'), 'utf8'), /\bany\b/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'tsconfig.json'), 'utf8')).compilerOptions.noUnusedLocals, true);
 
   const noCheckFiles = tsFiles
     .filter((fullPath) => {

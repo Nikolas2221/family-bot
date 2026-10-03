@@ -29,6 +29,7 @@ async function main() {
   for (const filePath of tsFiles) {
     const relativeFile = path.relative(srcTsDir, filePath);
     const contents = fs.readFileSync(filePath, 'utf8');
+    assert.doesNotMatch(contents, /\brequire\s*\(/, `${relativeFile} must use typed imports`);
     const lines = contents.split(/\r?\n/);
 
     lines.forEach((line, index) => {

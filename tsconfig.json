@@ -5,6 +5,7 @@
     "moduleResolution": "node",
     "ignoreDeprecations": "6.0",
     "strict": true,
+    "noUnusedLocals": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,

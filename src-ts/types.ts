@@ -188,11 +188,11 @@ export interface CopyCatalog {
   family: Record<string, any>;
   applications: Record<string, any>;
   admin: Record<string, any>;
-  automod: Record<string, any>;
+  automod: Record<string, any> & { notice(userId: string, ruleLabel: string, detail?: string): string; ruleLabel(rule: string): string };
   moderation: Record<string, any>;
   profile: Record<string, any>;
   ai: Record<string, any>;
-  security: Record<string, any>;
+  security: Record<string, any> & { inviteGuardNotice(userId: string): string; inviteBlocked: string; channelGuardReason: string; channelRestored(channelName: string): string };
   logs: Record<string, any>;
   discipline: Record<string, any>;
   reports: Record<string, any>;
@@ -241,7 +241,7 @@ export interface AutomodSpamEvaluation {
   triggered: boolean;
 }
 
-export type CommandJson = Record<string, any>;
+export type CommandJson = import('discord.js').RESTPostAPIChatInputApplicationCommandsJSONBody;
 
 export interface CommandGuildLike {
   commands: {
@@ -278,10 +278,7 @@ export interface AIService {
 
 export type EmbedFactory = (...args: any[]) => any;
 
-export interface EmbedsApi {
-  panelButtons: any;
-  [key: string]: any;
-}
+export type EmbedsApi = typeof import('./embeds-source').default;
 
 export interface ApplicationsService {
   retryPending(guild: any): Promise<void>;
@@ -296,14 +293,14 @@ export interface ApplicationsService {
 }
 
 export interface RankDescription {
-  currentRole: unknown;
+  currentRole: RoleDefinition | null;
   score: number;
   autoEnabled: boolean;
   manualOnly: boolean;
   canPromote: boolean;
   canDemote: boolean;
   canAutoSync: boolean;
-  autoTargetRole: unknown;
+  autoTargetRole: RoleDefinition | null;
 }
 
 export interface RankActionResult {
@@ -336,7 +333,7 @@ export interface RankService {
   describeMember(member: unknown): RankDescription;
   getCurrentRole(member: unknown): unknown;
   promote(member: unknown): Promise<RankActionResult>;
-  syncAutoRanks(guild: { members: { cache: Map<string, unknown> } }): Promise<RankSyncResult>;
+  syncAutoRanks(guild: { members: { cache: { values(): IterableIterator<unknown> } } }): Promise<RankSyncResult>;
 }
 
 export interface ChannelOverwriteSnapshot {
@@ -890,6 +887,7 @@ export type SanitizedApplicationInput =
     };
 
 export interface StorageApi {
+  healthStatus(): { writable: boolean; lastWriteAt: number; hasWriteError: boolean };
   healthLines(): string[];
   getStore(): StoreState;
   save(): void;

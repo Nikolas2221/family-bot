@@ -1,8 +1,35 @@
 const assert = require('node:assert/strict');
 
 const { createTelegramNotificationService } = require('../dist-ts/telegram');
+const { splitTelegramText } = require('../dist-ts/telegram/text');
 
 async function main() {
+  const unicode = 'Text \ud83d\ude00'.repeat(1800);
+  const chunks = splitTelegramText(unicode);
+  assert.equal(chunks.join(''), unicode);
+  assert.ok(chunks.every(chunk => chunk.length <= 4000 && !/[\ud800-\udbff]$/.test(chunk)));
+  const inner = 'value &amp; &lt; \ud83d\ude00 '.repeat(800);
+  const html = splitTelegramText(`<b><i>${inner}</i></b>`, true);
+  assert.ok(html.length > 1);
+  assert.ok(html.every(chunk => chunk.length <= 4000 && chunk.startsWith('<b><i>') && chunk.endsWith('</i></b>')));
+  assert.equal(html.map(chunk => chunk.replace(/<\/?(?:b|i)>/g, '')).join(''), inner);
+  const longMessages = [];
+  const longService = createTelegramNotificationService({ adminChatId: 'admin',
+    sender: { sendMessage: async (_, text, options) => { longMessages.push({ text, options }); return { message_id: longMessages.length }; } }
+  });
+  const fullText = 'long-message '.repeat(1000);
+  const longResult = await longService.sendAnnouncement({ text: fullText, type: 'announcement', authorName: 'Admin' });
+  assert.equal(longResult.ok, true);
+  assert.ok(longMessages.length > 1);
+  assert.ok(longMessages.map(item => item.text).join('').includes(fullText.trim()));
+  longMessages.length = 0;
+  await longService.notifyApplicationCreated({ application: { id: 'long', nickname: 'n'.repeat(1000), inviter: 'i'.repeat(1000), discovery: 'd'.repeat(1000), about: 'a'.repeat(1500), values: 'v'.repeat(1000) } });
+  assert.ok(longMessages.length > 1);
+  assert.equal(longMessages[0].options.reply_markup, undefined);
+  assert.ok(longMessages.at(-1).options.reply_markup);
+  let attempts = 0;
+  const failedService = createTelegramNotificationService({ adminChatId: 'admin', logger: { warn() {} }, sender: { sendMessage: async () => { if (++attempts === 2) throw new Error('offline'); } } });
+  assert.equal((await failedService.sendAnnouncement({ text: fullText, type: 'announcement', authorName: 'Admin' })).ok, false);
   const photos = [];
   const texts = [];
   let photoFails = false;

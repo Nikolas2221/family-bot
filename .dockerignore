@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+dist-ts
+.env
+.env.*
+data
+database.local.json
+storage.local.json
+*.bak
+npm-debug.log*
+.claude
+.aider*

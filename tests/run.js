@@ -1,4 +1,6 @@
 async function main() {
+  await require('./ai-action-safety.test').main();
+  await require('./runtime-health.test').main();
   await require('./telegram-startup.test').main();
   const { main: runAfkLeaveTests } = require('./afk-leave.test');
   const { main: runAfkLeaveUiTests } = require('./afk-leave-ui.test');

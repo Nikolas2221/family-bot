@@ -1,4 +1,4 @@
-import type { AppConfig, ReleaseNoteGroups, RoleEnvEntry, ValidationResult } from './types';
+import type { AppConfig, RoleEnvEntry, ValidationResult } from './types';
 import copy from './copy';
 
 const FAMILY_ROLE_ENV_KEYS = [

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { EmbedBuilder, type Guild, type GuildMember, type User } from 'discord.js';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { applyCardStyle } from './card-style';
-import type { CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
+import type { CardAppearance, CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
 
 const updateAnnouncementLocks = new Set<string>();
 
@@ -127,12 +127,14 @@ async function sendDirectNotification(
     title,
     description,
     color = 0x7c3aed,
-    footer = 'KLAIZ - Notify'
+    footer = 'KLAIZ - Notify',
+    style
   }: {
     title: string;
     description: string;
     color?: number;
     footer?: string;
+    style?: CardAppearance;
   },
   EmbedBuilderCtor: typeof EmbedBuilder
 ): Promise<boolean> {
@@ -148,7 +150,7 @@ async function sendDirectNotification(
     .setFooter({ text: footer })
     .setTimestamp();
 
-  return channel.send({ embeds: [embed] }).then(() => true).catch(() => false);
+  return channel.send({ embeds: [applyCardStyle(embed, style)] }).then(() => true).catch(() => false);
 }
 
 export function createNotificationRuntimeHelpers(options: NotificationHelpersOptions) {
@@ -190,6 +192,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       member.user,
       {
         title: 'Ваша заявка принята',
+        style: resolveGuildSettings(guild.id).visuals.cards?.applications?.discord,
         color: 0x10b981,
         footer: 'KLAIZ - Family',
         description: [
@@ -225,6 +228,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       user,
       {
         title: 'Ваша заявка отклонена',
+        style: resolveGuildSettings(guild.id).visuals.cards?.applications?.discord,
         color: 0xef4444,
         footer: `${familyTitle} - Applications`,
         description: [
@@ -253,6 +257,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       targetUser,
       {
         title: isWarn ? 'Получен выговор' : 'Получена похвала',
+        style: resolveGuildSettings(guild.id).visuals.cards?.moderation?.discord,
         color: isWarn ? 0xf97316 : 0x2563eb,
         footer: 'KLAIZ - Discipline',
         description: [
@@ -280,6 +285,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       {
         title,
         color: isPromotion ? 0x10b981 : 0xe11d48,
+        style: resolveGuildSettings(guild.id).visuals.cards?.family?.discord,
         footer: 'KLAIZ - Ranks',
         description: [
           `Сервер: **${guild.name}**`,
@@ -299,6 +305,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       user,
       {
         title: 'Чёрный список',
+        style: resolveGuildSettings(guild.id).visuals.cards?.moderation?.discord,
         color: 0xe11d48,
         footer: 'KLAIZ - Security',
         description: [
@@ -317,6 +324,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       member.user,
       {
         title: 'Предупреждение об AFK',
+        style: resolveGuildSettings(member.guild.id).visuals.cards?.family?.discord,
         color: 0xf59e0b,
         footer: 'KLAIZ - Activity',
         description: [
@@ -344,7 +352,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     if (!channel) return false;
 
     await channel.send({
-      embeds: [embeds.buildAcceptLogEmbed({ member, moderatorUser, reason, rankName })]
+      embeds: [applyCardStyle(embeds.buildAcceptLogEmbed({ member, moderatorUser, reason, rankName }), resolveGuildSettings(guild.id).visuals.cards?.applications?.discord)]
     });
     return true;
   }

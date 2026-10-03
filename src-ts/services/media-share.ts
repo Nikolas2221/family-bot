@@ -1,4 +1,5 @@
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { applyCardStyle } from '../card-style';
 import type { DatabaseApi, MediaShareRequestRecord, MediaShareSettings } from '../types';
 import {
   buildMediaShareLogEmbed,
@@ -60,10 +61,11 @@ function createRequestId(): string {
 export function createMediaShareService(options: {
   database: DatabaseApi;
   fetchTextChannel(guild: any, channelId?: string | null): Promise<any | null>;
-  resolveGuildSettings(guildId: string): any;
+  resolveGuildSettings(guildId: string): Pick<import('../types').GuildSettings, 'mediaShare' | 'visuals'>;
   canManageMedia?: (interaction: any) => boolean;
 }): MediaShareService {
   const { database, fetchTextChannel, resolveGuildSettings } = options;
+  const styleEmbed = (guildId: string, embed: EmbedBuilder) => applyCardStyle(embed, resolveGuildSettings(guildId).visuals?.cards?.reports?.discord);
 
   function canManage(interaction: any): boolean {
     if (typeof options.canManageMedia === 'function') return options.canManageMedia(interaction);
@@ -108,6 +110,7 @@ export function createMediaShareService(options: {
     if (!channel?.send) throw new Error('media_panel_channel_missing');
 
     const payload = { ...buildMediaSharePanel(config), allowedMentions: { parse: [] } };
+    payload.embeds = payload.embeds.map(embed => styleEmbed(guild.id, embed));
     const existing = await fetchMessage(channel, config.panelMessageId);
     const message = existing ? await existing.edit(payload) : await channel.send(payload);
     if (message?.id && message.id !== config.panelMessageId) {
@@ -202,7 +205,7 @@ export function createMediaShareService(options: {
 
     const config = getConfig(interaction.guild.id);
     await interaction.reply(ephemeral({
-      embeds: [new EmbedBuilder()
+      embeds: [styleEmbed(interaction.guild.id, new EmbedBuilder()
         .setColor(0x7c3aed)
         .setTitle('🎞️ Настройки медиа-панели')
         .setDescription([
@@ -213,7 +216,7 @@ export function createMediaShareService(options: {
           `Роль модерации: ${formatRole(config.moderatorRoleId || DEFAULT_MEDIA_MODERATOR_ROLE_ID)}`,
           `Ожидают проверки: ${(config.pendingRequests || []).filter(request => request.status === 'pending').length}`
         ].join('\n'))
-        .setFooter({ text: `Медиа-панель • ${new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} МСК` })]
+        .setFooter({ text: `Медиа-панель • ${new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })} МСК` }))]
     }));
   }
 
@@ -309,7 +312,7 @@ export function createMediaShareService(options: {
       const moderatorRoleId = config.moderatorRoleId || DEFAULT_MEDIA_MODERATOR_ROLE_ID;
       const message = await reviewChannel.send({
         content: moderatorRoleId ? `<@&${moderatorRoleId}>` : '',
-        embeds: [buildMediaShareReviewEmbed({
+        embeds: [styleEmbed(interaction.guild.id, buildMediaShareReviewEmbed({
           id: request.id,
           kind,
           title,
@@ -318,7 +321,7 @@ export function createMediaShareService(options: {
           author: interaction.user,
           status: 'pending',
           createdAt: new Date(request.createdAt)
-        })],
+        }))],
         components: buildMediaShareReviewButtons(request.id),
         allowedMentions: { parse: [], roles: moderatorRoleId ? [moderatorRoleId] : [] }
       });
@@ -338,14 +341,14 @@ export function createMediaShareService(options: {
     if (!targetChannel?.send) return null;
 
     const message = await targetChannel.send({
-      embeds: [buildMediaSharePublicationEmbed({
+      embeds: [styleEmbed(interaction.guild.id, buildMediaSharePublicationEmbed({
         kind: request.kind,
         title: request.title,
         url: request.url,
         note: request.note,
         author: { id: request.authorId, username: request.authorName },
         moderator: `<@${interaction.user.id}>`
-      })],
+      }))],
       allowedMentions: { parse: [] }
     });
 
@@ -359,7 +362,7 @@ export function createMediaShareService(options: {
     if (!logChannel?.send) return;
 
     await logChannel.send({
-      embeds: [buildMediaShareLogEmbed({
+      embeds: [styleEmbed(interaction.guild.id, buildMediaShareLogEmbed({
         kind: request.kind,
         title: request.title,
         url: request.url,
@@ -369,7 +372,7 @@ export function createMediaShareService(options: {
         targetChannelId: request.targetChannelId || config.targetChannelId,
         targetMessageId: request.targetMessageId,
         guildId: interaction.guild.id
-      })],
+      }))],
       allowedMentions: { parse: [] }
     }).catch((error: unknown) => console.warn('Media share log failed:', error));
   }
@@ -413,7 +416,7 @@ export function createMediaShareService(options: {
 
     upsertRequest(interaction.guild.id, request);
     await interaction.message?.edit?.({
-      embeds: [buildMediaShareReviewEmbed({
+      embeds: [styleEmbed(interaction.guild.id, buildMediaShareReviewEmbed({
         id: request.id,
         kind: request.kind,
         title: request.title,
@@ -423,7 +426,7 @@ export function createMediaShareService(options: {
         moderator: `<@${interaction.user.id}>`,
         status: request.status,
         createdAt: new Date(request.createdAt)
-      })],
+      }))],
       components: buildMediaShareReviewButtons(request.id, true),
       allowedMentions: { parse: [] }
     }).catch((error: unknown) => console.warn('Media share review message update failed:', error));

@@ -13,7 +13,7 @@ interface DiscordChannelLike {
 
 interface DiscordClientLike {
   channels: {
-    fetch(channelId: string): Promise<DiscordChannelLike | null>;
+    fetch(channelId: string): Promise<unknown>;
   };
 }
 
@@ -144,7 +144,7 @@ export function createAnnouncementService(options: {
 
     for (const id of ids) {
       const channel = await client.channels.fetch(id).catch(() => null);
-      if (channel) return channel;
+      if (channel && typeof channel === 'object' && 'send' in channel && typeof channel.send === 'function') return channel as DiscordChannelLike;
     }
 
     return null;

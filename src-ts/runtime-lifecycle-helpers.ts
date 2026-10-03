@@ -171,9 +171,7 @@ interface LifecycleRuntimeHelpersOptions {
     roles: unknown[];
     panelDisplayRoles?: unknown[];
     familyTitle: string;
-    visuals?: {
-      familyBanner?: string;
-    };
+    visuals?: Partial<import('./types').GuildVisuals>;
   };
   fetchTextChannel(guild: GuildLike, channelId?: string | null): Promise<TextChannelLike | null>;
   buildFamilyDashboardStats(guild: GuildLike): unknown;
@@ -290,7 +288,7 @@ export function createRuntimeLifecycleHelpers(options: LifecycleRuntimeHelpersOp
       });
 
       const { applyCardStyle } = await import('./card-style');
-      const style = (settings as any).visuals?.cards?.family?.discord;
+      const style = settings.visuals?.cards?.family?.discord;
       familyEmbeds.forEach(embed => applyCardStyle(embed, style));
       const resolvedFixedMessageId = guild.id === fixedGuildId ? fixedMessageId : '';
       const panelMessageId = storage.getGuildPanelMessageId(guild.id, resolvedFixedMessageId);

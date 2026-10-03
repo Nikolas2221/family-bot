@@ -35,7 +35,7 @@ async function main() {
   const targetMember = {
     id: '222222222222222222',
     guild: null,
-    roles: { add: async () => {}, remove: async () => {} },
+    roles: { highest: { position: 1 }, add: async () => {}, remove: async () => {} },
     timeout: async ms => { naturalTimeoutMs = ms; },
     kick: async () => {},
     ban: async () => { naturalBanned = true; }
@@ -57,7 +57,10 @@ async function main() {
           ...additionalMembers
         ][Symbol.iterator]()
       },
-      fetch: async id => (id === undefined ? guild.members.cache : (id === targetMember.id ? targetMember : null))
+      fetch: async id => (id === undefined ? guild.members.cache : (id === targetMember.id ? targetMember : id === 'user-1' ? {
+        id: 'user-1', guild, roles: { highest: { position: 20 } },
+        permissions: { has: permission => permission === PermissionFlagsBits.Administrator }
+      } : null))
     }
   };
   targetMember.guild = guild;
@@ -345,9 +348,22 @@ async function main() {
     delete: async () => {}
   });
   assert.equal(inactiveReplies.length, 1);
-  assert.match(inactiveReplies[0].content, /<@inactive-user>/u);
-  assert.doesNotMatch(inactiveReplies[0].content, /<@active-user>/u);
-  assert.deepEqual(inactiveReplies[0].allowedMentions.users, ['inactive-user']);
+  assert.match(inactiveReplies[0].content, /До подтверждения ничего не отправлено/u);
+  assert.deepEqual(inactiveReplies[0].allowedMentions.parse, []);
+  const confirmBulk = async (replies) => {
+    const code = replies.at(-1).content.match(/подтверждаю ([A-Z0-9]{6})/u)?.[1];
+    assert.ok(code);
+    await listeners.get('messageCreate')({ ...baseMessage,
+      content: `<@bot-1> подтверждаю ${code}`,
+      mentions: { users: { size: 1, has: id => id === 'bot-1' } },
+      channel: { id: 'channel-1', send: async payload => { replies.push(payload); return null; } }
+    });
+  };
+  await confirmBulk(inactiveReplies);
+  const ping = inactiveReplies.find(payload => payload.allowedMentions.users?.includes('inactive-user'));
+  assert.ok(ping);
+  assert.match(ping.content, /<@inactive-user>/u);
+  assert.doesNotMatch(ping.content, /<@active-user>/u);
 
   const inactiveListReplies = [];
   const aiCallsBeforeInactiveList = aiSystems.length;
@@ -398,9 +414,11 @@ async function main() {
     },
     delete: async () => {}
   });
+  assert.equal(inactiveDms.length, 0, 'DM must wait for confirmation');
+  await confirmBulk(inactiveDmReplies);
   assert.equal(inactiveDms.length, 1);
   assert.match(inactiveDms[0].content, /AI reply:/u);
-  assert.match(inactiveDmReplies[0].content, /Доставлено: \*\*1\*\*/u);
+  assert.match(inactiveDmReplies.at(-1).content, /Доставлено: \*\*1\*\*/u);
   assert.match(securityLogs.at(-1), /inactive_dm/u);
   const retryMessage = {
     ...baseMessage, content: '<@bot-1> отправь неактивным в лс',
@@ -412,6 +430,7 @@ async function main() {
   assert.match(inactiveDmReplies.at(-1).content, /менее минуты/u);
   activityNow += 61000;
   await listeners.get('messageCreate')(retryMessage);
+  await confirmBulk(inactiveDmReplies);
   assert.equal(inactiveDms.length, 1, 'delivered warning must not be repeated within 24h');
   assert.match(inactiveDmReplies.at(-1).content, /24 часа: \*\*1\*\*/u);
   activityNow += 61000;

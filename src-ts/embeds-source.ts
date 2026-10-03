@@ -139,41 +139,8 @@ function chunk<T>(items: T[], size: number): T[][] {
   return parts;
 }
 
-function statusEmoji(member: AnyRecord | null | undefined): string {
-  const status = member?.presence?.status || 'offline';
-  if (status === 'online') return '🟢';
-  if (status === 'idle') return '🟡';
-  if (status === 'dnd') return 'в›”';
-  return '⚫';
-}
 
-function statusLabel(member: AnyRecord | null | undefined): string {
-  const status = member?.presence?.status || 'offline';
-  if (status === 'online') return 'Онлайн';
-  if (status === 'idle') return 'Отошёл';
-  if (status === 'dnd') return 'Не беспокоить';
-  return 'Оффлайн';
-}
 
-function statusWeight(member: AnyRecord): number {
-  const status = member?.presence?.status || 'offline';
-  if (status === 'online') return 0;
-  if (status === 'idle') return 1;
-  if (status === 'dnd') return 2;
-  return 3;
-}
-
-function sortMembers(members: AnyRecord[], activityScore: (memberId: string) => number): AnyRecord[] {
-  return [...members].sort((a, b) => {
-    const byStatus = statusWeight(a) - statusWeight(b);
-    if (byStatus !== 0) return byStatus;
-
-    const byActivity = activityScore(b.id) - activityScore(a.id);
-    if (byActivity !== 0) return byActivity;
-
-    return text(a.displayName).localeCompare(text(b.displayName), 'ru');
-  });
-}
 
 function sortMembersByPoints(members: AnyRecord[], pointsScore: (memberId: string) => number): AnyRecord[] {
   return [...members].sort((a, b) => {
@@ -293,21 +260,6 @@ function formatRelativeTime(value: unknown): string {
   return `${days} дн назад`;
 }
 
-function isAutoFamilyPanelRole(role: AnyRecord, guild: AnyRecord): boolean {
-  if (!role?.id || role.id === guild?.id || role.name === '@everyone') return false;
-  if (role.managed || role.tags?.botId || role.tags?.premiumSubscriberRole) return false;
-
-  const normalized = normalizeRoleName(role.name);
-  if (!normalized) return false;
-
-  const blockedWords = [
-    'boost', 'booster', 'server booster', 'буст', 'бустер',
-    'guest', 'guests', 'гость', 'гости',
-    'bot', 'бот'
-  ];
-
-  return !blockedWords.some(word => normalized.includes(word));
-}
 
 function roleLine(label: string, roleId?: string): string {
   return `${label}: ${roleId ? `<@&${roleId}>` : 'не задана'}`;
@@ -1382,6 +1334,7 @@ export default {
   buildAcceptModal,
   buildAiAdvisorModal,
   buildApplyModal,
+  buildApplyDetailsModal,
   buildAdminPanelEmbed,
   buildBanListEmbed,
   buildBlacklistEmbed,

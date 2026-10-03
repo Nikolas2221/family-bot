@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 
 WORKDIR /app
 
@@ -46,6 +46,6 @@ RUN npm ci --include=dev
 RUN npm run cabinet:install
 
 COPY . .
-RUN npm run build:ts
+RUN npm run check
 
 CMD ["npm", "run", "start:ts"]

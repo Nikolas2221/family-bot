@@ -2,11 +2,9 @@ import { defaultModulesForMode } from './database';
 import type {
   ApplicationRecord,
   AutomodConfig,
-  AutoRanksConfig,
   DatabaseApi,
   GuildStorageContext,
   GuildFeatures,
-  GuardConfig,
   GuildSettings,
   RoleDefinition,
   StorageApi

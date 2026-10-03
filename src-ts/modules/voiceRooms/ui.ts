@@ -70,22 +70,6 @@ export function buildVoiceRoomsCommandData() {
     .addSubcommand(subcommand => subcommand.setName('delete').setDescription('Удалить свою голосовую комнату'));
 }
 
-function buildVoiceControlPanelEmbedLegacy(roomName: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle('🎛 Управление голосовой комнатой')
-    .setDescription([
-      `Комната **${roomName}** создана.`,
-      'Управляй ей кнопками ниже или командой `/voice`.',
-      '',
-      '🔒 Закрыть / 🔓 Открыть — управление входом',
-      '👁 Скрыть / 🌐 Показать — видимость комнаты',
-      '✏️ Название, 👥 Лимит, 🎚 Битрейт — настройки',
-      '✅ Доступ / ❌ Убрать / 👢 Выгнать — участники',
-      '👑 Передать — новый владелец',
-      '🗑 Удалить — удалить комнату'
-    ].join('\n'));
-}
 
 export function buildVoiceControlPanelEmbed(roomName: string): EmbedBuilder {
   return new EmbedBuilder()

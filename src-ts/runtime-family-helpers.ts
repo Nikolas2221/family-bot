@@ -1,6 +1,8 @@
 import { EmbedBuilder, type Guild, type GuildMember } from 'discord.js';
-import type { CopyCatalog, GuildStorageContext, GuildVisuals, MemberRecord, RankService } from './types';
+import type { CopyCatalog, GuildStorageContext, GuildVisuals, RankService } from './types';
 import { applyCardStyle } from './card-style';
+import { isMemberInactive } from './activity-policy';
+export { isMemberInactive } from './activity-policy';
 
 interface VoiceSessionState {
   startedAt?: number;
@@ -21,6 +23,7 @@ interface FamilyRuntimeHelpersOptions {
   resolveGuildSettings(guildId: string): FamilyRuntimeSettings;
   memberSessionKey(guildId: string, memberId: string): string;
   EmbedBuilderCtor: typeof EmbedBuilder;
+  isActivityExempt?(guildId: string, memberId: string): boolean;
 }
 
 function getRoleName(rankService: RankService, member: GuildMember): string {
@@ -30,18 +33,6 @@ function getRoleName(rankService: RankService, member: GuildMember): string {
 
 export function formatVoiceHours(minutes: number): string {
   return (Math.max(0, Number(minutes) || 0) / 60).toFixed(1);
-}
-
-export function isMemberInactive(
-  data: Pick<MemberRecord, 'lastSeenAt' | 'lastMessageAt' | 'lastVoiceAt' | 'observedSince'>,
-  joinedTimestamp: number | null | undefined,
-  thresholdMs: number,
-  now = Date.now()
-): boolean {
-  const activity = Math.max(Number(data.lastSeenAt) || 0, Number(data.lastMessageAt) || 0, Number(data.lastVoiceAt) || 0);
-  const anchor = activity || Number(data.observedSince) || 0;
-  if (!anchor || thresholdMs <= 0 || !Number.isFinite(thresholdMs)) return false;
-  return now - Math.max(anchor, Number(joinedTimestamp) || 0) >= thresholdMs;
 }
 
 export function formatTimeAgo(timestamp: number): string {
@@ -74,6 +65,11 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
 
   function styleReport(guild: Guild, embed: EmbedBuilder): EmbedBuilder {
     return applyCardStyle(embed, resolveGuildSettings(guild.id).visuals?.cards?.reports?.discord);
+  }
+
+  function hasInactivityRisk(member: GuildMember): boolean {
+    if (member.voice?.channelId || options.isActivityExempt?.(member.guild.id, member.id)) return false;
+    return isMemberInactive(getGuildStorage(member.guild.id).ensureMemberRecord(member.id), member.joinedTimestamp, afkWarningThresholdMs);
   }
 
   function hasFamilyRole(member: GuildMember): boolean {
@@ -126,10 +122,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
       }
     }
 
-    const afkRiskCount = familyMembers.filter((member) => {
-      const data = guildStorage.ensureMemberRecord(member.id);
-      return isMemberInactive(data, member.joinedTimestamp, afkWarningThresholdMs);
-    }).length;
+    const afkRiskCount = familyMembers.filter(hasInactivityRisk).length;
     const totalWarnings = familyMembers.reduce((sum, member) => {
       const data = guildStorage.ensureMemberRecord(member.id);
       return sum + Number(data.warns || 0);
@@ -412,10 +405,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
       (sum, member) => sum + Number(formatVoiceHours(getLiveVoiceMinutes(member))),
       0
     );
-    const afkRiskCount = members.filter((member) => {
-      const data = guildStorage.ensureMemberRecord(member.id);
-      return isMemberInactive(data, member.joinedTimestamp, afkWarningThresholdMs);
-    }).length;
+    const afkRiskCount = members.filter(hasInactivityRisk).length;
 
     const embed = new EmbedBuilderCtor()
       .setColor(0x7c3aed)

@@ -1,87 +1,84 @@
 ﻿import 'dotenv/config';
 
 import path from 'node:path';
-const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, Partials, PermissionFlagsBits } = require('discord.js');
-const { createAIService } = require('./ai');
-const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('./automod');
-const { createApplicationsService } = require('./applications');
-const { buildCommands, getCommandsSignature, registerCommands } = require('./commands');
+import { createRuntimeHealthServer } from './services/runtime-health';
+import { Client, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
+import { createAIService } from './ai';
+import { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } from './automod';
+import { createApplicationsService } from './applications';
 import { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } from './config';
 import copy from './copy';
-const { createDatabase, defaultModulesForMode } = require('./database');
+import { createDatabase, defaultModulesForMode } from './database';
 import embeds from './embeds';
-const { createRankService } = require('./ranks');
-const { getReleaseNotes } = require('./release-notes');
+import { createRankService } from './ranks';
 import ROLES from './roles';
-const { containsDiscordInvite, detectScamGift, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
-const { createStorage } = require('./storage');
-const { createTelegramNotificationService } = require('./telegram');
-const { createStyledEmbeds, applyCardStyle } = require('./card-style');
-const { createTelegramBot, startTelegramBot, stopTelegramBot } = require('./telegram/bot');
-const { registerTelegramHandlers } = require('./telegram/handlers');
-const { buildDiscordOnlineMembersText } = require('./services/online-members');
-const { createTicketService } = require('./services/tickets');
-const { canSendDiscordAnnouncement, createAnnouncementService } = require('./services/announcements');
-const { createLawService } = require('./services/law');
-const { createDeepSeekService, createOpenRouterChatCompletion } = require('./services/deepseek');
-const { createSupportTicketService } = require('./services/support-tickets');
-const { createAfkLeaveService } = require('./services/afk-leave');
-const { createReportRequestService } = require('./services/report-requests');
-const { createMediaShareService } = require('./services/media-share');
-const { createServerBackupService } = require('./services/server-backups');
-const { createVoiceRoomsService } = require('./modules/voiceRooms');
-const { createMajesticApiService } = require('./modules/majesticApi');
-const { createFamilyCabinetService } = require('./modules/familyCabinet');
-const { refreshLegacyBrandMessages } = require('./services/brand-refresh');
-const { createAccessApi } = require('./access');
-const { registerClientReadyRuntime } = require('./client-ready-runtime');
-const { registerEventRuntime } = require('./event-runtime');
-const { registerInteractionRuntime } = require('./interaction-runtime');
-const { handleCommandRuntime } = require('./command-runtime');
-const {
-  buildAiCommandsOverview: buildAiCommandsOverviewHelper,
+import { containsDiscordInvite, detectScamGift, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } from './security';
+import { createStorage } from './storage';
+import { createTelegramNotificationService } from './telegram';
+import { createStyledEmbeds, applyCardStyle } from './card-style';
+import { createTelegramBot, startTelegramBot, stopTelegramBot, telegramHealth } from './telegram/bot';
+import { registerTelegramHandlers } from './telegram/handlers';
+import { buildDiscordOnlineMembersText } from './services/online-members';
+import { createTicketService } from './services/tickets';
+import { canSendDiscordAnnouncement, createAnnouncementService } from './services/announcements';
+import { createLawService } from './services/law';
+import { createDeepSeekService, createOpenRouterChatCompletion } from './services/deepseek';
+import { createSupportTicketService } from './services/support-tickets';
+import { createAfkLeaveService } from './services/afk-leave';
+import { createReportRequestService } from './services/report-requests';
+import { createMediaShareService } from './services/media-share';
+import { createServerBackupService } from './services/server-backups';
+import { createVoiceRoomsService } from './modules/voiceRooms';
+import { createMajesticApiService } from './modules/majesticApi';
+import { createFamilyCabinetService } from './modules/familyCabinet';
+import { refreshLegacyBrandMessages } from './services/brand-refresh';
+import { createAccessApi } from './access';
+import { registerClientReadyRuntime } from './client-ready-runtime';
+import { registerEventRuntime } from './event-runtime';
+import { registerInteractionRuntime } from './interaction-runtime';
+import { handleCommandRuntime } from './command-runtime';
+import {
+  buildAiCommandsOverview as buildAiCommandsOverviewHelper,
   buildAutomodRulePatch,
   getAutomodStateKey,
   getAutomodTargetLimits,
   getUpdateChangeGroups,
   isAiCommandOverviewQuery,
-  isAiNicknameRequest,
   isPremiumAutomodRule,
   isPremiumAutomodTarget
-} = require('./runtime-command-helpers');
-const {
-  canApplications: canApplicationsHelper,
-  canBypassChannelGuard: canBypassChannelGuardHelper,
-  canBypassLeakGuard: canBypassLeakGuardHelper,
-  canDebugConfig: canDebugConfigHelper,
-  canDiscipline: canDisciplineHelper,
-  canManageNicknames: canManageNicknamesHelper,
-  canManageRanks: canManageRanksHelper,
-  canManageTargetChannel: canManageTargetChannelHelper,
-  canModerate: canModerateHelper,
-  canUseSecurity: canUseSecurityHelper,
-  fetchTextChannel: fetchTextChannelHelper,
-  formatModerationTimestamp: formatModerationTimestampHelper,
-  resolveTargetTextChannel: resolveTargetTextChannelHelper
-} = require('./runtime-access-helpers');
-const { createAutomationRuntimeHelpers } = require('./runtime-automation-helpers');
-const { createFamilyRuntimeHelpers } = require('./runtime-family-helpers');
+} from './runtime-command-helpers';
+import {
+  canApplications as canApplicationsHelper,
+  canBypassChannelGuard as canBypassChannelGuardHelper,
+  canBypassLeakGuard as canBypassLeakGuardHelper,
+  canDebugConfig as canDebugConfigHelper,
+  canDiscipline as canDisciplineHelper,
+  canManageNicknames as canManageNicknamesHelper,
+  canManageRanks as canManageRanksHelper,
+  canManageTargetChannel as canManageTargetChannelHelper,
+  canModerate as canModerateHelper,
+  canUseSecurity as canUseSecurityHelper,
+  fetchTextChannel as fetchTextChannelHelper,
+  formatModerationTimestamp as formatModerationTimestampHelper,
+  resolveTargetTextChannel as resolveTargetTextChannelHelper
+} from './runtime-access-helpers';
+import { createAutomationRuntimeHelpers } from './runtime-automation-helpers';
+import { createFamilyRuntimeHelpers } from './runtime-family-helpers';
 import { isMemberInactive } from './runtime-family-helpers';
-const { createRuntimeLifecycleHelpers } = require('./runtime-lifecycle-helpers');
-const { createNotificationRuntimeHelpers } = require('./runtime-notification-helpers');
-const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./guild-runtime');
-const {
-  editReplyAndAutoDelete: editReplyAndAutoDeleteHelper,
-  ephemeral: makeEphemeral,
-  replyAndAutoDelete: replyAndAutoDeleteHelper,
-  scheduleDeleteReply: scheduleDeleteReplyHelper
-} = require('./interaction-helpers');
-const {
+import { createRuntimeLifecycleHelpers } from './runtime-lifecycle-helpers';
+import { createNotificationRuntimeHelpers } from './runtime-notification-helpers';
+import { createGuildRuntimeApi, memberSessionKey as buildMemberSessionKey } from './guild-runtime';
+import {
+  editReplyAndAutoDelete as editReplyAndAutoDeleteHelper,
+  ephemeral as makeEphemeral,
+  replyAndAutoDelete as replyAndAutoDeleteHelper
+} from './interaction-helpers';
+import {
   PRODUCT_VERSION_LABEL,
   PRODUCT_VERSION_SEMVER,
   buildCurrentBuildSignature,
   getCurrentReleaseChangeGroups
-} = require('./runtime-meta');
+} from './runtime-meta';
 
 const config = createConfig(process.env);
 const diagnostics = validateConfig(config);
@@ -300,9 +297,6 @@ function ephemeral(payload = {}) {
   return makeEphemeral(payload);
 }
 
-function scheduleDeleteReply(interaction: any, delayMs = 5000) {
-  return scheduleDeleteReplyHelper(interaction, delayMs);
-}
 
 async function replyAndAutoDelete(interaction: any, payload: any, delayMs = 5000) {
   return replyAndAutoDeleteHelper(interaction, payload, delayMs);
@@ -340,9 +334,6 @@ function hasPermission(member: any, permission: any) {
   return accessApi.hasPermission(member, permission);
 }
 
-function hasAnyRole(member: any, roleIds: any) {
-  return accessApi.hasAnyRole(member, roleIds);
-}
 
 function isOwner(userId: any) {
   return accessApi.isOwner(userId);
@@ -361,17 +352,12 @@ function buildGuildSettingsSnapshot(guild: any) {
 }
 
 const {
-  buildActivityReportEmbed,
   buildFamilyDashboardStats,
   buildLeaderboardLines,
   buildLeaderboardSummary,
   buildPremiumActivityReportEmbed,
   buildVoiceActivityLines,
   buildVoiceActivitySummary,
-  formatTimeAgo,
-  formatVoiceHours,
-  getDisplayRankName,
-  getFamilyMembers,
   getLiveVoiceMinutes,
   hasFamilyRole
 } = createFamilyRuntimeHelpers({
@@ -384,7 +370,8 @@ const {
   isPremiumGuild,
   resolveGuildSettings,
   memberSessionKey,
-  EmbedBuilderCtor: EmbedBuilder
+  EmbedBuilderCtor: EmbedBuilder,
+  isActivityExempt
 });
 
 const {
@@ -402,7 +389,6 @@ const {
   sendDisciplineLog,
   sendRankDm,
   sendSecurityLog,
-  sendServerLogEmbed,
   sendWelcomeInvite
 } = createNotificationRuntimeHelpers({
   copy,
@@ -748,9 +734,6 @@ function getGuildRecord(guild: any) {
   });
 }
 
-function getRoleLimit(guildId: any) {
-  return isPremiumGuild(guildId) ? Number.MAX_SAFE_INTEGER : 6;
-}
 
 function getCommandModule(commandName: any) {
   switch (commandName) {
@@ -1250,6 +1233,7 @@ function getApplicationsService(guildId: any) {
     client,
     embeds: createStyledEmbeds(embeds, () => resolveGuildSettings(guildId).visuals),
     sendAcceptLog,
+    getCardStyle: () => resolveGuildSettings(guildId).visuals.cards?.applications?.discord || {},
     sendAcceptanceDm,
     sendRejectionDm,
     telegramNotifications,
@@ -1373,63 +1357,9 @@ function isServerBooster(member: any) {
   return Boolean(member?.premiumSince || member?.premiumSinceTimestamp);
 }
 
-async function runRolelessCleanup(guildId: any, reason = 'interval') {
-  if (!isPremiumGuild(guildId)) return;
-
-  const guild = client.guilds.cache.get(guildId);
-  if (!guild) return;
-
-  const record = database.getGuild(guildId);
-  const lastRunAt = record.maintenance?.lastRolelessCleanupAt ? Date.parse(record.maintenance.lastRolelessCleanupAt) : 0;
-  if (lastRunAt && Date.now() - lastRunAt < ROLELESS_CLEANUP_INTERVAL_MS) {
-    return;
-  }
-
-  await guild.members.fetch().catch(() => {});
-
-  const kicked = [];
-  const failed = [];
-
-  for (const member of guild.members.cache.values()) {
-    if (member.user?.bot) continue;
-    if (member.id === guild.ownerId) continue;
-    if (hasPermission(member, PermissionFlagsBits.Administrator)) continue;
-    if (isServerBooster(member)) continue;
-
-    const nonEveryoneRoles = member.roles.cache.filter((role: any) => role.id !== guild.id);
-    if (nonEveryoneRoles.size > 0) continue;
-
-    const ok = await member.kick('Еженедельная очистка участников без ролей').then(() => true).catch(() => false);
-    if (ok) {
-      kicked.push(member.user.username);
-    } else {
-      failed.push(`${member.user.username} (\`${member.id}\`)`);
-    }
-  }
-
-  database.updateGuildMaintenance(guildId, { lastRolelessCleanupAt: new Date().toISOString() });
-
-  const { channels } = resolveGuildSettings(guildId);
-  const logChannel = await fetchTextChannel(guild, channels.logs);
-  if (!logChannel) return { skipped: false, kicked, failed };
-
-  await logChannel.send({
-    embeds: [
-      buildMaintenanceEmbed({
-        title: 'Еженедельная очистка без ролей',
-        description: [`Режим: ${reason}`, `Кикнуто: ${kicked.length}`, `Ошибок: ${failed.length}`].join('\n'),
-        color: 0xe11d48,
-        fieldName: 'Отчёт',
-        lines: [...kicked.slice(0, 15), ...failed.slice(0, 10)].length ? [...kicked.slice(0, 15), ...failed.slice(0, 10)] : ['Никого не пришлось кикать.']
-      })
-    ]
-  }).catch(() => {});
-
-  return { skipped: false, kicked, failed };
-}
 
 async function runRolelessCleanupDetailed(guildId: any, reason = 'interval', options: any = {}) {
-  const { force = false, notify = true } = options;
+  const { force = false } = options;
   if (!isPremiumGuild(guildId)) return;
 
   const guild = client.guilds.cache.get(guildId);
@@ -1445,7 +1375,7 @@ async function runRolelessCleanupDetailed(guildId: any, reason = 'interval', opt
 
   const kicked = [];
   const failed = [];
-  const botMember = guild.members.me || guild.members.cache.get(client.user.id);
+  const botMember = guild.members.me || (client.user ? guild.members.cache.get(client.user.id) : null);
 
   for (const member of guild.members.cache.values()) {
     if (member.user?.bot) continue;
@@ -1456,7 +1386,7 @@ async function runRolelessCleanupDetailed(guildId: any, reason = 'interval', opt
     const nonEveryoneRoles = member.roles.cache.filter((role: any) => role.id !== guild.id);
     if (nonEveryoneRoles.size > 0) continue;
 
-    const blockedReason = explainKickFailure(member, botMember);
+    const blockedReason = explainKickFailure({ id: member.id, guild: { ownerId: guild.ownerId }, permissions: member.permissions, roles: member.roles, kickable: member.kickable }, botMember ? { id: botMember.id, permissions: botMember.permissions, roles: botMember.roles } : null);
     if (blockedReason) {
       failed.push(`${member.user.username} (\`${member.id}\`) - ${blockedReason}`);
       continue;
@@ -1503,7 +1433,7 @@ async function runAfkWarnings(guildId: any) {
   const warned = [];
 
   for (const member of guild.members.cache.values()) {
-    if (member.user?.bot || !hasFamilyRole(member)) continue;
+    if (member.user?.bot || !hasFamilyRole(member) || member.voice?.channelId || isActivityExempt(guildId, member.id)) continue;
 
     const memberData = guildStorage.ensureMemberRecord(member.id);
     if (!isMemberInactive(memberData, member.joinedTimestamp, AFK_WARNING_THRESHOLD_MS)) {
@@ -1552,7 +1482,7 @@ registerClientReadyRuntime({
   doPanelUpdate,
   doPanelUpdateAll,
   refreshLegacyBrandMessages,
-  announceBuildUpdate,
+  announceBuildUpdate: guild => announceBuildUpdate(guild as Guild),
   runRolelessCleanupDetailed,
   runAfkWarnings,
   runScheduledReports,
@@ -1583,12 +1513,16 @@ client.once('clientReady', () => {
   });
 });
 
-registerEventRuntime({
-  isActivityExempt: (guildId: string, userId: string) => storage.getStore().afkRequests.some((request: import('./types').AfkRequestRecord) => {
+function isActivityExempt(guildId: string, userId: string): boolean {
+  return storage.getStore().afkRequests.some((request: import('./types').AfkRequestRecord) => {
     const date = (value: string) => { const [day, month, year] = value.split('.'); return Date.parse(`${year}-${month}-${day}T00:00:00+03:00`); };
     return request.guildId === guildId && request.userId === userId && request.status === 'approved'
       && date(request.startDate) <= Date.now() && date(request.endDate) + 86400000 > Date.now();
-  }),
+  });
+}
+
+registerEventRuntime({
+  isActivityExempt,
   client,
   aiMention: {
     enabled: config.aiEnabled && config.aiMentionEnabled,
@@ -1606,7 +1540,7 @@ registerEventRuntime({
   getGuildStorage,
   isPremiumGuild,
   isModuleEnabled,
-  hasFamilyRole,
+  hasFamilyRole: member => Boolean(member && hasFamilyRole(member as GuildMember)),
   containsDiscordInvite,
   detectScamGift,
   canBypassLeakGuard,
@@ -1614,15 +1548,15 @@ registerEventRuntime({
   canBypassAutomod,
   handleAutomodMessage,
   handleCustomTriggerMessage,
-  sendSecurityLog,
+  sendSecurityLog: (guild, content) => sendSecurityLog(guild as Guild, content),
   notifyTelegramScamBlocked,
   notifyTelegramSecurityAlert,
   startVoiceSession,
   stopVoiceSession,
   enforceBlacklist,
-  sendWelcomeInvite,
+  sendWelcomeInvite: (member, count) => sendWelcomeInvite(member as GuildMember, count),
   notifyTelegramMemberJoined,
-  applyAutorole,
+  applyAutorole: member => applyAutorole(member as GuildMember),
   resolveGuildSettings,
   findReactionRoleEntry,
   getReactionEmojiKey,
@@ -1686,15 +1620,8 @@ registerInteractionRuntime({
     return handleCommandRuntime(interaction, {
     APPLICATION_COOLDOWN_MS,
     AUTO_RANKS,
-    CHANNEL_ID,
-    GUILD_ID,
-    LEAK_GUARD,
-    MESSAGE_ID,
-    accessApi,
     aiService,
-    applicationsChannelId: APPLICATIONS_CHANNEL_ID,
     buildAiAdvisorEmbed,
-    buildCommands,
     buildGuildSettingsSnapshot,
     buildLeaderboardLines,
     buildLeaderboardSummary,
@@ -1711,8 +1638,6 @@ registerInteractionRuntime({
     canModerate,
     canUseSecurity,
     clearChannelByMessages,
-    client,
-    config,
     copy,
     createConfig,
     database,
@@ -1728,34 +1653,20 @@ registerInteractionRuntime({
     fetchMessagesForUser,
     fetchRecentDeletableMessages,
     formatModerationTimestamp,
-    formatVoiceHours,
     getHelpCatalog,
-    getGuildPlan,
     getGuildRecord: (guild: any) => database.getGuild(guild.id),
-    getRoleIds,
     guildStorage,
-    guildRuntime,
-    hasFamilyRole,
     isOwner,
     isAiCommandOverviewQuery,
     isPremiumGuild,
     isPremiumAutomodRule,
     isPremiumAutomodTarget,
-    normalizeAutomodConfig,
-    printStartupDiagnostics,
     rankService,
     replyAndAutoDelete,
     resolveGuildSettings,
-    resolveMemberQuery,
     resolveTargetTextChannel,
     remapConfiguredChannelIds,
     runRolelessCleanupDetailed,
-    security: {
-      containsDiscordInvite,
-      explainKickFailure,
-      fetchDeletedChannelExecutor,
-      restoreDeletedChannel
-    },
     applicationsService,
     sendAcceptLog,
     sendBlacklistDm,
@@ -1766,8 +1677,6 @@ registerInteractionRuntime({
     notifyTelegramSecurityAlert,
     storage,
     summarizeConfig,
-    syncAutoRanks,
-    updateAutomodConfig: (guildId: any, patch: any) => database.updateGuildSettings(guildId, { automod: patch }),
     validateConfig,
     getAutomodTargetLimits,
     buildAutomodRulePatch,
@@ -1784,8 +1693,8 @@ registerInteractionRuntime({
     familyCabinetService,
     healthLines: () => [
       `Discord: ${client.isReady() ? 'подключён' : 'нет соединения'}; ping ${client.ws.ping} мс`,
-      `Telegram: ${require('./telegram/bot').telegramHealth(telegramBot)}`,
-      ...aiService.healthLines(),
+      `Telegram: ${telegramHealth(telegramBot)}`,
+      ...(aiService.healthLines?.() || []),
       ...storage.healthLines(),
       ...serverBackupService.healthLines(),
       ...familyCabinetService.statusLines().filter((line: string) => !line.startsWith('Файл') && !line.startsWith('Scraper'))
@@ -1844,6 +1753,22 @@ registerInteractionRuntime({
   sendScheduledReport
 });
 
+const healthPort = Number(process.env.PORT || 0);
+const healthServer = healthPort ? createRuntimeHealthServer(() => ({
+  ready: client.isReady(),
+  storageWritable: storage.healthStatus().writable && !storage.healthStatus().hasWriteError
+})) : null;
+if (healthServer) {
+  healthServer.on('error', (error) => {
+    console.error('Health server failed:', error);
+    process.exit(1);
+  });
+  healthServer.listen(healthPort, '0.0.0.0');
+  process.once('SIGTERM', () => healthServer.close());
+  process.once('SIGINT', () => healthServer.close());
+}
+
 client.login(config.token).then(() => startTelegramBot(telegramBot)).catch((error: unknown) => {
   console.error('Discord login failed:', error);
+  process.exit(1);
 });

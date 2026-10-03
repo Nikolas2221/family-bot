@@ -1,8 +1,8 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "main": "dist-ts/index.js",
   "scripts": {

@@ -1,5 +1,6 @@
 import { Telegraf } from 'telegraf';
-import type { CardAppearance } from '../types';
+import type { ApplicationRecord, CardAppearance } from '../types';
+import { splitTelegramText } from './text';
 
 export interface TelegramSenderLike {
   sendPhoto?(chatId: string, photo: string, options?: Record<string, unknown>): Promise<unknown>;
@@ -7,7 +8,7 @@ export interface TelegramSenderLike {
 }
 
 export interface ApplicationNotificationInput {
-  application: Record<string, any>;
+  application: Partial<ApplicationRecord>;
   familyTitle?: string;
   guild?: { id?: string; name?: string } | null;
   candidate?: { id?: string; username?: string; globalName?: string | null; tag?: string } | null;
@@ -18,7 +19,7 @@ export interface ApplicationNotificationInput {
 }
 
 export interface TicketActivityNotificationInput {
-  application: Record<string, any>;
+  application: Partial<ApplicationRecord>;
   guildId: string;
   channelId: string;
   authorName?: string;
@@ -45,6 +46,19 @@ export interface AfkRequestNotificationInput {
   };
 }
 
+interface SecurityNotificationInput {
+  title?: string;
+  guild?: { id?: string; name?: string };
+  user?: { id?: string; globalName?: string | null; username?: string };
+  actor?: { id?: string; globalName?: string | null; username?: string };
+  channel?: { id?: string };
+  deleted?: boolean;
+  muted?: boolean;
+  timeoutMinutes?: number;
+  reason?: string;
+  content?: string;
+}
+
 export interface TelegramNotificationService {
   previewCard(guildId: string, category: string): Promise<boolean>;
   enabled: boolean;
@@ -55,8 +69,8 @@ export interface TelegramNotificationService {
   notifyTicketClosed(input: ApplicationNotificationInput): Promise<boolean>;
   notifyTicketActivity(input: TicketActivityNotificationInput): Promise<boolean>;
   notifyMemberJoined(input: MemberJoinedNotificationInput): Promise<boolean>;
-  notifyScamBlocked(input: Record<string, any>): Promise<boolean>;
-  notifySecurityAlert(input: Record<string, any>): Promise<boolean>;
+  notifyScamBlocked(input: SecurityNotificationInput): Promise<boolean>;
+  notifySecurityAlert(input: SecurityNotificationInput): Promise<boolean>;
   notifyAfkRequestCreated(input: AfkRequestNotificationInput): Promise<boolean>;
   notifyUpdateAnnouncement(input: {
     guildId?: string;
@@ -120,10 +134,13 @@ function buildNewApplicationMessage(input: ApplicationNotificationInput): string
     `ID анкеты: ${clean(application.id)}`,
     '',
     `О себе: ${clean(application.about || application.text, 'не указано', 1500)}`,
+    `Ценности: ${clean(application.values, 'не указано', 1000)}`,
+    `Развитие: ${clean(application.development, 'не указано', 1000)}`,
+    `Сильные стороны: ${clean(application.strengths, 'не указано', 1000)}`,
     '',
     'Discord тикет:',
     ticketLabel(input)
-  ].join('\n').slice(0, 4000);
+  ].join('\n');
 }
 
 function buildDecisionMessage(title: string, input: ApplicationNotificationInput): string {
@@ -137,7 +154,7 @@ function buildDecisionMessage(title: string, input: ApplicationNotificationInput
     `Причина: ${clean(input.reason)}`,
     `Discord тикет: ${ticketLabel(input)}`
   ];
-  return lines.join('\n').slice(0, 4000);
+  return lines.join('\n');
 }
 
 function escapeHtml(value: unknown): string {
@@ -192,7 +209,7 @@ function buildUpdateAnnouncementHtml(input: {
     sections.length ? '\n' + sections.join('\n\n') : '',
     '',
     `<i>${escapeHtml(date)}</i>`
-  ].filter(Boolean).join('\n').slice(0, 4000);
+  ].filter(Boolean).join('\n');
 }
 
 export function createTelegramNotificationService(options: {
@@ -213,18 +230,28 @@ export function createTelegramNotificationService(options: {
     options.allowedGuildId
   ].map(value => String(value || '').trim()).filter(Boolean)));
   const enabled = Boolean(adminChatId && (options.sender || token));
-  const sender = options.sender || (enabled ? new Telegraf(token).telegram : null);
+  const sender: TelegramSenderLike | null = options.sender || (enabled ? new Telegraf(token).telegram : null);
   const logger = options.logger || console;
 
   async function sendWithResult(chatId: string, text: string, sendOptions: Record<string, unknown> = {}): Promise<{ ok: boolean; messageId: string; error?: string }> {
     if (!enabled || !sender) return { ok: false, messageId: '', error: 'Telegram notification service is disabled' };
     if (!chatId) return { ok: false, messageId: '', error: 'Telegram chat id is empty' };
     try {
-      const result: any = await sender.sendMessage(chatId, text.slice(0, 4000), {
-        disable_web_page_preview: true,
-        ...sendOptions
-      });
-      return { ok: true, messageId: String(result?.message_id || '') };
+      const parts = splitTelegramText(text, sendOptions.parse_mode === 'HTML');
+      if (!parts.length) return { ok: false, messageId: '', error: 'Telegram text is empty' };
+      let messageId = '';
+      for (let index = 0; index < parts.length; index += 1) {
+        const { reply_markup, ...commonOptions } = sendOptions;
+        const result = await sender.sendMessage(chatId, parts[index], {
+          disable_web_page_preview: true,
+          ...commonOptions,
+          ...(index === parts.length - 1 && reply_markup ? { reply_markup } : {})
+        });
+        if (!messageId && result && typeof result === 'object' && 'message_id' in result) {
+          messageId = String(result.message_id);
+        }
+      }
+      return { ok: true, messageId };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`Telegram notification failed: ${message}`);
@@ -391,7 +418,7 @@ export function createTelegramNotificationService(options: {
       return sendWithResult(announcementsChatId, [
         title,
         '',
-        clean(input.text, '', 3000),
+        String(input.text || '').trim(),
         '',
         'Источник: Discord',
         `Автор: ${clean(input.authorName)}`,

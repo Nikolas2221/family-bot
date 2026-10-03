@@ -116,12 +116,17 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
   let lastWriteAt = 0;
   let lastWriteError = '';
 
-  function healthLines(): string[] {
+  function healthStatus(): { writable: boolean; lastWriteAt: number; hasWriteError: boolean } {
     let writable = false;
     try {
       fs.accessSync(fs.existsSync(dataFile) ? dataFile : path.dirname(dataFile), fs.constants.W_OK);
       writable = true;
     } catch { /* Report disk permissions without changing the store. */ }
+    return { writable, lastWriteAt, hasWriteError: Boolean(lastWriteError) };
+  }
+
+  function healthLines(): string[] {
+    const { writable } = healthStatus();
     return [
       `Хранилище: загружено; запись ${writable ? 'разрешена' : 'недоступна'}`,
       `Последняя успешная запись: ${lastWriteAt ? new Date(lastWriteAt).toISOString() : 'в этом запуске ещё не было'}`,
@@ -779,6 +784,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
 
   return {
     healthLines,
+    healthStatus,
     getStore,
     save,
     flush,

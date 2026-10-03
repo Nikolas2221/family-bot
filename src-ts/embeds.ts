@@ -1,7 +1,7 @@
 import type { EmbedsApi } from './types';
 import { repairText } from './copy';
 
-const embedsJs = require('./embeds-source') as EmbedsApi;
+import embedsJs from './embeds-source';
 
 function sanitizeText(value: string): string {
   if (!value) return value;

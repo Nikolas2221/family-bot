@@ -16,6 +16,8 @@ import type { createRankService } from './ranks';
 import type { createAIService } from './ai';
 import type { AnnouncementService } from './services/announcements';
 import type { TicketService } from './services/tickets';
+import type { AutoRanksConfig, GuildStorageContext, GuildVisuals, CardAppearance } from './types';
+type ResolvedGuildSettings = ReturnType<ReturnType<typeof import('./guild-runtime').createGuildRuntimeApi>['resolveGuildSettings']>;
 
 function isRenderableArtUrl(value: string): boolean {
   try {
@@ -167,21 +169,21 @@ async function buildSecurityCheckLines(guild: any): Promise<string[]> {
 
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
-  AUTO_RANKS: any;
+  AUTO_RANKS: AutoRanksConfig;
   copy: CopyCatalog;
   embeds: EmbedsApi;
   database: DatabaseApi;
   ephemeral(payload: Record<string, unknown>): Record<string, unknown>;
-  resolveGuildSettings(guildId: string): any;
+  resolveGuildSettings(guildId: string): ResolvedGuildSettings;
   buildFamilyDashboardStats(guild: any): any;
   canApplications(member: any): boolean;
   canDebugConfig(interaction: any): boolean;
   buildGuildSettingsSnapshot(guild: any): any;
   getGuildRecord(guild: any): any;
   doPanelUpdate(guildId: string, force?: boolean): Promise<unknown>;
-  defaultModulesForMode(mode: string): Record<string, boolean>;
+  defaultModulesForMode: typeof import('./database').defaultModulesForMode;
   getHelpCatalog(interaction: any): any;
-  guildStorage: any;
+  guildStorage: GuildStorageContext;
   applicationsService: ReturnType<typeof createApplicationsService>;
   rankService: ReturnType<typeof createRankService>;
   isPremiumGuild(guildId: string): boolean;
@@ -216,9 +218,9 @@ interface CommandRuntimeOptions {
   isOwner(userId: string): boolean;
   enforceBlacklist(member: any): Promise<any>;
   sendBlacklistDm(user: any, guild: any, reason: string): Promise<any>;
-  createConfig(env: NodeJS.ProcessEnv): any;
-  validateConfig(config: any): any;
-  summarizeConfig(config: any): any;
+  createConfig: typeof import('./config').createConfig;
+  validateConfig: typeof import('./config').validateConfig;
+  summarizeConfig: typeof import('./config').summarizeConfig;
   sendAcceptLog(guild: any, member: any, user: any): Promise<any>;
   buildProfilePayload(member: any, canManageRanks: boolean, statusMessage?: string): Record<string, unknown>;
   canManageRanks(member: any): boolean;
@@ -238,10 +240,10 @@ interface CommandRuntimeOptions {
     answer(question: string): Promise<{ found: boolean; title: string; description: string }>;
     stats(): { documents: number };
   };
-  serverBackupService: any;
-  voiceRoomsService?: any;
-  majesticApiService?: any;
-  familyCabinetService?: any;
+  serverBackupService: ReturnType<typeof import('./services/server-backups').createServerBackupService>;
+  voiceRoomsService?: ReturnType<typeof import('./modules/voiceRooms').createVoiceRoomsService>;
+  majesticApiService?: ReturnType<typeof import('./modules/majesticApi').createMajesticApiService>;
+  familyCabinetService?: ReturnType<typeof import('./modules/familyCabinet').createFamilyCabinetService>;
   healthLines?(): string[];
   previewTelegramCard?(guildId: string, category: string): Promise<boolean>;
 }
@@ -268,15 +270,15 @@ function formatAiTopEntries(guild: any, entries: Array<{ memberId: string; value
     : 'Нет данных.';
 }
 
-function buildAiDailyPrompt(guild: any, guildStorage: any): string {
+function buildAiDailyPrompt(guild: any, guildStorage: GuildStorageContext): string {
   const day = guildStorage.getPeriodAnalytics?.(1) || {};
   const week = guildStorage.getPeriodAnalytics?.(7) || {};
-  const members = Object.entries(day.members || {}) as Array<[string, any]>;
-  const weeklyMembers = Object.entries(week.members || {}) as Array<[string, any]>;
+  const members = Object.entries(day.members || {});
+  const weeklyMembers = Object.entries(week.members || {});
   const applications = typeof guildStorage.listRecentApplications === 'function'
     ? guildStorage.listRecentApplications(10)
     : [];
-  const pendingApplications = applications.filter((application: any) => application.status === 'pending' || application.status === 'review').length;
+  const pendingApplications = applications.filter(application => application.status === 'pending' || application.status === 'review').length;
 
   return [
     `Сервер: ${guild.name}`,
@@ -303,9 +305,9 @@ function buildAiDailyPrompt(guild: any, guildStorage: any): string {
   ].join('\n');
 }
 
-function buildAiStaffPrompt(guild: any, guildStorage: any, question: string): string {
+function buildAiStaffPrompt(guild: any, guildStorage: GuildStorageContext, question: string): string {
   const week = guildStorage.getPeriodAnalytics?.(7) || {};
-  const members = Object.entries(week.members || {}) as Array<[string, any]>;
+  const members = Object.entries(week.members || {});
   const applications = typeof guildStorage.listRecentApplications === 'function'
     ? guildStorage.listRecentApplications(15)
     : [];
@@ -571,10 +573,13 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     const category = interaction.options.getString('card', true);
     if (!(CARD_CATEGORIES as readonly string[]).includes(category)) return true;
     const settings = resolveGuildSettings(guildId);
-    const cards: Record<string, any> = structuredClone(settings.visuals.cards || {});
+    const cards: NonNullable<GuildVisuals['cards']> = structuredClone(settings.visuals.cards || {});
     const current = cards[category] || {};
     if (sub === 'preview') {
       if (interaction.options.getString('platform') === 'telegram') {
+        if (['family', 'reports'].includes(category)) {
+          await interaction.reply(ephemeral({ content: 'Эти карточки отправляются только в Discord.' })); return true;
+        }
         await interaction.deferReply({ flags: 64 });
         const sent = await options.previewTelegramCard?.(guildId, category);
         await interaction.editReply({ content: sent ? 'Предпросмотр отправлен в настроенный Telegram-чат.' : 'Не удалось отправить предпросмотр: проверь Telegram и доступ сервера.' });
@@ -590,10 +595,12 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     if (platform === 'telegram' && ['family', 'reports'].includes(category)) {
       await interaction.reply(ephemeral({ content: 'Семейные карточки и отчёты этого типа сейчас отправляются только в Discord.' })); return true;
     }
-    const platforms = platform === 'both' ? ['discord', 'telegram'] : [platform];
-    const patch: Record<string, string | undefined> = {};
+    const platforms: Array<'discord' | 'telegram'> = platform === 'both'
+      ? ['family', 'reports'].includes(category) ? ['discord'] : ['discord', 'telegram']
+      : [platform];
+    const patch: CardAppearance = {};
     if (sub === 'set') {
-      for (const [option, field] of [['title', 'title'], ['color', 'color'], ['image', 'imageUrl'], ['thumbnail', 'thumbnailUrl'], ['footer', 'footer']]) {
+      for (const [option, field] of [['title', 'title'], ['color', 'color'], ['image', 'imageUrl'], ['thumbnail', 'thumbnailUrl'], ['footer', 'footer']] as const) {
         const raw = interaction.options.getString(option);
         if (raw === null || raw === undefined) continue;
         const value = raw.trim();
@@ -647,6 +654,10 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       await interaction.reply(ephemeral({
         content: familyCabinetService?.statusLines?.().join('\n') || 'Family Cabinet service не подключён.'
       }));
+      return true;
+    }
+    if (!familyCabinetService) {
+      await interaction.reply(ephemeral({ content: 'Family Cabinet service не подключён.' }));
       return true;
     }
 
@@ -981,10 +992,9 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
     if (subcommand === copy.commands.automodActionSubcommand) {
       const mode = interaction.options.getString(copy.commands.actionModeOptionName, true);
-      const actionModeLabel = mode === 'hard' ? 'жёсткий' : 'мягкий';
       database.updateGuildSettings(guildId, { automod: { actionMode: mode } });
       await interaction.reply(ephemeral({
-        content: copy.automod.actionUpdated(actionModeLabel),
+        content: copy.automod.actionUpdated(mode === 'hard' ? 'жёсткий' : 'мягкий'),
         embeds: [embeds.buildAutomodStatusEmbed(resolveGuildSettings(guildId).automod, resolveGuildSettings(guildId).channels.automod)]
       }));
       return true;
@@ -1091,7 +1101,6 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
     if (subcommand === copy.commands.automodActionSubcommand) {
       const mode = interaction.options.getString(copy.commands.actionModeOptionName, true);
-      const actionModeLabel = mode === 'hard' ? 'жёсткий' : 'мягкий';
       database.updateGuildSettings(guildId, { automod: { actionMode: mode } });
       await interaction.reply(ephemeral({
         content: copy.automod.actionUpdated(mode === 'hard' ? 'жёсткий' : 'мягкий'),

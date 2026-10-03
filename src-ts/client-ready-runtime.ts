@@ -1,9 +1,6 @@
 import { buildCommands, getCommandsSignature, registerCommands } from './commands';
+import type { Client, Guild } from 'discord.js';
 import type { AutoRanksConfig, DatabaseApi } from './types';
-
-interface ClientUserLike {
-  tag: string;
-}
 
 interface MemberVoiceStateLike {
   channelId?: string | null;
@@ -13,43 +10,9 @@ interface MemberLike {
   voice?: MemberVoiceStateLike | null;
 }
 
-interface GuildLike {
-  id: string;
-  name: string;
-  ownerId?: string | null;
-  commands: {
-    set(commands: unknown[]): Promise<unknown>;
-  };
-  roles: {
-    fetch(): Promise<unknown>;
-  };
-  members: {
-    fetch(): Promise<unknown>;
-    cache: {
-      values(): IterableIterator<MemberLike>;
-    };
-  };
-}
+type GuildLike = Pick<Guild, 'id' | 'name' | 'ownerId' | 'commands' | 'roles' | 'members'>;
 
-interface GuildFetchEntryLike {
-  id: string;
-  fetch(): Promise<GuildLike>;
-}
-
-interface ClientLike {
-  user?: ClientUserLike | null;
-  guilds: {
-    fetch(): Promise<{
-      values(): IterableIterator<GuildFetchEntryLike>;
-    }>;
-    cache: {
-      values(): IterableIterator<GuildLike>;
-    };
-  };
-  removeAllListeners(event: 'clientReady' | 'guildCreate'): unknown;
-  on(event: 'clientReady', listener: () => Promise<void> | void): unknown;
-  on(event: 'guildCreate', listener: (guild: GuildLike) => Promise<void> | void): unknown;
-}
+type ClientLike = Pick<Client, 'user' | 'guilds' | 'removeAllListeners' | 'on'>;
 
 interface ClientReadyRuntimeOptions {
   client: ClientLike;

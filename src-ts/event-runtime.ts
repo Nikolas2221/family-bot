@@ -1,4 +1,6 @@
 import { AuditLogEvent, ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { randomBytes } from 'node:crypto';
+import { assessInactivity } from './activity-policy';
 import { getActiveLockdown } from './services/security-lockdown';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import {
@@ -27,12 +29,9 @@ interface RoleLike {
   id: string;
 }
 
-interface MemberRoleManagerLike {
-  add(role: RoleLike, reason?: string): Promise<unknown>;
-  remove(role: RoleLike, reason?: string): Promise<unknown>;
-}
-
 interface MemberLike {
+  bannable?: boolean;
+  kickable?: boolean;
   joinedTimestamp?: number | null;
   voice?: { channelId?: string | null };
   id: string;
@@ -47,6 +46,7 @@ interface MemberLike {
   roles: {
     highest?: { position?: number };
     cache?: {
+      has(roleId: string): boolean;
       values?(): IterableIterator<{ id: string; name?: string; position?: number }>;
       some?(callback: (role: { id: string; name?: string; position?: number }) => boolean): boolean;
     };
@@ -94,14 +94,15 @@ interface ChannelLike {
   type?: number;
   parentId?: string | null;
   topic?: string | null;
-  archived?: boolean;
+  archived?: boolean | null;
   guild?: GuildLike | null;
   send?(payload: Record<string, unknown>): Promise<NoticeLike | null>;
   sendTyping?(): Promise<unknown>;
   fetchWebhooks?(): Promise<any>;
   permissionsFor?(target: unknown): { has(permission: unknown): boolean } | null;
   messages?: {
-    fetch(options?: Record<string, unknown> | string): Promise<any>;
+    fetch(options: string): Promise<any>;
+    fetch(options?: import('discord.js').FetchMessagesOptions): Promise<any>;
   };
   permissionOverwrites?: {
     edit(target: unknown, overwrite: Record<string, boolean | null>, options?: Record<string, unknown>): Promise<unknown>;
@@ -326,6 +327,7 @@ interface RoleEventLike {
 }
 
 interface GuildStorageLike {
+  flush?(): void;
   getCooldown?(memberId: string): number;
   setCooldown?(memberId: string, value: number): unknown;
   recordAnalyticsMessage(memberId: string, channelId: string): unknown;
@@ -370,11 +372,12 @@ interface WelcomeSettingsLike {
     ranks?: string[];
   };
   modules?: Record<string, boolean>;
-  roles?: Record<string, string>;
+  roles?: import('./types').RoleDefinition[];
   aiBrain?: ServerBrainSettings;
 }
 
 interface DatabaseLike {
+  flush?(): void;
   updateGuildSettings(guildId: string, patch: Record<string, unknown>): unknown;
 }
 
@@ -382,13 +385,13 @@ interface EventRuntimeOptions {
   client: {
     user?: UserLike | null;
     channels?: {
-      fetch(channelId: string): Promise<ChannelLike | null>;
+      fetch(channelId: string): Promise<unknown>;
     };
     removeAllListeners(event: string): unknown;
     on(event: string, listener: (...args: any[]) => unknown): unknown;
     guilds?: {
       cache?: {
-        values?(): IterableIterator<GuildLike>;
+        values?(): IterableIterator<unknown>;
       };
     };
   };
@@ -459,13 +462,19 @@ interface PendingBrainAction {
   code: string;
   guildId: string;
   actorId: string;
-  action: 'ban' | 'kick';
+  action: 'ban' | 'kick' | 'inactive_dm' | 'inactive_ping';
   targetId: string;
   reason: string;
   summary: string;
   risk: BrainRisk;
   expiresAt: number;
+  channelId?: string;
+  prompt?: string;
+  recipientIds?: string[];
+  text?: string;
 }
+
+const bulkActionLocks = new Set<string>();
 
 interface WelcomeInviteBatch {
   items: MemberLike[];
@@ -853,10 +862,12 @@ async function loadActivityMembers(guild: GuildLike): Promise<MemberLike[]> {
   return collectionValues<MemberLike>(fetched);
 }
 
-async function handleInactiveMembersRequest(
+export async function handleInactiveMembersRequest(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'database' | 'resolveGuildSettings' | 'sendSecurityLog' | 'aiService' | 'isActivityExempt'>
+  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'database' | 'resolveGuildSettings' | 'sendSecurityLog' | 'aiService' | 'isActivityExempt'>,
+  pendingActions?: Map<string, PendingBrainAction>,
+  confirmed?: { ids: string[]; text: string }
 ): Promise<boolean> {
   if (!message.guild || !looksLikeInactiveMembersRequest(prompt)) return false;
   if (!isAdminMember(message.member)) {
@@ -874,7 +885,7 @@ async function handleInactiveMembersRequest(
     await message.channel.send?.({ content: 'Укажи место отправки: «отправь неактивным в ЛС». Для списка: «покажи неактивных».', allowedMentions: { parse: [] } });
     return true;
   }
-  const threshold = Date.now() - days * 24 * 60 * 60 * 1000;
+  const thresholdMs = days * 24 * 60 * 60 * 1000;
   const guildStorage = options.getGuildStorage(message.guild.id);
   let insufficientData = 0;
   const inactive = (await loadActivityMembers(message.guild))
@@ -882,21 +893,17 @@ async function handleInactiveMembersRequest(
     .filter(member => !member.voice?.channelId && !options.isActivityExempt?.(message.guild!.id, member.id))
     .map(member => ({ member, data: guildStorage.ensureMemberRecord(member.id) }))
     .filter(({ member, data }) => {
-      const observed = data.observedSince || data.lastSeenAt || 0;
-      if (!observed || observed > threshold || (member.joinedTimestamp || 0) > threshold) {
-        insufficientData++;
-        return false;
-      }
-      const lastActivity = Math.max(
-        Number(data.lastSeenAt) || 0,
-        Number(data.lastMessageAt) || 0,
-        Number(data.lastVoiceAt) || 0
-      ) || observed;
-      return lastActivity > 0 && lastActivity < threshold;
+      const assessment = assessInactivity(data, member.joinedTimestamp, thresholdMs);
+      if (assessment === 'insufficient') insufficientData++;
+      return assessment === 'inactive' && (!confirmed || confirmed.ids.includes(member.id));
     })
     .sort((left, right) => (Number(left.data.lastSeenAt) || 0) - (Number(right.data.lastSeenAt) || 0));
 
   if (!inactive.length) {
+    if (confirmed) recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
+      action: messageMembers ? 'inactive_dm' : 'inactive_ping', risk: 'medium', status: 'cancelled',
+      actorId: message.author.id, targetId: message.channel.id, summary: 'No eligible recipients remain after confirmation'
+    }, options);
     await message.channel.send?.({
       content: `Неактивных семейных участников за последние ${days} дн. по доступным данным не найдено.${insufficientData ? ` Для ${insufficientData} участник(ов) недостаточен срок наблюдения или пребывания на сервере; их активность пока не оценена.` : ''}`,
       allowedMentions: { parse: [] }
@@ -911,7 +918,7 @@ async function handleInactiveMembersRequest(
     const publicName = member.displayName || member.user?.globalName || member.user?.username || member.id;
     return `${index + 1}) ${publicName}; Discord ID=${member.id}; сообщений=${Number(data.messageCount) || 0}; голос=${Number(data.voiceMinutes) || 0} мин; баллы=${Number(data.points) || 0}; выговоры=${Number(data.warns) || 0}; похвалы=${Number(data.commends) || 0}; неактивность=${inactiveForDays < 0 ? 'нет данных' : `${inactiveForDays} дн.`}`;
   }).join('\n');
-  const aiSummary = await buildAiToolSummary(
+  const aiSummary = confirmed?.text || await buildAiToolSummary(
     options.aiService,
     messageMembers
       ? 'Ты KLAIZ BOT. Составь одно вежливое, но ясное личное предупреждение неактивному участнику семьи. Попроси проявить активность или сообщить администрации причину отсутствия. Не добавляй имя, mention, ссылку, угрозы и выдуманные правила. Верни только готовый текст сообщения.'
@@ -923,6 +930,24 @@ async function handleInactiveMembersRequest(
       ? `Здравствуйте! Мы заметили, что вы не проявляли активность более ${days} дней. Пожалуйста, проявите активность или сообщите администрации причину отсутствия, чтобы мы понимали вашу текущую ситуацию.`
       : `Найдено ${ids.length} неактивных семейных участников за период более ${days} дней.`
   );
+  if ((messageMembers || pingMembers) && !confirmed) {
+    if (!pendingActions) {
+      await message.channel.send?.({ content: 'Центр подтверждений недоступен. Рассылка не выполнена.', allowedMentions: { parse: [] } });
+      return true;
+    }
+    for (const [key, pending] of pendingActions) if (pending.expiresAt <= Date.now()) pendingActions.delete(key);
+    const code = createBrainConfirmationCode();
+    const action = messageMembers ? 'inactive_dm' : 'inactive_ping';
+    pendingActions.set(code, { code, guildId: message.guild.id, actorId: message.author.id,
+      channelId: message.channel.id, action, targetId: message.channel.id, risk: 'medium', reason: '',
+      summary: `${action}: ${ids.length} recipients`, expiresAt: Date.now() + 120000, prompt, recipientIds: ids, text: aiSummary });
+    recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
+      action, risk: 'medium', status: 'planned', actorId: message.author.id, targetId: message.channel.id,
+      summary: `${ids.length} recipients; ${days} days`
+    }, options);
+    await message.channel.send?.({ content: `Подготовлено: ${messageMembers ? 'личные предупреждения' : 'упоминания'}. Получателей: ${ids.length}. Риск: medium.\nТекст: ${aiSummary}\n\nПодтверди в этом канале: «подтверждаю ${code}» с упоминанием бота. Срок: 2 минуты. До подтверждения ничего не отправлено.`.slice(0, 1900), allowedMentions: { parse: [] } });
+    return true;
+  }
   let delivered = 0;
   let failed = 0;
   let skipped = 0;
@@ -940,12 +965,13 @@ async function handleInactiveMembersRequest(
       if (sent) {
         delivered += 1;
         guildStorage.setCooldown?.(key, Date.now());
+        guildStorage.flush?.();
       }
       else failed += 1;
     }
     await message.channel.send?.({
       content: [
-        '✅ Предупреждение неактивным участникам отправлено.',
+        failed ? 'Рассылка завершена с ошибками доставки.' : 'Рассылка завершена.',
         `Доставлено: **${delivered}**`,
         `Не доставлено: **${failed}**`,
         `Уже предупреждены за последние 24 часа: **${skipped}**`,
@@ -959,14 +985,16 @@ async function handleInactiveMembersRequest(
     for (let index = 0; index < ids.length; index += 25) batches.push(ids.slice(index, index + 25));
     for (let index = 0; index < batches.length; index += 1) {
       const batch = batches[index];
-      await message.channel.send?.({
+      const sent = await message.channel.send?.({
         content: [
           index === 0 ? `📣 ${aiSummary}\nНеактивные участники за ${days} дн. (${ids.length}):` : `Продолжение списка (${index + 1}/${batches.length}):`,
           batch.map(id => `<@${id}>`).join(' '),
           index === 0 ? 'Пожалуйста, отметьтесь и сообщите о своей активности.' : ''
         ].filter(Boolean).join('\n'),
         allowedMentions: { parse: [], users: batch }
-      }).catch(() => null);
+      }).then(() => true).catch(() => false);
+      if (sent) delivered += batch.length;
+      else failed += batch.length;
     }
   } else {
     const lines = inactive.map(({ member, data }, index) => {
@@ -996,7 +1024,7 @@ async function handleInactiveMembersRequest(
   const brain = appendBrainAudit(normalizeServerBrainSettings(currentSettings.aiBrain), {
     action: messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list'),
     risk: messageMembers || pingMembers ? 'medium' : 'read',
-    status: 'completed',
+    status: failed ? 'failed' : 'completed',
     actorId: message.author.id,
     targetId: message.channel.id,
     summary: `${messageMembers ? `ЛС доставлено ${delivered}, ошибок ${failed}` : (pingMembers ? 'Упомянуты' : 'Показаны')} неактивные участники: ${ids.length}; период: ${days} дн.`
@@ -1004,7 +1032,7 @@ async function handleInactiveMembersRequest(
   saveBrainSettings(message.guild.id, brain, options);
   await options.sendSecurityLog(
     message.guild,
-    `AI action ${messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list')}: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, delivered=${delivered}, failed=${failed}, days=${days}, risk=${messageMembers || pingMembers ? 'medium' : 'read'}, status=completed`
+    `AI action ${messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list')}: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, delivered=${delivered}, failed=${failed}, days=${days}, risk=${messageMembers || pingMembers ? 'medium' : 'read'}, status=${failed ? 'failed' : 'completed'}`
   ).catch(() => null);
   return true;
 }
@@ -1553,6 +1581,7 @@ function saveBrainSettings(
   options: Pick<EventRuntimeOptions, 'database'>
 ): void {
   options.database?.updateGuildSettings(guildId, { aiBrain: brain });
+  options.database?.flush?.();
 }
 
 function recordBrainAction(
@@ -1609,7 +1638,8 @@ async function readMentionedRulesChannel(
   const channelId = parseMentionedChannelId(prompt) || String(fallbackChannelId || '').trim();
   if (!channelId) return { channelId: '', text: '', error: '' };
   try {
-    const channel = await client.channels?.fetch(channelId).catch(() => null);
+    const fetched = await client.channels?.fetch(channelId).catch(() => null);
+    const channel = fetched && typeof fetched === 'object' && 'id' in fetched ? fetched as ChannelLike : null;
     if (!channel?.messages?.fetch) return { channelId, text: '', error: 'канал не найден или бот не может читать сообщения' };
     const messages = await channel.messages.fetch({ limit: 10 }).catch((error: any) => {
       throw error;
@@ -1948,9 +1978,10 @@ async function handleNaturalChannelSetup(
 
   const purpose = inferChannelPurpose(prompt);
   const channelId = parseMentionedChannelId(prompt) || message.channel.id;
-  const channel = channelId
+  const fetchedChannel = channelId
     ? await options.client.channels?.fetch(channelId).catch(() => null)
     : null;
+  const channel = fetchedChannel && typeof fetchedChannel === 'object' && 'id' in fetchedChannel ? fetchedChannel as ChannelLike : null;
 
   if (!purpose || !channel?.id) {
     await message.channel.send?.({
@@ -2165,20 +2196,20 @@ function parseBrainConfirmationCode(prompt: string): string {
 }
 
 function createBrainConfirmationCode(): string {
-  return Math.random().toString(36).slice(2, 8).toUpperCase().padEnd(6, 'X');
+  return randomBytes(3).toString('hex').toUpperCase();
 }
 
-async function executePendingBrainAction(
+export async function executePendingBrainAction(
   message: MessageLike,
   prompt: string,
   pendingActions: Map<string, PendingBrainAction>,
-  options: Pick<EventRuntimeOptions, 'database' | 'resolveGuildSettings' | 'sendSecurityLog'>
+  options: Pick<EventRuntimeOptions, 'database' | 'resolveGuildSettings' | 'sendSecurityLog' | 'getGuildStorage' | 'hasFamilyRole' | 'aiService' | 'isActivityExempt'>
 ): Promise<boolean> {
   const code = parseBrainConfirmationCode(prompt);
   if (!code || !message.guild) return false;
   const pending = pendingActions.get(code);
-  if (!pending || pending.guildId !== message.guild.id || pending.actorId !== message.author.id || pending.expiresAt < Date.now()) {
-    pendingActions.delete(code);
+  if (!pending || pending.guildId !== message.guild.id || pending.actorId !== message.author.id || (pending.channelId && pending.channelId !== message.channel.id) || pending.expiresAt <= Date.now()) {
+    if (pending && pending.expiresAt <= Date.now()) pendingActions.delete(code);
     await message.channel.send?.({
       content: `<@${message.author.id}>, подтверждение не найдено или истекло. Повтори исходную команду.`,
       allowedMentions: { parse: [], users: [message.author.id] }
@@ -2187,9 +2218,35 @@ async function executePendingBrainAction(
   }
 
   pendingActions.delete(code);
+  const actor = await message.guild.members.fetch(message.author.id).catch(() => null);
+  if (!actor || !isAdminMember(actor)) {
+    recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
+      action: pending.action, risk: pending.risk, status: 'failed', actorId: message.author.id,
+      targetId: pending.targetId, summary: 'Permission revoked before confirmation'
+    }, options);
+    await message.channel.send?.({ content: 'Нет действующего права Administrator. Действие отменено.', allowedMentions: { parse: [] } });
+    return true;
+  }
+  if (pending.action === 'inactive_dm' || pending.action === 'inactive_ping') {
+    if (bulkActionLocks.has(message.guild.id)) {
+      await message.channel.send?.({ content: 'На сервере уже выполняется массовое действие. Повтори запрос после завершения.', allowedMentions: { parse: [] } });
+      return true;
+    }
+    bulkActionLocks.add(message.guild.id);
+    const confirmedMessage = Object.create(message) as MessageLike;
+    Object.defineProperty(confirmedMessage, 'member', { value: actor });
+    try {
+      await handleInactiveMembersRequest(confirmedMessage, pending.prompt || '', options, pendingActions,
+        { ids: pending.recipientIds || [], text: pending.text || '' });
+    } finally { bulkActionLocks.delete(message.guild.id); }
+    return true;
+  }
   const targetMember = await message.guild.members.fetch(pending.targetId).catch(() => null);
   let ok = false;
-  if (targetMember) {
+  if (targetMember && targetMember.id !== message.guild.ownerId && targetMember.id !== actor.id
+    && (!isAdminMember(targetMember) || actor.id === message.guild.ownerId)
+    && (actor.id === message.guild.ownerId || (Number(actor.roles.highest?.position) > Number(targetMember.roles.highest?.position)))
+    && (pending.action === 'ban' ? targetMember.bannable !== false : targetMember.kickable !== false)) {
     ok = pending.action === 'ban'
       ? await targetMember.ban?.({ reason: pending.reason }).then(() => true).catch(() => false) || false
       : await targetMember.kick?.(pending.reason).then(() => true).catch(() => false) || false;
@@ -2217,7 +2274,7 @@ async function executePendingBrainAction(
 async function handleNaturalAdminCommand(
   message: MessageLike,
   prompt: string,
-  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog'>,
+  options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog' | 'getGuildStorage' | 'hasFamilyRole' | 'isActivityExempt'>,
   pendingActions: Map<string, PendingBrainAction>
 ): Promise<boolean> {
   if (await executePendingBrainAction(message, prompt, pendingActions, options)) {
@@ -2304,7 +2361,8 @@ async function handleNaturalAdminCommand(
         reason,
         summary,
         risk,
-        expiresAt: Date.now() + 2 * 60 * 1000
+        expiresAt: Date.now() + 2 * 60 * 1000,
+        channelId: message.channel.id
       });
       const settings = options.resolveGuildSettings(message.guild.id);
       recordBrainAction(message.guild.id, settings.aiBrain, {
@@ -2461,7 +2519,7 @@ async function handleAiMentionMessage(
     }
     state.set(key, Infinity);
     try {
-      if (await handleInactiveMembersRequest(message, prompt, options)) return true;
+      if (await handleInactiveMembersRequest(message, prompt, options, pendingActions)) return true;
       if (await handleLiveActivityQuestion(message, prompt, options)) return true;
     } catch (error) {
       await message.channel.send?.({ content: `Не удалось выполнить запрос активности: ${String(error instanceof Error ? error.message : error).slice(0, 300)}`, allowedMentions: { parse: [] } });

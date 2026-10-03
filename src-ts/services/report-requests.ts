@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { applyCardStyle } from '../card-style';
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import type { DatabaseApi, ReportRequestConfig, ReportRequestType } from '../types';
 import {
@@ -38,10 +39,11 @@ function createReportId(type: ReportRequestType): string {
 export function createReportRequestService(options: {
   database: DatabaseApi;
   fetchTextChannel(guild: any, channelId?: string | null): Promise<any | null>;
-  resolveGuildSettings(guildId: string): any;
+  resolveGuildSettings(guildId: string): Pick<import('../types').GuildSettings, 'reportRequests' | 'visuals'>;
   canManageReports?: (interaction: any) => boolean;
 }): ReportRequestService {
   const { database, fetchTextChannel, resolveGuildSettings } = options;
+  const styleEmbed = (guildId: string, embed: EmbedBuilder) => applyCardStyle(embed, resolveGuildSettings(guildId).visuals?.cards?.reports?.discord);
 
   function canManage(interaction: any): boolean {
     if (typeof options.canManageReports === 'function') return options.canManageReports(interaction);
@@ -88,6 +90,7 @@ export function createReportRequestService(options: {
       ...buildReportRequestPanel(type, config),
       allowedMentions: { parse: [] }
     };
+    payload.embeds = payload.embeds.map(embed => styleEmbed(guild.id, embed));
     const existing = await fetchMessage(channel, config.panelMessageId);
     const message = existing
       ? await existing.edit(payload)
@@ -170,7 +173,7 @@ export function createReportRequestService(options: {
 
     const settings = resolveGuildSettings(interaction.guild.id);
     const lines = Object.values(REPORT_REQUEST_DEFINITIONS).map(definition => {
-      const config = settings.reportRequests?.[definition.type] || {};
+      const config: Partial<ReportRequestConfig> = settings.reportRequests?.[definition.type] || {};
       return [
         `**${definition.label}**`,
         `Карточка: ${formatChannel(config.panelChannelId)}`,
@@ -180,11 +183,11 @@ export function createReportRequestService(options: {
     });
 
     await interaction.reply(ephemeral({
-      embeds: [new EmbedBuilder()
+      embeds: [styleEmbed(interaction.guild.id, new EmbedBuilder()
         .setColor(0x64748b)
         .setTitle('🧾 Настройки отчётов')
         .setDescription(lines.join('\n\n'))
-        .setFooter({ text: `Система отчётов • ${new Date().toLocaleString('ru-RU')}` })]
+        .setFooter({ text: `Система отчётов • ${new Date().toLocaleString('ru-RU')}` }))]
     }));
   }
 
@@ -248,18 +251,18 @@ export function createReportRequestService(options: {
 
     try {
       const message = await targetChannel.send({
-        embeds: [buildReportRequestEmbed({
+        embeds: [styleEmbed(interaction.guild.id, buildReportRequestEmbed({
           type,
           values,
           reporter: interaction.user,
           reportId
-        })],
+        }))],
         components: [buildReportRequestReviewButtons(type, reportId)],
         allowedMentions: { parse: [] }
       });
 
       await sendLog(interaction.guild, config, {
-        embeds: [buildReportRequestLogEmbed({
+        embeds: [styleEmbed(interaction.guild.id, buildReportRequestLogEmbed({
           type,
           values,
           reporter: interaction.user,
@@ -267,7 +270,7 @@ export function createReportRequestService(options: {
           guildId: interaction.guild.id,
           targetChannelId: targetChannel.id,
           targetMessageId: message?.id
-        })]
+        }))]
       });
 
       await interaction.editReply({ content: `Отчёт отправлен: ${formatChannel(targetChannel.id)}` });
@@ -298,13 +301,13 @@ export function createReportRequestService(options: {
 
     const targetChannelId = interaction.channelId || interaction.message?.channelId || config?.targetChannelId || '';
     const targetMessageId = interaction.message?.id || '';
-    const updatedEmbed = buildReportRequestDecisionEmbed({
+    const updatedEmbed = styleEmbed(interaction.guild.id, buildReportRequestDecisionEmbed({
       type,
       reportId,
       decision,
       moderator: interaction.user,
       sourceEmbed: interaction.message?.embeds?.[0]
-    });
+    }));
 
     try {
       await interaction.message?.edit?.({
@@ -315,7 +318,7 @@ export function createReportRequestService(options: {
 
       if (config) {
         await sendLog(interaction.guild, config, {
-          embeds: [buildReportRequestDecisionLogEmbed({
+          embeds: [styleEmbed(interaction.guild.id, buildReportRequestDecisionLogEmbed({
             type,
             reportId,
             decision,
@@ -323,7 +326,7 @@ export function createReportRequestService(options: {
             guildId: interaction.guild.id,
             targetChannelId,
             targetMessageId
-          })]
+          }))]
         });
       }
 

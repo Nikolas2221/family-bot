@@ -41,9 +41,9 @@ interface InteractionRuntimeOptions {
   normalizeReactionEmoji(emojiValue?: string): string;
   buildProfilePayload(member: any, allowRankButtons: boolean, content?: string): any;
   buildLeaderboardLines(guild: any, limit?: number): string[];
-  buildLeaderboardSummary(guild: any): string;
+  buildLeaderboardSummary: ReturnType<typeof import('./runtime-family-helpers').createFamilyRuntimeHelpers>['buildLeaderboardSummary'];
   buildVoiceActivityLines(guild: any, limit?: number): string[];
-  buildVoiceActivitySummary(guild: any): string;
+  buildVoiceActivitySummary: ReturnType<typeof import('./runtime-family-helpers').createFamilyRuntimeHelpers>['buildVoiceActivitySummary'];
   buildPremiumActivityReportEmbed(guild: any, targetMember?: any): any;
   buildAiAdvisorEmbed(guild: any, member: any): Promise<any>;
   resolveMemberQuery(guild: any, query: string, fallbackUserId?: string): Promise<any>;

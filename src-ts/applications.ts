@@ -1,4 +1,6 @@
 import { MessageFlags } from 'discord.js';
+import { applyCardStyle } from './card-style';
+import type { CardAppearance } from './types';
 
 import copy from './copy';
 import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
@@ -36,6 +38,7 @@ interface ApplicationStorageLike {
 }
 
 interface ApplicationsOptions {
+  getCardStyle?(): CardAppearance;
   storage: ApplicationStorageLike;
   fetchTextChannel: (...args: any[]) => Promise<any>;
   applicationsChannelId: string;
@@ -81,7 +84,8 @@ export function createApplicationsService({
   sendRejectionDm = async () => {},
   telegramNotifications,
   ticketService,
-  ticketDeleteDelayMs = 5000
+  ticketDeleteDelayMs = 5000,
+  getCardStyle = () => ({})
 }: ApplicationsOptions): ApplicationsService {
   const closingTickets = new Set<string>();
   const applicationDrafts = new Map<string, ApplicationDraft>();
@@ -607,6 +611,7 @@ export function createApplicationsService({
       .setColor(0x16a34a)
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('accepted')))
       .setFooter({ text: `Решение принял: <@${interaction.user.id}>` });
+    applyCardStyle(accepted, getCardStyle());
 
     const reason = String(details.reason || '').trim() || copy.applications.acceptReason;
     const rankName = String(details.rankName || '').trim() || copy.applications.acceptRank;
@@ -656,6 +661,7 @@ export function createApplicationsService({
       .setColor(0x64748b)
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('review')))
       .setFooter({ text: `Заявку взял: <@${interaction.user.id}>` });
+    applyCardStyle(review, getCardStyle());
 
     await interaction.message.edit({ embeds: [review], components: interaction.message.components });
     storage.setApplicationStatus(application, 'review', interaction.user.id);
@@ -703,6 +709,7 @@ export function createApplicationsService({
       .setColor(0xef4444)
       .setDescription(copy.applications.description(copy.applications.source, userId, copy.applications.statusLabel('rejected')))
       .setFooter({ text: `Решение принял: <@${interaction.user.id}>` });
+    applyCardStyle(rejected, getCardStyle());
 
     await targetMessage.edit({ embeds: [rejected], components: [] });
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);

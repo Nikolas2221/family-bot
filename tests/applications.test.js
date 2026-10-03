@@ -53,6 +53,9 @@ function createFakeEmbed() {
     color: null,
     description: '',
     footer: null,
+    setTitle(value) { this.title = value; return this; },
+    setImage(value) { this.image = value; return this; },
+    setThumbnail(value) { this.thumbnail = value; return this; },
     setColor(value) {
       this.color = value;
       return this;
@@ -453,6 +456,7 @@ async function testAcceptApplication() {
     sendAcceptLog: async (_guild, _member, _moderatorUser, reason, rankName) => {
       acceptLogPayload = { reason, rankName };
     },
+    getCardStyle: () => ({ color: '#123456', footer: 'Custom footer', imageUrl: 'https://example.com/card.png' }),
     sendAcceptanceDm: async payload => {
       acceptanceDm = payload;
       return true;
@@ -501,6 +505,9 @@ async function testAcceptApplication() {
 
   assert.equal(storage.findGuildApplication(guildId, applicationId).status, 'accepted');
   assert.equal(edits.length, 1);
+  assert.equal(edits[0].embeds[0].color, 0x123456);
+  assert.deepEqual(edits[0].embeds[0].footer, { text: 'Custom footer' });
+  assert.equal(edits[0].embeds[0].image, 'https://example.com/card.png');
   assert.equal(addedRoleId, 'role-newbie');
   assert.equal(removedRoleIds, null);
   assert.deepEqual(acceptLogPayload, {

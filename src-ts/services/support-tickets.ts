@@ -1,9 +1,7 @@
 import {
   ChannelType,
   MessageFlags,
-  PermissionFlagsBits,
-  type GuildMember,
-  type TextChannel
+  PermissionFlagsBits
 } from 'discord.js';
 import type { StorageApi, SupportTicketConfig, SupportTicketRecord } from '../types';
 import {

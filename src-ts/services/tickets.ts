@@ -4,13 +4,13 @@ import type { TelegramNotificationService } from '../telegram';
 interface DiscordChannelLike {
   id: string;
   name?: string;
-  archived?: boolean;
+  archived?: boolean | null;
   send(payload: Record<string, unknown>): Promise<unknown>;
 }
 
 interface DiscordClientLike {
   channels: {
-    fetch(channelId: string): Promise<DiscordChannelLike | null>;
+    fetch(channelId: string): Promise<unknown>;
   };
 }
 
@@ -25,7 +25,7 @@ export interface TicketService {
   handleDiscordTicketMessage(message: {
     content?: string;
     guild?: { id?: string } | null;
-    channel: { id: string; archived?: boolean };
+    channel: { id: string; archived?: boolean | null };
     author: { bot?: boolean; username?: string; globalName?: string | null; id?: string };
   }): Promise<boolean>;
   stop(): void;
@@ -70,8 +70,10 @@ export function createTicketService(options: {
     const channelId = application.ticketChannelId || application.ticketThreadId;
     if (!channelId || isClosed(application)) return null;
     const channel = await client.channels.fetch(channelId).catch(() => null);
-    if (!channel || channel.archived) return null;
-    return channel;
+    if (!channel || typeof channel !== 'object' || !('send' in channel) || typeof channel.send !== 'function') return null;
+    if ('archived' in channel && channel.archived) return null;
+    if (!('id' in channel) || typeof channel.id !== 'string') return null;
+    return channel as DiscordChannelLike;
   }
 
   async function takeInWork(ticketId: string, handler: string) {
@@ -142,7 +144,7 @@ export function createTicketService(options: {
   async function handleDiscordTicketMessage(message: {
     content?: string;
     guild?: { id?: string } | null;
-    channel: { id: string; archived?: boolean };
+    channel: { id: string; archived?: boolean | null };
     author: { bot?: boolean; username?: string; globalName?: string | null; id?: string };
   }): Promise<boolean> {
     const content = String(message.content || '').trim();

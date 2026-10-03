@@ -3,6 +3,7 @@
 const { createConfig, summarizeConfig, validateConfig } = require('../dist-ts/config');
 const copy = require('../dist-ts/copy').default;
 const { embeds } = require('../dist-ts/embeds');
+assert.equal(embeds.buildApplyDetailsModal().toJSON().custom_id, 'family_apply_details_modal');
 const {
   buildApplicationsPanelEmbed,
   buildDebugConfigEmbed,
