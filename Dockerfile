@@ -46,5 +46,6 @@ RUN npm ci --include=dev
 RUN npm run cabinet:install
 
 COPY . .
+RUN npm run build:ts
 
-CMD ["npm", "start"]
+CMD ["npm", "run", "start:ts"]

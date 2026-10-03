@@ -97,6 +97,10 @@ async function main() {
   assert.equal(restored.getGuild('styled-guild').settings.visuals.cards.updates.telegram.title, 'Release');
   restored.updateGuildSettings('styled-guild', { visuals: { familyBanner: 'https://example.com/banner.png' } });
   assert.equal(restored.getGuild('styled-guild').settings.visuals.cards.updates.discord.color, '#ef4444');
+  restored.updateGuildSettings('styled-guild', { roles: { member: 'member-role' } });
+  restored.updateGuildSettings('styled-guild', { roles: { member: undefined, deputy: 'deputy-role' } });
+  assert.equal(restored.getGuild('styled-guild').settings.roles.member, 'member-role');
+  assert.equal(restored.getGuild('styled-guild').settings.roles.deputy, 'deputy-role');
   await runTest('database setup creates guild record', testSetupCreatesGuildRecord);
   await runTest('database subscription can be updated', testSubscriptionCanBeUpdated);
   console.log('ALL DATABASE TESTS PASSED');

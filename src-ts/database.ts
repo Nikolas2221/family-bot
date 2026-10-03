@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { BotMode, DatabaseApi, DatabaseState, GuildRecord, GuildSettings, ModuleFlags } from './types';
+import type { BotMode, DatabaseApi, DatabaseState, GuildRecord, GuildSettings, GuildSettingsPatch, ModuleFlags } from './types';
 import { normalizeAutomodConfig } from './automod';
 import { normalizeServerBrainSettings } from './services/server-brain';
 
@@ -374,7 +374,7 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
     return guild;
   }
 
-  function updateGuildSettings(guildId: string, patch: Partial<GuildSettings>): GuildRecord {
+  function updateGuildSettings(guildId: string, patch: GuildSettingsPatch): GuildRecord {
     const guild = ensureGuild(guildId);
     guild.settings = normalizeGuildRecord(guildId, {
       settings: {
@@ -386,7 +386,9 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
         },
         roles: {
           ...(guild.settings?.roles || {}),
-          ...(patch?.roles || {})
+          ...Object.fromEntries(Object.entries(patch.roles || {}).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string'
+          ))
         },
         access: {
           ...(guild.settings?.access || {}),

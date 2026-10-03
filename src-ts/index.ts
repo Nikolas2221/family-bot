@@ -1,18 +1,18 @@
 ﻿import 'dotenv/config';
 
-const path = require('path');
+import path from 'node:path';
 const { ChannelType, Client, EmbedBuilder, GatewayIntentBits, MessageFlags, Partials, PermissionFlagsBits } = require('discord.js');
 const { createAIService } = require('./ai');
 const { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } = require('./automod');
 const { createApplicationsService } = require('./applications');
 const { buildCommands, getCommandsSignature, registerCommands } = require('./commands');
-const { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } = require('./config');
-const copy = require('./copy').default || require('./copy');
+import { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } from './config';
+import copy from './copy';
 const { createDatabase, defaultModulesForMode } = require('./database');
-const embeds = require('./embeds').default || require('./embeds');
+import embeds from './embeds';
 const { createRankService } = require('./ranks');
 const { getReleaseNotes } = require('./release-notes');
-const ROLES = require('./roles').default || require('./roles');
+import ROLES from './roles';
 const { containsDiscordInvite, detectScamGift, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
 const { createTelegramNotificationService } = require('./telegram');

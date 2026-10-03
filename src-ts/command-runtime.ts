@@ -7,6 +7,15 @@ import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './r
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { buildFamilyCabinetActionsEmbed } from './modules/familyCabinet';
 import type { MarketplaceCategory } from './modules/majesticApi';
+import type { DatabaseApi } from './database';
+import type { StorageApi } from './storage';
+import type { CopyCatalog } from './copy';
+import type { EmbedsApi } from './embeds';
+import type { createApplicationsService } from './applications';
+import type { createRankService } from './ranks';
+import type { createAIService } from './ai';
+import type { AnnouncementService } from './services/announcements';
+import type { TicketService } from './services/tickets';
 
 function isRenderableArtUrl(value: string): boolean {
   try {
@@ -159,9 +168,9 @@ async function buildSecurityCheckLines(guild: any): Promise<string[]> {
 interface CommandRuntimeOptions {
   APPLICATION_COOLDOWN_MS: number;
   AUTO_RANKS: any;
-  copy: any;
-  embeds: any;
-  database: any;
+  copy: CopyCatalog;
+  embeds: EmbedsApi;
+  database: DatabaseApi;
   ephemeral(payload: Record<string, unknown>): Record<string, unknown>;
   resolveGuildSettings(guildId: string): any;
   buildFamilyDashboardStats(guild: any): any;
@@ -173,8 +182,8 @@ interface CommandRuntimeOptions {
   defaultModulesForMode(mode: string): Record<string, boolean>;
   getHelpCatalog(interaction: any): any;
   guildStorage: any;
-  applicationsService: any;
-  rankService: any;
+  applicationsService: ReturnType<typeof createApplicationsService>;
+  rankService: ReturnType<typeof createRankService>;
   isPremiumGuild(guildId: string): boolean;
   isPremiumAutomodRule(rule: string): boolean;
   isPremiumAutomodTarget(target: string): boolean;
@@ -190,7 +199,7 @@ interface CommandRuntimeOptions {
   fetchMessagesForUser(channel: any, userId: string, count: number): Promise<{ messages: any[]; matched: number; blocked: number; system: number }>;
   clearChannelByMessages(channel: any): Promise<{ deleted: number; requested: number; skippedSystem: number; skippedBlocked: number }>;
   remapConfiguredChannelIds(guildId: string, oldChannelId: string, newChannelId: string): void;
-  storage: any;
+  storage: StorageApi;
   runRolelessCleanupDetailed(guildId: string, reason: string, options?: Record<string, unknown>): Promise<any>;
   canUseSecurity(member: any): boolean;
   fetchMemberFast(guild: any, userId: string): Promise<any>;
@@ -218,13 +227,13 @@ interface CommandRuntimeOptions {
   sendRankDm(guild: any, member: any, result: any): Promise<any>;
   sendSecurityLog(guild: any, content: string): Promise<any>;
   notifyTelegramSecurityAlert(input: Record<string, any>): Promise<any>;
-  aiService: any;
+  aiService: ReturnType<typeof createAIService>;
   isAiCommandOverviewQuery(query: string): boolean;
   buildAiCommandsOverview(interaction: any): string;
   canManageNicknames(member: any): boolean;
-  announcementService: any;
+  announcementService: AnnouncementService;
   discordAnnouncerRoleIds: string[];
-  ticketService: any;
+  ticketService: TicketService;
   lawService: {
     answer(question: string): Promise<{ found: boolean; title: string; description: string }>;
     stats(): { documents: number };

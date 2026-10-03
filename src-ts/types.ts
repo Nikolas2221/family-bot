@@ -586,6 +586,12 @@ export interface ServerBrainSettings {
   lastMappedAt: string;
 }
 
+export type GuildSettingsPatch = {
+  [K in keyof GuildSettings]?: GuildSettings[K] extends readonly unknown[]
+    ? GuildSettings[K]
+    : GuildSettings[K] extends object ? Partial<GuildSettings[K]> : GuildSettings[K];
+};
+
 export interface GuildSettings {
   mode: BotMode;
   familyTitle: string;
@@ -645,7 +651,7 @@ export interface DatabaseApi {
   save(): void;
   setGuildSettings(guildId: string, settings: Partial<GuildSettings>): GuildRecord;
   updateGuildMaintenance(guildId: string, patch: Partial<GuildMaintenance>): GuildRecord;
-  updateGuildSettings(guildId: string, patch: Partial<GuildSettings>): GuildRecord;
+  updateGuildSettings(guildId: string, patch: GuildSettingsPatch): GuildRecord;
   setSubscription(guildId: string, payload: { plan: SubscriptionPlan; assignedBy?: string }): GuildRecord;
 }
 
