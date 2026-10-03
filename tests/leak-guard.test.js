@@ -6,6 +6,7 @@ const { buildLeakScanText, registerEventRuntime } = require('../dist-ts/event-ru
 const { containsDiscordInvite, detectScamGift } = require('../dist-ts/security');
 
 async function main() {
+  let observedSince;
   assert.equal(containsDiscordInvite('https://discord.gg/family'), true);
   assert.equal(containsDiscordInvite('discord . gg / family'), true);
   assert.equal(containsDiscordInvite('discord dot gg/family'), true);
@@ -154,6 +155,7 @@ async function main() {
         voiceChannels: {}
       }),
       ensureMemberRecord: id => ({
+        observedSince,
         lastSeenAt: id === 'inactive-user' ? Date.now() - 10 * 24 * 60 * 60 * 1000 : Date.now(),
         lastMessageAt: 0,
         lastVoiceAt: 0,
@@ -421,6 +423,11 @@ async function main() {
   assert.equal(inactiveDmReplies.at(-1).embeds[0].data.title, 'Активность участника');
   assert.match(inactiveDmReplies.at(-1).embeds[0].data.description, /123456789012345678/u);
   additionalMembers.length = 0;
+  observedSince = activityNow;
+  activityNow += 61000;
+  await listeners.get('messageCreate')({ ...retryMessage, content: '<@bot-1> покажи неактивных за 7 дней' });
+  assert.match(inactiveDmReplies.at(-1).content, /недостаточен срок наблюдения/u);
+  observedSince = undefined;
   Date.now = originalNow;
 
   await listeners.get('messageCreate')({

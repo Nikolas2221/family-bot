@@ -446,25 +446,38 @@ export class FamilyCabinetService {
   }
 
   private loadState(): FamilyCabinetState {
-    try {
-      if (!fs.existsSync(this.config.dataFile)) return defaultState();
-      const parsed = JSON.parse(fs.readFileSync(this.config.dataFile, 'utf8'));
-      return {
-        ...defaultState(),
-        ...parsed,
-        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-        syncRuns: Array.isArray(parsed.syncRuns) ? parsed.syncRuns : [],
-        pendingDelivery: Array.isArray(parsed.pendingDelivery) ? parsed.pendingDelivery : []
-      };
-    } catch {
-      return defaultState();
+    const candidates = [this.config.dataFile, `${this.config.dataFile}.backup`];
+    if (!candidates.some(file => fs.existsSync(file))) return defaultState();
+    for (const file of candidates) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (!parsed || !Array.isArray(parsed.actions) || !Array.isArray(parsed.syncRuns)
+          || (parsed.pendingDelivery !== undefined && !Array.isArray(parsed.pendingDelivery))) {
+          throw new Error('Invalid cabinet state');
+        }
+        if (file !== this.config.dataFile) console.warn('[family-cabinet] State recovered from backup.');
+        return {
+          ...defaultState(),
+          ...parsed,
+          actions: parsed.actions,
+          syncRuns: parsed.syncRuns,
+          pendingDelivery: parsed.pendingDelivery || []
+        };
+      } catch (error) {
+        console.warn('[family-cabinet] Cannot read state:', file, error);
+      }
     }
+    throw new Error('Хранилище Majestic повреждено: восстановите файл данных или резервную копию. Очередь не перезаписана.');
   }
 
   private saveState(): void {
     fs.mkdirSync(path.dirname(this.config.dataFile), { recursive: true });
     const temporary = `${this.config.dataFile}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify(this.state, null, 2), 'utf8');
+    const serialized = JSON.stringify(this.state, null, 2);
+    const backup = `${this.config.dataFile}.backup`;
+    fs.writeFileSync(`${backup}.tmp`, serialized, 'utf8');
+    fs.renameSync(`${backup}.tmp`, backup);
+    fs.writeFileSync(temporary, serialized, 'utf8');
     fs.renameSync(temporary, this.config.dataFile);
   }
 }

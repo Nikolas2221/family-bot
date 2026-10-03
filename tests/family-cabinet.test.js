@@ -172,6 +172,14 @@ Luffy Klaiz #206656
   assert.equal(broken.logsCreated, 2);
   assert.equal(broken.logsDelivered, 0);
   assert.match(broken.errorMessage, /FAMILY_CABINET_SYNC_CHANNEL_ID/u);
+  const brokenConfig = baseConfig(brokenDir, scraperModulePath);
+  fs.writeFileSync(brokenConfig.dataFile, '{broken');
+  const recoveredBackup = createFamilyCabinetService(client, brokenConfig);
+  assert.match(recoveredBackup.statusLines().join('\n'), /Ожидает доставки: 2/u);
+  fs.writeFileSync(`${brokenConfig.dataFile}.backup`, '{broken');
+  assert.throws(() => createFamilyCabinetService(client, brokenConfig), /Очередь не перезаписана/u);
+  assert.equal(fs.readFileSync(brokenConfig.dataFile, 'utf8'), '{broken');
+  recoveredBackup.saveState();
   const recovered = createFamilyCabinetService(client, baseConfig(brokenDir, scraperModulePath));
   const retry = await recovered.runSync('manual');
   assert.equal(retry.logsCreated, 0, 'persisted history must not be reimported');

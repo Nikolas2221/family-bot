@@ -936,6 +936,50 @@ async function testCloseTicketNotifiesTelegram() {
 }
 
 async function main() {
+  await runTest('decision retries after card failure and preserves details', async () => {
+    const storage = createTempStorage();
+    const scoped = createGuildScopedStorage(storage, 'retry-guild');
+    const id = scoped.createApplication({ userId: 'candidate', nickname: 'Test', level: '20', about: 'Application', values: 'Respect', development: 'Team', strengths: 'Reliable' });
+    let cardFails = true;
+    let acknowledged = false;
+    let dmSent = false;
+    let payload;
+    const interaction = {
+      guild: { id: 'retry-guild', members: { fetch: async () => { assert.ok(acknowledged); return { id: 'candidate', roles: { cache: new Map() } }; } } },
+      user: { id: 'moderator' },
+      message: { edit: async value => { if (cardFails) throw new Error('card failed'); payload = value; } },
+      deferReply: async () => { acknowledged = true; },
+      editReply: async () => {},
+      reply: async () => { throw new Error('late initial reply'); }
+    };
+    const service = createApplicationsService({ storage: scoped, fetchTextChannel: async () => null,
+      applicationsChannelId: 'apps', applicationDefaultRole: '', logChannelId: '', familyRoles: [], client: {}, embeds: createEmbedsStub(),
+      sendAcceptLog: async () => { throw new Error('log unavailable'); },
+      sendAcceptanceDm: async () => { dmSent = true; return true; } });
+    await assert.rejects(service.accept(interaction, id, 'candidate'), /card failed/);
+    assert.notEqual(scoped.findApplication(id).status, 'accepted');
+    cardFails = false;
+    await service.accept(interaction, id, 'candidate');
+    assert.equal(scoped.findApplication(id).status, 'accepted');
+    assert.equal(dmSent, true);
+    assert.equal(payload.embeds[0].payload.values, 'Respect');
+    assert.equal(payload.embeds[0].payload.development, 'Team');
+    assert.equal(payload.embeds[0].payload.strengths, 'Reliable');
+  });
+  await runTest('failed publication can retry without cooldown or duplicate record', async () => {
+    const storage = createTempStorage();
+    const scoped = createGuildScopedStorage(storage, 'publish-guild');
+    let fails = true;
+    const service = createApplicationsService({ storage: scoped, fetchTextChannel: async () => ({ send: async () => { if (fails) throw new Error('offline'); return { id: 'card' }; } }),
+      applicationsChannelId: 'apps', applicationDefaultRole: '', logChannelId: '', client: {}, embeds: createEmbedsStub(), sendAcceptLog: async () => {} });
+    const interaction = { guild: { id: 'publish-guild' }, user: { id: 'candidate' }, fields: { getTextInputValue: field => ({ nickname: 'Tester', level: '20', inviter: 'Boss', discovery: 'Discord', about: 'Хочу помогать семье и быть активным.' })[field] || '' }, reply: async () => {} };
+    await service.submitApplication(interaction);
+    assert.equal(scoped.getCooldown('candidate'), 0);
+    fails = false;
+    await service.submitApplication(interaction);
+    assert.equal(scoped.listRecentApplications(10).length, 1);
+    assert.ok(scoped.getCooldown('candidate') > 0);
+  });
   await runTest('submitApplication stores data and sends application message', testSubmitApplication);
   await runTest('application two-step modal stores all visible fields', testApplicationTwoStepModalStoresAllVisibleFields);
   await runTest('submitApplication creates review card without a thread', testSubmitApplicationCreatesReviewCardWithoutThread);

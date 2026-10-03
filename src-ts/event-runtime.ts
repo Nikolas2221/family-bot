@@ -876,13 +876,17 @@ async function handleInactiveMembersRequest(
   }
   const threshold = Date.now() - days * 24 * 60 * 60 * 1000;
   const guildStorage = options.getGuildStorage(message.guild.id);
+  let insufficientData = 0;
   const inactive = (await loadActivityMembers(message.guild))
     .filter(member => member.id !== message.author.id && !member.user?.bot && options.hasFamilyRole(member))
     .filter(member => !member.voice?.channelId && !options.isActivityExempt?.(message.guild!.id, member.id))
     .map(member => ({ member, data: guildStorage.ensureMemberRecord(member.id) }))
     .filter(({ member, data }) => {
       const observed = data.observedSince || data.lastSeenAt || 0;
-      if (!observed || observed > threshold || (member.joinedTimestamp || 0) > threshold) return false;
+      if (!observed || observed > threshold || (member.joinedTimestamp || 0) > threshold) {
+        insufficientData++;
+        return false;
+      }
       const lastActivity = Math.max(
         Number(data.lastSeenAt) || 0,
         Number(data.lastMessageAt) || 0,
@@ -894,7 +898,7 @@ async function handleInactiveMembersRequest(
 
   if (!inactive.length) {
     await message.channel.send?.({
-      content: `✅ Неактивных семейных участников за последние ${days} дн. не найдено.`,
+      content: `Неактивных семейных участников за последние ${days} дн. по доступным данным не найдено.${insufficientData ? ` Для ${insufficientData} участник(ов) недостаточен срок наблюдения или пребывания на сервере; их активность пока не оценена.` : ''}`,
       allowedMentions: { parse: [] }
     }).catch(() => null);
     return true;
@@ -978,7 +982,7 @@ async function handleInactiveMembersRequest(
     const embed = new EmbedBuilder()
       .setColor(0xf59e0b)
       .setTitle('💤 Неактивные участники')
-      .setDescription(`${aiSummary}\n\nСемейные участники без активности более **${days} дн.**: **${inactive.length}**`)
+      .setDescription(`${aiSummary}\n\nСемейные участники без активности более **${days} дн.**: **${inactive.length}**${insufficientData ? `\nНедостаточный срок наблюдения или пребывания на сервере: **${insufficientData}**. Эти участники не оценены.` : ''}`)
       .addFields({ name: 'Список', value: lines.slice(0, 10).join('\n') })
       .setFooter({ text: 'KLAIZ • Живые данные бота' })
       .setTimestamp();

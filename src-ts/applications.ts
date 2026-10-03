@@ -78,10 +78,27 @@ export function createApplicationsService({
 }: ApplicationsOptions): ApplicationsService {
   const closingTickets = new Set<string>();
   const applicationDrafts = new Map<string, ApplicationDraft>();
+  const pendingSubmissions = new Map<string, string>();
   const APPLICATION_DRAFT_TTL_MS = 10 * 60 * 1000;
 
   function draftKey(interaction: any): string {
     return `${interaction.guild?.id || 'dm'}:${interaction.user?.id || 'unknown'}`;
+  }
+
+  async function acknowledgedInteraction(interaction: any): Promise<any> {
+    if (typeof interaction.deferReply !== 'function') return interaction;
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply(ephemeral());
+    const acknowledged = Object.create(interaction);
+    acknowledged.reply = (payload: Record<string, unknown>) => {
+      const { flags, ...content } = payload;
+      return interaction.editReply(content);
+    };
+    return acknowledged;
+  }
+
+  async function notifyDecision(task: () => Promise<unknown>): Promise<void> {
+    try { await task(); }
+    catch (error) { console.warn('Application decision notification failed:', error); }
   }
 
   function readOptionalTextInput(interaction: any, fieldId: string): string {
@@ -354,10 +371,14 @@ export function createApplicationsService({
   }
 
   async function submitApplication(interaction: any) {
+    interaction = await acknowledgedInteraction(interaction);
     cleanupExpiredApplicationDrafts();
     const key = draftKey(interaction);
     const isDetailsStep = interaction.customId === 'family_apply_details_modal';
     const draft = isDetailsStep ? applicationDrafts.get(key) : null;
+    if (isDetailsStep && !draft) {
+      return interaction.reply(ephemeral({ content: 'Черновик заявки устарел. Нажмите «Подать заявку» и заполните форму заново.' }));
+    }
     const baseFields = draft || {
       nickname: interaction.fields.getTextInputValue('nickname'),
       level: interaction.fields.getTextInputValue('level'),
@@ -366,12 +387,6 @@ export function createApplicationsService({
       about: interaction.fields.getTextInputValue('about')
     };
     const details = readApplicationDetails(interaction);
-
-    if (isDetailsStep && !draft) {
-      return interaction.reply(ephemeral({
-        content: 'Черновик заявки устарел. Нажмите «Подать заявку» и заполните форму заново.'
-      }));
-    }
 
     if (isDetailsStep && (!details.values || !details.development || !details.strengths)) {
       return interaction.reply(ephemeral({
@@ -389,9 +404,9 @@ export function createApplicationsService({
     }
 
     const { nickname, level, inviter, discovery, about, values, development, strengths } = sanitized;
-    applicationDrafts.delete(key);
-    storage.setCooldown(interaction.user.id);
-    const applicationId = storage.createApplication({
+    const channel = await fetchTextChannel(interaction.guild, applicationsChannelId);
+    if (!channel) return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
+    const applicationId = pendingSubmissions.get(key) || storage.createApplication({
       userId: interaction.user.id,
       discordUsername: interaction.user.globalName || interaction.user.username || interaction.user.tag || '',
       nickname,
@@ -403,14 +418,21 @@ export function createApplicationsService({
       development,
       strengths
     });
+    pendingSubmissions.set(key, applicationId);
     const application = storage.findApplication(applicationId);
-
-    const channel = await fetchTextChannel(interaction.guild, applicationsChannelId);
     if (!channel || !application) {
       return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
     }
 
-    const reviewMessage = await createApplicationReviewCard(channel, application, interaction.user);
+    let reviewMessage;
+    try { reviewMessage = await createApplicationReviewCard(channel, application, interaction.user); }
+    catch (error) {
+      console.warn('Application publication failed:', error);
+      return interaction.reply(ephemeral({ content: 'Не удалось отправить заявку. Данные сохранены; повторите отправку.' }));
+    }
+    pendingSubmissions.delete(key);
+    applicationDrafts.delete(key);
+    storage.setCooldown(interaction.user.id);
     const reviewUrl = messageUrl(interaction.guild.id, channel.id, reviewMessage?.id);
 
     await notifyTelegram(telegramNotifications?.notifyApplicationCreated({
@@ -431,6 +453,7 @@ export function createApplicationsService({
   }
 
   async function accept(interaction: any, applicationId: string, userId: string, details: Record<string, any> = {}) {
+    interaction = await acknowledgedInteraction(interaction);
     const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
     if (!targetMessage) return interaction.reply(ephemeral({ content: 'Сообщение заявки не найдено. Решение не применено.' }));
     const application = storage.findApplication(applicationId);
@@ -478,9 +501,6 @@ export function createApplicationsService({
       }
     }
 
-    storage.setApplicationStatus(application, 'accepted', interaction.user.id);
-    ticketService?.markDecision(application, 'approved', interaction.user.username || interaction.user.id);
-
     const applicationUrl = messageUrl(interaction.guild.id, targetMessage.channel?.id || interaction.channel?.id, targetMessage.id);
     const accepted = embeds.buildApplicationEmbed({
       user: member.user || { id: userId },
@@ -489,6 +509,9 @@ export function createApplicationsService({
       inviter: application.inviter,
       discovery: application.discovery,
       about: application.about,
+      values: application.values,
+      development: application.development,
+      strengths: application.strengths,
       age: application.age,
       text: application.text,
       applicationId,
@@ -505,7 +528,9 @@ export function createApplicationsService({
     const rankName = String(details.rankName || '').trim() || copy.applications.acceptRank;
 
     await targetMessage.edit({ embeds: [accepted], components: [] });
-    await sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName);
+    storage.setApplicationStatus(application, 'accepted', interaction.user.id);
+    ticketService?.markDecision(application, 'approved', interaction.user.username || interaction.user.id);
+    await notifyDecision(() => sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName));
     await notifyAcceptanceDm(interaction, member, userId, reason, rankName, applicationUrl);
     await interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
     await notifyTelegram(telegramNotifications?.notifyApplicationAccepted({
@@ -522,6 +547,7 @@ export function createApplicationsService({
   }
 
   async function moveToReview(interaction: any, applicationId: string, userId: string) {
+    interaction = await acknowledgedInteraction(interaction);
     const application = storage.findApplication(applicationId);
     if (!application) {
       return interaction.reply(ephemeral({ content: copy.applications.notFound }));
@@ -534,8 +560,6 @@ export function createApplicationsService({
       });
     }
 
-    storage.setApplicationStatus(application, 'review', interaction.user.id);
-
     const review = embeds.buildApplicationEmbed({
       user: { id: userId },
       nickname: application.nickname,
@@ -543,6 +567,9 @@ export function createApplicationsService({
       inviter: application.inviter,
       discovery: application.discovery,
       about: application.about,
+      values: application.values,
+      development: application.development,
+      strengths: application.strengths,
       age: application.age,
       text: application.text,
       applicationId,
@@ -556,10 +583,12 @@ export function createApplicationsService({
       .setFooter({ text: `Заявку взял: <@${interaction.user.id}>` });
 
     await interaction.message.edit({ embeds: [review], components: interaction.message.components });
+    storage.setApplicationStatus(application, 'review', interaction.user.id);
     return interaction.reply(ephemeral({ content: copy.applications.reviewReply }));
   }
 
   async function reject(interaction: any, applicationId: string, userId: string, details: { reason?: string; messageId?: string } = {}) {
+    interaction = await acknowledgedInteraction(interaction);
     const targetMessage = interaction.message || await interaction.channel?.messages?.fetch?.(details.messageId).catch(() => null);
     if (!targetMessage) return interaction.reply(ephemeral({ content: 'Сообщение заявки не найдено. Решение не применено.' }));
     const application = storage.findApplication(applicationId);
@@ -576,9 +605,6 @@ export function createApplicationsService({
       return interaction.reply(ephemeral({ content: '❌ Укажи причину отказа.' }));
     }
 
-    storage.setApplicationStatus(application, 'rejected', interaction.user.id);
-    ticketService?.markDecision(application, 'rejected', interaction.user.username || interaction.user.id);
-
     const user = await client.users?.fetch?.(userId).catch(() => null);
     const applicationUrl = messageUrl(interaction.guild.id, targetMessage.channel?.id || interaction.channel?.id, targetMessage.id);
     const rejected = embeds.buildApplicationEmbed({
@@ -588,6 +614,9 @@ export function createApplicationsService({
       inviter: application.inviter,
       discovery: application.discovery,
       about: application.about,
+      values: application.values,
+      development: application.development,
+      strengths: application.strengths,
       age: application.age,
       text: application.text,
       applicationId,
@@ -601,11 +630,13 @@ export function createApplicationsService({
       .setFooter({ text: `Решение принял: <@${interaction.user.id}>` });
 
     await targetMessage.edit({ embeds: [rejected], components: [] });
+    storage.setApplicationStatus(application, 'rejected', interaction.user.id);
+    ticketService?.markDecision(application, 'rejected', interaction.user.username || interaction.user.id);
 
     if (user && logChannelId) {
-      const channel = await fetchTextChannel(interaction.guild, logChannelId);
-      if (channel) {
-        await channel.send({
+      await notifyDecision(async () => {
+        const channel = await fetchTextChannel(interaction.guild, logChannelId);
+        if (channel) await channel.send({
           embeds: [
             embeds.buildRejectLogEmbed({
               user,
@@ -614,7 +645,7 @@ export function createApplicationsService({
             })
           ]
         });
-      }
+      });
     }
 
     await notifyDiscordDm(sendRejectionDm({
@@ -723,7 +754,7 @@ export function createApplicationsService({
     return interaction.showModal(embeds.buildApplyDetailsModal());
   }
 
-  function guardedDecision<T extends typeof accept | typeof reject>(handler: T): T {
+  function guardedDecision<T extends typeof accept | typeof reject | typeof moveToReview>(handler: T): T {
     return (async (interaction: any, applicationId: string, ...args: any[]) => {
       const key = `${interaction.guild.id}:${applicationId}`;
       if (decisionLocks.has(key)) return interaction.reply(ephemeral({ content: 'Эта заявка уже обрабатывается. Дождись результата.' }));
@@ -736,7 +767,7 @@ export function createApplicationsService({
     accept: guardedDecision(accept),
     closeTicket,
     getCooldownSecondsLeft,
-    moveToReview,
+    moveToReview: guardedDecision(moveToReview),
     reject: guardedDecision(reject),
     sendApplyPanel,
     continueApplication,
