@@ -369,6 +369,26 @@ export function createAIService({
   enabled: boolean;
   chatCompletion?: ChatCompletionLike | null;
 }): AIService {
+  let lastAttemptAt = 0;
+  let lastSuccessAt = 0;
+  let lastResult = 'запросов ещё не было';
+  const provider = chatCompletion;
+  if (provider) chatCompletion = {
+    enabled: provider.enabled,
+    model: provider.model,
+    async chat(messages) {
+      lastAttemptAt = Date.now();
+      try {
+        const result = await provider.chat(messages);
+        lastResult = normalizeText(result) ? 'успех' : 'пустой ответ; используется локальный ответ';
+        if (normalizeText(result)) lastSuccessAt = Date.now();
+        return result;
+      } catch (error) {
+        lastResult = 'ошибка провайдера; используется локальный ответ';
+        throw error;
+      }
+    }
+  };
   async function aiText(_systemPrompt: string, userPrompt: string): Promise<string> {
     if (!enabled) {
       throw new Error(copy.ai.disabled);
@@ -439,6 +459,11 @@ export function createAIService({
   }
 
   return {
+    healthLines: () => [
+      `ИИ: ${enabled ? (provider?.enabled ? 'внешний провайдер включён' : 'локальный режим') : 'выключен'}`,
+      `Последний запрос ИИ: ${lastAttemptAt ? new Date(lastAttemptAt).toISOString() : 'не было'}; ${lastResult}`,
+      `Последний успех ИИ: ${lastSuccessAt ? new Date(lastSuccessAt).toISOString() : 'не было'}`
+    ],
     aiText,
     analyzeApplication,
     analyzeMember

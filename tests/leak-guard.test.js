@@ -487,6 +487,17 @@ async function main() {
   assert.equal(channelSettingsPatches.at(-1).aiBrain.audit.at(-1).action, 'channel_assign');
   assert.match(aiReplies.at(-1), /теперь используется как \*\*заявки\*\*/u);
 
+  for (const content of ['у <@222222222222222222> мут за флуд', 'замуть и размуть <@222222222222222222>']) {
+    await listeners.get('messageCreate')({ ...baseMessage,
+      content: `<@bot-1> ${content}`,
+      mentions: { users: { size: 2, has: id => id === 'bot-1' || id === targetMember.id } },
+      member: { ...baseMessage.member, permissions: { has: permission => permission === PermissionFlagsBits.Administrator } },
+      channel: { id: 'channel-1', send: async payload => { aiReplies.push(payload.content); return null; } },
+      delete: async () => {}
+    });
+    assert.equal(naturalTimeoutMs, 0, 'discussion and conflicting instructions must not mute anyone');
+  }
+
   await listeners.get('messageCreate')({
     ...baseMessage,
     id: 'message-4a',

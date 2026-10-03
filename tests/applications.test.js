@@ -14,6 +14,15 @@ function createTempStorage() {
 
 function createGuildScopedStorage(storage, guildId) {
   return {
+    save: storage.save,
+    flush: storage.flush,
+    getApplicationDraft(userId) { return storage.getStore().applicationDrafts?.[`${guildId}:${userId}`] || null; },
+    setApplicationDraft(userId, draft) {
+      storage.getStore().applicationDrafts ||= {};
+      if (draft) storage.getStore().applicationDrafts[`${guildId}:${userId}`] = draft;
+      else delete storage.getStore().applicationDrafts[`${guildId}:${userId}`];
+      storage.flush();
+    },
     sanitizeApplicationInput: storage.sanitizeApplicationInput,
     getCooldown(userId) {
       return storage.getGuildCooldown(guildId, userId);
@@ -936,6 +945,52 @@ async function testCloseTicketNotifiesTelegram() {
 }
 
 async function main() {
+  await runTest('pending decision resumes after restart without resending delivered DM', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'decision-restart-'));
+    const dataFile = path.join(dir, 'store.json');
+    let storage = createStorage({ dataFile });
+    let scoped = createGuildScopedStorage(storage, 'restart');
+    const id = scoped.createApplication({ userId: 'candidate', nickname: 'Tester', level: '20', about: 'Application' });
+    let dmCount = 0;
+    let logCount = 0;
+    let logFails = true;
+    const member = { id: 'candidate', user: { id: 'candidate' }, roles: { cache: new Map() } };
+    const guild = { id: 'restart', members: { fetch: async () => member } };
+    const makeService = () => createApplicationsService({ storage: scoped, fetchTextChannel: async () => null,
+      applicationsChannelId: 'apps', applicationDefaultRole: '', logChannelId: '', client: { users: { fetch: async id => ({ id }) } }, embeds: createEmbedsStub(),
+      sendAcceptLog: async () => { if (logFails) throw new Error('offline'); logCount++; },
+      sendAcceptanceDm: async () => { dmCount++; return true; } });
+    await makeService().accept({ guild, user: { id: 'moderator' }, message: { edit: async () => {} }, reply: async () => {} }, id, 'candidate');
+    assert.equal(dmCount, 1);
+    storage = createStorage({ dataFile });
+    scoped = createGuildScopedStorage(storage, 'restart');
+    assert.deepEqual(scoped.findApplication(id).decisionDelivery.remaining, ['log']);
+    scoped.findApplication(id).decisionDelivery.nextAttemptAt = 0;
+    logFails = false;
+    await makeService().retryPending(guild);
+    assert.equal(logCount, 1);
+    assert.equal(dmCount, 1);
+    assert.deepEqual(scoped.findApplication(id).decisionDelivery.remaining, []);
+  });
+  await runTest('draft and unpublished application survive new storage instance', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'draft-restart-'));
+    const dataFile = path.join(dir, 'store.json');
+    let scoped = createGuildScopedStorage(createStorage({ dataFile }), 'draft-restart');
+    let fail = true;
+    const makeService = () => createApplicationsService({ storage: scoped, fetchTextChannel: async () => ({ send: async () => { if (fail) throw new Error('offline'); return { id: 'card' }; } }), applicationsChannelId: 'apps', applicationDefaultRole: '', logChannelId: '', client: {}, embeds: createEmbedsStub(), sendAcceptLog: async () => {} });
+    const base = { guild: { id: 'draft-restart' }, user: { id: 'candidate' }, reply: async () => {}, showModal: async () => {}, fields: { getTextInputValue: field => ({ nickname: 'Tester', level: '20', inviter: 'Boss', discovery: 'Discord', about: 'Хочу помогать семье и быть активным.' })[field] || '' } };
+    await makeService().continueApplication(base);
+    scoped = createGuildScopedStorage(createStorage({ dataFile }), 'draft-restart');
+    const details = { ...base, customId: 'family_apply_details_modal', fields: { getTextInputValue: () => 'Хочу помогать семье' } };
+    await makeService().submitApplication(details);
+    const savedId = scoped.listRecentApplications(10)[0].id;
+    scoped = createGuildScopedStorage(createStorage({ dataFile }), 'draft-restart');
+    fail = false;
+    await makeService().submitApplication(details);
+    assert.equal(scoped.listRecentApplications(10).length, 1);
+    assert.equal(scoped.findApplication(savedId).ticketMessageId, 'card');
+    assert.equal(scoped.getApplicationDraft('candidate'), null);
+  });
   await runTest('decision retries after card failure and preserves details', async () => {
     const storage = createTempStorage();
     const scoped = createGuildScopedStorage(storage, 'retry-guild');

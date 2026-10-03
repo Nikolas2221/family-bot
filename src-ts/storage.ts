@@ -97,7 +97,7 @@ function createEmptyMemberRecord(guildId: string, memberId: string): MemberRecor
     userId: memberId,
     messageCount: 0,
     observedSince: Date.now(),
-    lastSeenAt: Date.now(),
+    lastSeenAt: 0,
     lastMessageAt: 0,
     lastVoiceAt: 0,
     warns: 0,
@@ -113,6 +113,22 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
 
   let store: StoreState = loadStore();
   let saveTimer: NodeJS.Timeout | null = null;
+  let lastWriteAt = 0;
+  let lastWriteError = '';
+
+  function healthLines(): string[] {
+    let writable = false;
+    try {
+      fs.accessSync(fs.existsSync(dataFile) ? dataFile : path.dirname(dataFile), fs.constants.W_OK);
+      writable = true;
+    } catch { /* Report disk permissions without changing the store. */ }
+    return [
+      `Хранилище: загружено; запись ${writable ? 'разрешена' : 'недоступна'}`,
+      `Последняя успешная запись: ${lastWriteAt ? new Date(lastWriteAt).toISOString() : 'в этом запуске ещё не было'}`,
+      `Ошибка записи: ${lastWriteError ? 'есть; подробности в логах' : 'нет'}`,
+      `Ожидают уведомлений по заявкам: ${store.applications.filter(app => app.decisionDelivery?.remaining.length).length}`
+    ];
+  }
 
   function readJsonFile(filePath: string): StoreState | null {
     try {
@@ -172,16 +188,24 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     const tempFile = `${dataFile}.tmp`;
     const payload = JSON.stringify(store, null, 2);
 
-    fs.mkdirSync(path.dirname(dataFile), { recursive: true });
-    fs.writeFileSync(tempFile, payload, 'utf8');
-    fs.renameSync(tempFile, dataFile);
-    fs.writeFileSync(backupFile, payload, 'utf8');
+    try {
+      fs.mkdirSync(path.dirname(dataFile), { recursive: true });
+      fs.writeFileSync(tempFile, payload, 'utf8');
+      fs.renameSync(tempFile, dataFile);
+      fs.writeFileSync(backupFile, payload, 'utf8');
+      lastWriteAt = Date.now();
+      lastWriteError = '';
+    } catch (error) {
+      lastWriteError = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
   }
 
   function save(): void {
     if (saveTimer) return;
     saveTimer = setTimeout(() => {
-      flush();
+      try { flush(); }
+      catch (error) { console.error('Storage write failed:', error); }
     }, saveDelayMs);
   }
 
@@ -263,7 +287,8 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       guildId,
       userId: memberId,
       messageCount: Math.max(Number(existingMember?.messageCount) || 0, Number(legacyMember.messageCount) || 0),
-      lastSeenAt: Math.max(Number(existingMember?.lastSeenAt) || 0, Number(legacyMember.lastSeenAt) || 0, Date.now()),
+      observedSince: Number(existingMember?.observedSince) || Number(legacyMember.observedSince) || Date.now(),
+      lastSeenAt: Math.max(Number(existingMember?.lastSeenAt) || 0, Number(legacyMember.lastSeenAt) || 0),
       lastMessageAt: Math.max(Number(existingMember?.lastMessageAt) || 0, Number(legacyMember.lastMessageAt) || 0),
       lastVoiceAt: Math.max(Number(existingMember?.lastVoiceAt) || 0, Number(legacyMember.lastVoiceAt) || 0),
       warns: Math.max(Number(existingMember?.warns) || 0, Number(legacyMember.warns) || 0),
@@ -283,6 +308,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
     const key = memberKey(guildId, memberId);
     if (!store.members[key]) {
       store.members[key] = createEmptyMemberRecord(guildId, memberId);
+      save();
     }
 
     store.members[key] = migrateLegacyMemberIfNeeded(guildId, memberId, store.members[key]) || store.members[key];
@@ -752,6 +778,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
   }
 
   return {
+    healthLines,
     getStore,
     save,
     flush,

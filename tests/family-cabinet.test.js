@@ -177,7 +177,13 @@ Luffy Klaiz #206656
   const recoveredBackup = createFamilyCabinetService(client, brokenConfig);
   assert.match(recoveredBackup.statusLines().join('\n'), /Ожидает доставки: 2/u);
   fs.writeFileSync(`${brokenConfig.dataFile}.backup`, '{broken');
-  assert.throws(() => createFamilyCabinetService(client, brokenConfig), /Очередь не перезаписана/u);
+  const unavailable = createFamilyCabinetService(client, brokenConfig);
+  assert.equal(unavailable.isEnabled(), false);
+  const unavailableRun = await unavailable.runSync('manual');
+  assert.equal(unavailableRun.status, 'failed');
+  assert.match(unavailableRun.errorMessage, /Очередь не перезаписана/u);
+  unavailable.startAutoSync();
+  assert.equal(unavailable.timer, null);
   assert.equal(fs.readFileSync(brokenConfig.dataFile, 'utf8'), '{broken');
   recoveredBackup.saveState();
   const recovered = createFamilyCabinetService(client, baseConfig(brokenDir, scraperModulePath));

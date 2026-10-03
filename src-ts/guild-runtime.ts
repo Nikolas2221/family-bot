@@ -156,6 +156,18 @@ export function createGuildStorageContext(guildId: string, storage: StorageApi):
       return storage.setGuildReportMarker(guildId, markerKey, value);
     },
     sanitizeApplicationInput: storage.sanitizeApplicationInput,
+    save: storage.save,
+    flush: storage.flush,
+    getApplicationDraft(userId: string) {
+      return storage.getStore().applicationDrafts?.[`${guildId}:${userId}`] || null;
+    },
+    setApplicationDraft(userId: string, draft: Record<string, any> | null) {
+      const drafts = storage.getStore().applicationDrafts ||= {};
+      const key = `${guildId}:${userId}`;
+      if (draft) drafts[key] = draft;
+      else delete drafts[key];
+      storage.flush();
+    },
     setApplicationStatus: storage.setApplicationStatus
   };
 }

@@ -105,6 +105,11 @@ async function testMemberRolesArePassedToExternalAi() {
 async function main() {
   const unavailable = createAIService({ enabled: true, chatCompletion: { enabled: true, chat: async () => { throw new Error('network'); } } });
   assert.equal(await unavailable.aiText('[tool-result-only]', 'Напиши предупреждение'), '');
+  assert.match(unavailable.healthLines().join('\n'), /ошибка провайдера/u);
+  const healthy = createAIService({ enabled: true, chatCompletion: { enabled: true, chat: async () => 'ok' } });
+  await healthy.aiText('', 'test');
+  assert.match(healthy.healthLines().join('\n'), /успех/u);
+  assert.doesNotMatch(healthy.healthLines().join('\n'), /Последний успех ИИ: не было/u);
   await runTest('ai advisor suggests promotion for strong member', testAdvisorSuggestsPromotionForStrongMember);
   await runTest('ai advisor flags afk risk', testAdvisorFlagsAfkRisk);
   await runTest('external ai chat is used when configured', testExternalAiChatIsUsedWhenConfigured);

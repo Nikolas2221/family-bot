@@ -6,6 +6,8 @@ import type { ApplicationsService, EmbedsApi, RoleDefinition } from './types';
 import type { TelegramNotificationService } from './telegram';
 import type { TicketService } from './services/tickets';
 const decisionLocks = new Set<string>();
+const deliveryLocks = new Set<string>();
+const submissionLocks = new Set<string>();
 
 function ephemeral(payload: Record<string, any> = {}) {
   return { ...payload, flags: MessageFlags.Ephemeral };
@@ -19,6 +21,11 @@ function normalizeRankToken(value: unknown): string {
 }
 
 interface ApplicationStorageLike {
+  save?(): void;
+  flush?(): void;
+  listRecentApplications?(limit?: number): any[];
+  getApplicationDraft?(userId: string): Record<string, any> | null;
+  setApplicationDraft?(userId: string, draft: Record<string, any> | null): void;
   getCooldown(userId: string): number;
   setCooldown(userId: string): void;
   createApplication(input: Record<string, unknown>): string;
@@ -96,9 +103,9 @@ export function createApplicationsService({
     return acknowledged;
   }
 
-  async function notifyDecision(task: () => Promise<unknown>): Promise<void> {
-    try { await task(); }
-    catch (error) { console.warn('Application decision notification failed:', error); }
+  function persist(): void {
+    storage.save?.();
+    storage.flush?.();
   }
 
   function readOptionalTextInput(interaction: any, fieldId: string): string {
@@ -146,7 +153,7 @@ export function createApplicationsService({
     });
   }
 
-  async function notifyAcceptanceDm(interaction: any, member: any, userId: string, reason: string, rankName: string, applicationUrl = ''): Promise<void> {
+  async function notifyAcceptanceDm(interaction: any, member: any, userId: string, reason: string, rankName: string, applicationUrl = ''): Promise<boolean> {
     const sent = await notifyDiscordDm(sendAcceptanceDm({
       guild: interaction.guild,
       member,
@@ -156,12 +163,12 @@ export function createApplicationsService({
       applicationUrl
     }));
 
-    if (sent) return;
+    if (sent) return true;
 
     const user = await client.users?.fetch?.(userId).catch(() => null);
-    if (!user) return;
+    if (!user) return false;
 
-    await notifyDiscordDm(sendAcceptanceDm({
+    return notifyDiscordDm(sendAcceptanceDm({
       guild: interaction.guild,
       member: { ...member, user },
       moderatorUser: interaction.user,
@@ -169,6 +176,78 @@ export function createApplicationsService({
       rankName,
       applicationUrl
     }));
+  }
+
+  function queueDecision(application: any, status: 'accepted' | 'rejected', interaction: any, reason: string, rankName: string, applicationUrl: string): void {
+    application.decisionDelivery = {
+      status, moderatorId: interaction.user.id, reason, rankName, applicationUrl,
+      remaining: ['log', 'dm', ...(telegramNotifications ? ['telegram'] : [])],
+      attempts: 0, nextAttemptAt: 0
+    };
+    persist();
+  }
+
+  async function deliverDecision(application: any, guild: any, suppliedModerator?: any, suppliedMember?: any): Promise<void> {
+    const job = application.decisionDelivery;
+    const key = `${guild.id}:${application.id}`;
+    if (!job?.remaining.length || deliveryLocks.has(key) || job.nextAttemptAt > Date.now()) return;
+    deliveryLocks.add(key);
+    try {
+      const moderator = suppliedModerator || await client.users?.fetch?.(job.moderatorId).catch(() => null) || { id: job.moderatorId };
+      const member = suppliedMember || await guild.members?.fetch?.(application.discordId).catch(() => null);
+      const user = member?.user || await client.users?.fetch?.(application.discordId).catch(() => null) || { id: application.discordId };
+      for (const target of [...job.remaining]) {
+        try {
+          let delivered: unknown = true;
+          if (target === 'log') {
+            if (job.status === 'accepted') delivered = await sendAcceptLog(guild, member || { id: application.discordId, user }, moderator, job.reason, job.rankName);
+            else if (logChannelId) {
+              const channel = await fetchTextChannel(guild, logChannelId);
+              if (!channel) throw new Error('Application log channel unavailable');
+              await channel.send({ embeds: [embeds.buildRejectLogEmbed({ user, moderatorUser: moderator, reason: job.reason })], allowedMentions: { parse: [] } });
+            }
+          } else if (target === 'dm') {
+            delivered = job.status === 'accepted'
+              ? await notifyAcceptanceDm({ guild, user: moderator }, member || { id: application.discordId, user }, application.discordId, job.reason, job.rankName, job.applicationUrl)
+              : await notifyDiscordDm(sendRejectionDm({ guild, user, moderatorUser: moderator, reason: job.reason, applicationUrl: job.applicationUrl }));
+          } else if (target === 'telegram') {
+            const input = { application, guild, candidate: user, moderator, ticketChannel: application.ticketThreadId ? { id: application.ticketThreadId } : null, reason: job.reason, status: job.status === 'accepted' ? 'approved' : 'rejected' };
+            delivered = job.status === 'accepted'
+              ? await telegramNotifications?.notifyApplicationAccepted(input)
+              : await telegramNotifications?.notifyApplicationRejected(input);
+          }
+          if (delivered === false) throw new Error('Application notification not delivered');
+          job.remaining = job.remaining.filter((item: string) => item !== target);
+          persist();
+        } catch (error) { console.warn(`Application ${application.id} ${target} delivery failed:`, error); }
+      }
+      job.attempts++;
+      job.nextAttemptAt = Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(job.attempts, 6));
+      persist();
+    } finally { deliveryLocks.delete(key); }
+  }
+
+  async function retryPending(guild: any): Promise<void> {
+    for (const application of storage.listRecentApplications?.(Number.MAX_SAFE_INTEGER) || []) {
+      if (decisionLocks.has(`${guild.id}:${application.id}`)) continue;
+      if (application.status === 'pending' && !application.ticketMessageId && !application.ticketThreadId) {
+        const key = `${guild.id}:${application.discordId}`;
+        if (submissionLocks.has(key)) continue;
+        submissionLocks.add(key);
+        try {
+          const user = await client.users?.fetch?.(application.discordId).catch(() => null);
+          const channel = await fetchTextChannel(guild, applicationsChannelId);
+          if (user && channel) {
+            await createApplicationReviewCard(channel, application, user);
+            storage.setCooldown(application.discordId);
+            storage.setApplicationDraft?.(application.discordId, null);
+            persist();
+          }
+        } catch (error) { console.warn('Pending application publication failed:', error); }
+        finally { submissionLocks.delete(key); }
+      }
+      if (application.decisionDelivery?.remaining.length) await deliverDecision(application, guild);
+    }
   }
 
   function messageUrl(guildId: string, channelId?: string, messageId?: string): string {
@@ -375,7 +454,8 @@ export function createApplicationsService({
     cleanupExpiredApplicationDrafts();
     const key = draftKey(interaction);
     const isDetailsStep = interaction.customId === 'family_apply_details_modal';
-    const draft = isDetailsStep ? applicationDrafts.get(key) : null;
+    const savedDraft = storage.getApplicationDraft?.(interaction.user.id);
+    const draft = isDetailsStep ? (applicationDrafts.get(key) || (savedDraft && Date.now() - savedDraft.createdAt <= APPLICATION_DRAFT_TTL_MS ? savedDraft : null)) : null;
     if (isDetailsStep && !draft) {
       return interaction.reply(ephemeral({ content: 'Черновик заявки устарел. Нажмите «Подать заявку» и заполните форму заново.' }));
     }
@@ -406,7 +486,8 @@ export function createApplicationsService({
     const { nickname, level, inviter, discovery, about, values, development, strengths } = sanitized;
     const channel = await fetchTextChannel(interaction.guild, applicationsChannelId);
     if (!channel) return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
-    const applicationId = pendingSubmissions.get(key) || storage.createApplication({
+    const unpublished = storage.listRecentApplications?.(Number.MAX_SAFE_INTEGER).find(app => app.discordId === interaction.user.id && app.status === 'pending' && !app.ticketMessageId && !app.ticketThreadId);
+    const applicationId = pendingSubmissions.get(key) || unpublished?.id || storage.createApplication({
       userId: interaction.user.id,
       discordUsername: interaction.user.globalName || interaction.user.username || interaction.user.tag || '',
       nickname,
@@ -420,6 +501,7 @@ export function createApplicationsService({
     });
     pendingSubmissions.set(key, applicationId);
     const application = storage.findApplication(applicationId);
+    persist();
     if (!channel || !application) {
       return interaction.reply(ephemeral({ content: copy.applications.channelMissing }));
     }
@@ -432,7 +514,9 @@ export function createApplicationsService({
     }
     pendingSubmissions.delete(key);
     applicationDrafts.delete(key);
+    storage.setApplicationDraft?.(interaction.user.id, null);
     storage.setCooldown(interaction.user.id);
+    persist();
     const reviewUrl = messageUrl(interaction.guild.id, channel.id, reviewMessage?.id);
 
     await notifyTelegram(telegramNotifications?.notifyApplicationCreated({
@@ -530,18 +614,9 @@ export function createApplicationsService({
     await targetMessage.edit({ embeds: [accepted], components: [] });
     storage.setApplicationStatus(application, 'accepted', interaction.user.id);
     ticketService?.markDecision(application, 'approved', interaction.user.username || interaction.user.id);
-    await notifyDecision(() => sendAcceptLog(interaction.guild, member, interaction.user, reason, rankName));
-    await notifyAcceptanceDm(interaction, member, userId, reason, rankName, applicationUrl);
+    queueDecision(application, 'accepted', interaction, reason, rankName, applicationUrl);
     await interaction.reply(ephemeral({ content: copy.applications.acceptedReply(userId) }));
-    await notifyTelegram(telegramNotifications?.notifyApplicationAccepted({
-      application,
-      guild: interaction.guild,
-      candidate: member.user || { id: userId, username: member.displayName },
-      moderator: interaction.user,
-      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null),
-      reason,
-      status: 'approved'
-    }));
+    await deliverDecision(application, interaction.guild, interaction.user, member);
     await cleanupAcceptedTicket(interaction.guild, application, interaction.channel);
     return true;
   }
@@ -632,39 +707,9 @@ export function createApplicationsService({
     await targetMessage.edit({ embeds: [rejected], components: [] });
     storage.setApplicationStatus(application, 'rejected', interaction.user.id);
     ticketService?.markDecision(application, 'rejected', interaction.user.username || interaction.user.id);
-
-    if (user && logChannelId) {
-      await notifyDecision(async () => {
-        const channel = await fetchTextChannel(interaction.guild, logChannelId);
-        if (channel) await channel.send({
-          embeds: [
-            embeds.buildRejectLogEmbed({
-              user,
-              moderatorUser: interaction.user,
-              reason
-            })
-          ]
-        });
-      });
-    }
-
-    await notifyDiscordDm(sendRejectionDm({
-      guild: interaction.guild,
-      user: user || { id: userId },
-      moderatorUser: interaction.user,
-      reason,
-      applicationUrl
-    }));
+    queueDecision(application, 'rejected', interaction, reason, '', applicationUrl);
     await interaction.reply(ephemeral({ content: copy.applications.rejectedReply(userId) }));
-    await notifyTelegram(telegramNotifications?.notifyApplicationRejected({
-      application,
-      guild: interaction.guild,
-      candidate: user || { id: userId },
-      moderator: interaction.user,
-      ticketChannel: interaction.channel || (application.ticketThreadId ? { id: application.ticketThreadId } : null),
-      reason,
-      status: 'rejected'
-    }));
+    await deliverDecision(application, interaction.guild, interaction.user, { id: userId, user: user || { id: userId } });
     return true;
   }
 
@@ -750,6 +795,7 @@ export function createApplicationsService({
       about,
       createdAt: Date.now()
     });
+    storage.setApplicationDraft?.(interaction.user.id, applicationDrafts.get(draftKey(interaction))!);
 
     return interaction.showModal(embeds.buildApplyDetailsModal());
   }
@@ -764,6 +810,7 @@ export function createApplicationsService({
     }) as T;
   }
   return {
+    retryPending,
     accept: guardedDecision(accept),
     closeTicket,
     getCooldownSecondsLeft,
@@ -771,7 +818,13 @@ export function createApplicationsService({
     reject: guardedDecision(reject),
     sendApplyPanel,
     continueApplication,
-    submitApplication
+    async submitApplication(interaction: any) {
+      const key = draftKey(interaction);
+      if (submissionLocks.has(key)) return interaction.reply(ephemeral({ content: 'Заявка уже отправляется. Дождись результата.' }));
+      submissionLocks.add(key);
+      try { return await submitApplication(interaction); }
+      finally { submissionLocks.delete(key); }
+    }
   };
 }
 

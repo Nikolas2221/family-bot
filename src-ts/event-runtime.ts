@@ -891,7 +891,7 @@ async function handleInactiveMembersRequest(
         Number(data.lastSeenAt) || 0,
         Number(data.lastMessageAt) || 0,
         Number(data.lastVoiceAt) || 0
-      );
+      ) || observed;
       return lastActivity > 0 && lastActivity < threshold;
     })
     .sort((left, right) => (Number(left.data.lastSeenAt) || 0) - (Number(right.data.lastSeenAt) || 0));
@@ -906,7 +906,7 @@ async function handleInactiveMembersRequest(
 
   const ids = inactive.map(item => item.member.id);
   const inactiveAiProfiles = inactive.map(({ member, data }, index) => {
-    const lastActivity = Math.max(Number(data.lastSeenAt) || 0, Number(data.lastMessageAt) || 0, Number(data.lastVoiceAt) || 0);
+    const lastActivity = Math.max(Number(data.lastSeenAt) || 0, Number(data.lastMessageAt) || 0, Number(data.lastVoiceAt) || 0) || Number(data.observedSince) || 0;
     const inactiveForDays = lastActivity ? Math.max(0, Math.floor((Date.now() - lastActivity) / (24 * 60 * 60 * 1000))) : -1;
     const publicName = member.displayName || member.user?.globalName || member.user?.username || member.id;
     return `${index + 1}) ${publicName}; Discord ID=${member.id}; сообщений=${Number(data.messageCount) || 0}; голос=${Number(data.voiceMinutes) || 0} мин; баллы=${Number(data.points) || 0}; выговоры=${Number(data.warns) || 0}; похвалы=${Number(data.commends) || 0}; неактивность=${inactiveForDays < 0 ? 'нет данных' : `${inactiveForDays} дн.`}`;
@@ -974,7 +974,7 @@ async function handleInactiveMembersRequest(
         Number(data.lastSeenAt) || 0,
         Number(data.lastMessageAt) || 0,
         Number(data.lastVoiceAt) || 0
-      );
+      ) || Number(data.observedSince) || 0;
       const inactiveDays = Math.max(1, Math.floor((Date.now() - lastActivity) / (24 * 60 * 60 * 1000)));
       return `${index + 1}. <@${member.id}> — нет активности ${inactiveDays} дн.`;
     });
@@ -2043,10 +2043,10 @@ function parseNaturalModerationAction(prompt: string): 'ban' | 'kick' | 'mute' |
   if (/(?:^|\s)(?:не|нельзя|зачем|почему|объясни|расскажи|что значит|как)(?:\s|$)/u.test(text)) return '';
   if (/(^|\s)(размуть|размут|unmute)(\s|$)/u.test(text)) return 'unmute';
   if (/(сними|снять|убери|убрать)\s+(мут|timeout|таймаут|наказание)/u.test(text)) return 'unmute';
-  if (/(^|\s)(забань|бан|ban)(\s|$)/u.test(text)) return 'ban';
-  if (/(^|\s)(кикни|кик|kick)(\s|$)/u.test(text)) return 'kick';
-  if (/(^|\s)(замуть|мут|mute|timeout|накажи|наказание)(\s|$)/u.test(text)) return 'mute';
-  if (/(нарушил|нарушение|получил мут|выдай мут)/u.test(text) && findDiscordRule(text)) return 'mute';
+  if (/(^|\s)(забань|забаньте|ban)(\s|$)/u.test(text) || /(?:выдай|примени)\s+бан(?:\s|$)/u.test(text)) return 'ban';
+  if (/(^|\s)(кикни|кикните|kick)(\s|$)/u.test(text)) return 'kick';
+  if (/(^|\s)(замуть|замутите|mute|timeout)(\s|$)/u.test(text) || /(?:выдай|примени)\s+(?:мут|таймаут)(?:\s|$)/u.test(text)) return 'mute';
+  if (/(?:^|\s)накажи(?:\s|$)/u.test(text) && findDiscordRule(text)) return 'mute';
   return '';
 }
 
@@ -2242,6 +2242,12 @@ async function handleNaturalAdminCommand(
   }
 
   if (action) {
+    const mentionedActions = new Set((prompt.toLowerCase().match(/(?:забань|забаньте|кикни|кикните|замуть|замутите|размуть)/gu) || []).map(word =>
+      word.startsWith('забан') ? 'ban' : word.startsWith('кик') ? 'kick' : word.startsWith('разм') ? 'unmute' : 'mute'));
+    if (mentionedActions.size > 1) {
+      await message.channel.send?.({ content: 'В запросе несколько разных действий. Укажи одно действие и одного участника.', allowedMentions: { parse: [] } });
+      return true;
+    }
     const targets = parseTargetUserIds(message.content, botId);
     if (targets.length > 1) {
       await message.channel.send?.({ content: 'Укажи одного участника для этого действия.', allowedMentions: { parse: [] } });

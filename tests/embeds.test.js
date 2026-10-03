@@ -396,6 +396,9 @@ async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
     semver: '1.0.3',
     buildId: 'abc123',
     commitMessage: 'embed update',
+    title: 'KLAIZ | Test release',
+    color: '#ef4444',
+    imageUrl: 'https://example.com/update.png',
     changeLines: {
       added: [],
       updated: ['окно обновлений'],
@@ -404,6 +407,9 @@ async function testUpdateAnnouncementEmbedShowsStructuredChanges() {
   }).toJSON();
 
   const fields = embed.fields || [];
+  assert.equal(embed.title, 'KLAIZ | Test release');
+  assert.equal(embed.color, 0xef4444);
+  assert.equal(embed.image.url, 'https://example.com/update.png');
   const updatedField = fields.find(field => field.name === 'Обновлено');
   const fixedField = fields.find(field => field.name === 'Исправлено');
 

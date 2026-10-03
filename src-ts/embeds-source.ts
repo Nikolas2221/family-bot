@@ -1117,7 +1117,7 @@ export function buildHelpPaginationButtons(catalog: AnyRecord = {}, page = 0): B
   ];
 }
 
-export function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMessage = '', changeLines = {} }: AnyRecord): EmbedBuilder {
+export function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, commitMessage = '', changeLines = {}, title = 'KLAIZ BOT | Обновление системы', color = '#10b981', imageUrl = '' }: AnyRecord): EmbedBuilder {
   const groups = Array.isArray(changeLines)
     ? { added: changeLines, updated: [], fixed: [] }
     : {
@@ -1128,27 +1128,23 @@ export function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, co
 
   const hasChanges = groups.added.length || groups.updated.length || groups.fixed.length;
   const embed = card({
-    title: '🚀 Бот получил обновление',
-    color: THEME.gold,
-    description: `${text(versionLabel)}\nСборка успешно развернута на сервере.`,
-    footer: `${BRAND_FOOTER} • Updates`
+    title: text(title).slice(0, 256),
+    color: /^#?[0-9a-f]{6}$/iu.test(String(color)) ? parseInt(String(color).replace('#', ''), 16) : THEME.emerald,
+    description: `**${text(versionLabel)}**\nНовые возможности и исправления этого выпуска.`,
+    footer: `${BRAND_FOOTER} • Обновления`
   });
 
   embed.addFields(
-    section('Версия', [`Лейбл: ${text(versionLabel)}`, `Semver: ${semver}`, `Build: ${buildId}`].join('\n'), true),
-    section('Коммит', trimValue(commitMessage || 'deploy update'), true)
+    section('Версия', text(semver), true),
+    section('Сборка', trimValue(buildId), true)
   );
+  if (/^https?:\/\//iu.test(String(imageUrl))) embed.setImage(String(imageUrl));
 
   if (groups.added.length) embed.addFields(section('Добавлено', updateGroupLines(groups.added)));
   if (groups.updated.length) embed.addFields(section('Обновлено', updateGroupLines(groups.updated)));
   if (groups.fixed.length) embed.addFields(section('Исправлено', updateGroupLines(groups.fixed)));
 
-  embed.addFields(section(
-    'Итог',
-    hasChanges
-      ? 'Обновление успешно применено и разложено по понятным пунктам.'
-      : 'Список изменений не передан, но сборка успешно развернута.'
-  ));
+  if (!hasChanges) embed.addFields(section('Изменения', 'Подробности этого выпуска не указаны.'));
 
   return embed;
 }

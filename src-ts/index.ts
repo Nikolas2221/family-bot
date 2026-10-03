@@ -1502,7 +1502,10 @@ async function runAfkWarnings(guildId: any) {
     if (member.user?.bot || !hasFamilyRole(member)) continue;
 
     const memberData = guildStorage.ensureMemberRecord(member.id);
-    const inactiveMs = Date.now() - Number(memberData.lastSeenAt || 0);
+    const activityAnchor = Math.max(Number(memberData.lastSeenAt) || 0, Number(memberData.lastMessageAt) || 0, Number(memberData.lastVoiceAt) || 0)
+      || Number(memberData.observedSince) || 0;
+    if (!activityAnchor) continue;
+    const inactiveMs = Date.now() - Math.max(activityAnchor, Number(member.joinedTimestamp) || 0);
 
     if (inactiveMs < AFK_WARNING_THRESHOLD_MS) {
       guildStorage.clearAfkWarningSent(member.id);
@@ -1556,7 +1559,23 @@ registerClientReadyRuntime({
   startVoiceSession
 });
 
+let applicationRecoveryRunning = false;
+async function recoverApplicationDeliveries(): Promise<void> {
+  if (applicationRecoveryRunning || !client.isReady()) return;
+  applicationRecoveryRunning = true;
+  try {
+    for (const guild of client.guilds.cache.values()) {
+      await getApplicationsService(guild.id).retryPending(guild).catch((error: unknown) => {
+        console.warn('Application recovery failed:', error);
+      });
+    }
+  } finally { applicationRecoveryRunning = false; }
+}
+const applicationRecoveryTimer = setInterval(() => { void recoverApplicationDeliveries(); }, 60000);
+applicationRecoveryTimer.unref();
+
 client.once('clientReady', () => {
+  void recoverApplicationDeliveries();
   serverBackupService.startAutoBackups();
   familyCabinetService.startAutoSync();
   voiceRoomsService.reconcileAll().catch((error: unknown) => {
@@ -1617,6 +1636,7 @@ registerEventRuntime({
 });
 
 process.on('SIGINT', () => {
+  clearInterval(applicationRecoveryTimer);
   stopTelegramBot(telegramBot, 'SIGINT');
   ticketService.stop();
   serverBackupService.stopAutoBackups();
@@ -1629,6 +1649,7 @@ process.on('SIGINT', () => {
 });
 
 process.on('SIGTERM', () => {
+  clearInterval(applicationRecoveryTimer);
   stopTelegramBot(telegramBot, 'SIGTERM');
   ticketService.stop();
   serverBackupService.stopAutoBackups();
@@ -1764,8 +1785,8 @@ registerInteractionRuntime({
     healthLines: () => [
       `Discord: ${client.isReady() ? 'подключён' : 'нет соединения'}; ping ${client.ws.ping} мс`,
       `Telegram: ${require('./telegram/bot').telegramHealth(telegramBot)}`,
-      `ИИ: ${config.aiEnabled ? 'включён; доступность провайдера проверяется при запросе' : 'выключен'}`,
-      `Хранилище: ${storage.getStore() ? 'загружено' : 'недоступно'}`,
+      ...aiService.healthLines(),
+      ...storage.healthLines(),
       ...familyCabinetService.statusLines().filter((line: string) => !line.startsWith('Файл') && !line.startsWith('Scraper'))
     ]
   });

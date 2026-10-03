@@ -80,21 +80,27 @@ export class FamilyCabinetService {
   private stopped = false;
   private nextSyncAt = 0;
   private lastFailureNotice = { text: '', at: 0 };
+  private storageError = '';
 
   constructor(
     private readonly client: any,
     private readonly config: FamilyCabinetConfig
   ) {
-    this.state = this.loadState();
+    try { this.state = this.loadState(); }
+    catch (error) {
+      this.storageError = error instanceof Error ? error.message : String(error);
+      this.state = defaultState();
+    }
   }
 
   isEnabled(): boolean {
-    return this.config.enabled;
+    return this.config.enabled && !this.storageError;
   }
 
   statusLines(): string[] {
     const lastRun = this.state.syncRuns[0];
     return [
+      this.storageError ? `Хранилище Majestic недоступно: ${this.storageError}` : '',
       `Статус: ${this.config.enabled ? 'включён' : 'выключен'}`,
       `Live-sync: ${this.config.syncEnabled ? 'включён' : 'выключен'}`,
       `Сохранено действий: ${this.state.actions.length}`,
@@ -114,7 +120,7 @@ export class FamilyCabinetService {
   }
 
   startAutoSync(): void {
-    if (!this.config.enabled || !this.config.syncEnabled || this.timer) return;
+    if (this.storageError || !this.config.enabled || !this.config.syncEnabled || this.timer) return;
     this.stopped = false;
     void this.runSync('startup').catch(error => {
       console.error('[family-cabinet] startup sync failed:', error);
@@ -154,6 +160,10 @@ export class FamilyCabinetService {
   }
 
   async runSync(reason = 'manual'): Promise<FamilyCabinetSyncRun> {
+    if (this.storageError) {
+      const now = new Date().toISOString();
+      return { status: 'failed', startedAt: now, finishedAt: now, logsReceived: 0, logsCreated: 0, logsSkipped: 0, logsDelivered: 0, logsDeliveryFailed: 0, errorMessage: this.storageError };
+    }
     if (!this.config.enabled) {
       return this.recordRun('disabled', 0, 0, 0, 'FAMILY_CABINET_ENABLED не true.');
     }
@@ -471,6 +481,7 @@ export class FamilyCabinetService {
   }
 
   private saveState(): void {
+    if (this.storageError) throw new Error(this.storageError);
     fs.mkdirSync(path.dirname(this.config.dataFile), { recursive: true });
     const temporary = `${this.config.dataFile}.tmp`;
     const serialized = JSON.stringify(this.state, null, 2);

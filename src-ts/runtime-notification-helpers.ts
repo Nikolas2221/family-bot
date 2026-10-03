@@ -35,6 +35,7 @@ interface GuildSettingsLike {
     reports?: string;
   };
   visuals: {
+    familyBanner?: string;
     applicationsBanner?: string;
   };
   welcome: {
@@ -338,11 +339,12 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     const { channels } = resolveGuildSettings(guild.id);
     if (!channels.logs) return;
     const channel = await fetchTextChannel(guild, channels.logs);
-    if (!channel) return;
+    if (!channel) return false;
 
     await channel.send({
       embeds: [embeds.buildAcceptLogEmbed({ member, moderatorUser, reason, rankName })]
     });
+    return true;
   }
 
   async function sendDisciplineLog(guild: Guild, embed: EmbedBuilder) {
@@ -416,7 +418,10 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
               semver: productVersionSemver,
               buildId: deployBuildId,
               commitMessage: deployCommitMessage,
-              changeLines
+              changeLines,
+              title: process.env.UPDATE_CARD_TITLE || 'KLAIZ BOT | Обновление системы',
+              color: process.env.UPDATE_CARD_COLOR || '#10b981',
+              imageUrl: process.env.UPDATE_CARD_BANNER_URL || resolveGuildSettings(guild.id).visuals?.familyBanner || ''
             })
           ]
         }).then(() => true).catch(error => {

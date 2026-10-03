@@ -270,6 +270,7 @@ export interface MemberRecommendationInput {
 }
 
 export interface AIService {
+  healthLines?(): string[];
   aiText(systemPrompt: string, userPrompt: string): Promise<string>;
   analyzeApplication(application: ApplicationAnalysisInput): Promise<string>;
   analyzeMember(profile: MemberRecommendationInput): Promise<string>;
@@ -283,6 +284,7 @@ export interface EmbedsApi {
 }
 
 export interface ApplicationsService {
+  retryPending(guild: any): Promise<void>;
   accept(interaction: unknown, applicationId: string, userId: string, details?: Record<string, unknown>): Promise<unknown>;
   closeTicket(interaction: unknown, applicationId: string, details?: { reason?: string }): Promise<unknown>;
   getCooldownSecondsLeft(userId: string, cooldownMs: number): number;
@@ -654,6 +656,16 @@ export interface MemberRecord {
 }
 
 export interface ApplicationRecord {
+  decisionDelivery?: {
+    status: 'accepted' | 'rejected';
+    moderatorId: string;
+    reason: string;
+    rankName: string;
+    applicationUrl: string;
+    remaining: string[];
+    attempts: number;
+    nextAttemptAt: number;
+  };
   id: string;
   guildId?: string;
   discordId: string;
@@ -759,6 +771,7 @@ export interface GuildPeriodAnalytics {
 }
 
 export interface StoreState {
+  applicationDrafts?: Record<string, Record<string, any>>;
   members: Record<string, MemberRecord>;
   analytics: {
     daily: Record<string, GuildDailyAnalytics>;
@@ -862,6 +875,7 @@ export type SanitizedApplicationInput =
     };
 
 export interface StorageApi {
+  healthLines(): string[];
   getStore(): StoreState;
   save(): void;
   flush(): void;
@@ -905,6 +919,10 @@ export interface StorageApi {
 }
 
 export interface GuildStorageContext {
+  save(): void;
+  flush(): void;
+  getApplicationDraft(userId: string): Record<string, any> | null;
+  setApplicationDraft(userId: string, draft: Record<string, any> | null): void;
   ensureMemberRecord(memberId: string): MemberRecord;
   getActivityScore(memberId: string): number;
   getPointsScore(memberId: string): number;
