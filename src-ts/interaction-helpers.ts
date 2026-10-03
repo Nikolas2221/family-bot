@@ -11,7 +11,7 @@ export interface CleanupInteractionLike {
   webhook?: WebhookLike | null;
 }
 
-export function ephemeral<T extends Record<string, unknown> = Record<string, unknown>>(payload: T = {} as T): T & { flags: MessageFlags } {
+export function ephemeral<T extends object = Record<string, unknown>>(payload: T = {} as T): T & { flags: MessageFlags.Ephemeral } {
   return { ...payload, flags: MessageFlags.Ephemeral };
 }
 

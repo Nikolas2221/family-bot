@@ -1,4 +1,5 @@
 import { ChannelType, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
+import { trackWork } from './shutdown';
 
 type BackupConfig = {
   enabled: boolean;
@@ -348,7 +349,7 @@ export function createServerBackupService({ client, config }: { client: any; con
     const intervalMs = Math.max(1, Number(config.intervalHours) || 48) * 60 * 60 * 1000;
 
     const runAutoBackup = (reason: string) => {
-      void (async () => {
+      void trackWork(async () => {
         for (const guild of client.guilds.cache.values()) {
           if (authenticationFailed) break;
           const result = await createBackup(guild, reason);
@@ -358,7 +359,7 @@ export function createServerBackupService({ client, config }: { client: any; con
             console.error(`Auto server backup failed for ${guild.id}:`, result.error);
           }
         }
-      })().catch(error => {
+      }).catch(error => {
         console.error('Auto server backup scheduler failed:', error);
       });
     };

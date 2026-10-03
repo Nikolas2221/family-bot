@@ -1,4 +1,5 @@
 import type { ApplicationRecord, StorageApi } from '../types';
+import { trackWork } from './shutdown';
 import type { TelegramNotificationService } from '../telegram';
 
 interface DiscordChannelLike {
@@ -175,7 +176,7 @@ export function createTicketService(options: {
     if (!pendingTimers.has(application.id)) {
       const delay = Math.max(1, notificationWindowMs - elapsed);
       pendingTimers.set(application.id, setTimeout(() => {
-        void flushPending(application, message.guild!.id!).catch(error => {
+        void trackWork(() => flushPending(application, message.guild!.id!)).catch(error => {
           console.warn('Telegram ticket digest failed:', error);
         });
       }, delay));

@@ -1,8 +1,12 @@
 import { Telegraf } from 'telegraf';
+import { trackWork } from '../services/shutdown';
 
 export function createTelegramBot(token?: string): Telegraf | null {
   const normalized = String(token || '').trim();
-  return normalized ? new Telegraf(normalized) : null;
+  if (!normalized) return null;
+  const bot = new Telegraf(normalized);
+  bot.use(async (_context, next) => { await trackWork(next); });
+  return bot;
 }
 
 const runs = new WeakMap<Telegraf, { stopped: boolean; timer?: ReturnType<typeof setTimeout>; pending: Promise<boolean> }>();

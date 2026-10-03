@@ -2,6 +2,8 @@
 
 import path from 'node:path';
 import { createRuntimeHealthServer } from './services/runtime-health';
+import { ActionJournal } from './services/action-journal';
+import { drainWork, isStopping, trackWork } from './services/shutdown';
 import { Client, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
 import { createAIService } from './ai';
 import { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } from './automod';
@@ -34,7 +36,7 @@ import { createFamilyCabinetService } from './modules/familyCabinet';
 import { refreshLegacyBrandMessages } from './services/brand-refresh';
 import { createAccessApi } from './access';
 import { registerClientReadyRuntime } from './client-ready-runtime';
-import { registerEventRuntime } from './event-runtime';
+import { configureActionJournal, registerEventRuntime } from './event-runtime';
 import { registerInteractionRuntime } from './interaction-runtime';
 import { handleCommandRuntime } from './command-runtime';
 import {
@@ -293,7 +295,7 @@ const accessApi = createAccessApi({
   resolveGuildSettings: guildRuntime.resolveGuildSettings
 });
 
-function ephemeral(payload = {}) {
+function ephemeral<T extends object>(payload: T) {
   return makeEphemeral(payload);
 }
 
@@ -1501,7 +1503,7 @@ async function recoverApplicationDeliveries(): Promise<void> {
     }
   } finally { applicationRecoveryRunning = false; }
 }
-const applicationRecoveryTimer = setInterval(() => { void recoverApplicationDeliveries(); }, 60000);
+const applicationRecoveryTimer = setInterval(() => { void trackWork(recoverApplicationDeliveries); }, 60000);
 applicationRecoveryTimer.unref();
 
 client.once('clientReady', () => {
@@ -1521,6 +1523,11 @@ function isActivityExempt(guildId: string, userId: string): boolean {
   });
 }
 
+const actionJournal = new ActionJournal(`${DATA_FILE}.actions.json`);
+configureActionJournal(actionJournal);
+for (const job of actionJournal.list().filter(job => job.status === 'interrupted')) {
+  console.warn(`Interrupted action ${job.id}: guild=${job.guildId}, delivered=${Object.values(job.recipients).filter(status => status === 'delivered').length}, uncertain=${Object.values(job.recipients).filter(status => status === 'sending').length}`);
+}
 registerEventRuntime({
   isActivityExempt,
   client,
@@ -1569,31 +1576,33 @@ registerEventRuntime({
   handleVoiceRoomsVoiceStateUpdate: (oldState: any, newState: any) => voiceRoomsService.handleVoiceStateUpdate(oldState, newState)
 });
 
-process.on('SIGINT', () => {
+let shutdownStarted = false;
+async function shutdown(signal: string): Promise<void> {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  const hardDeadline = setTimeout(() => process.exit(1), 25000);
+  hardDeadline.unref();
+  const drained = drainWork();
   clearInterval(applicationRecoveryTimer);
-  stopTelegramBot(telegramBot, 'SIGINT');
-  ticketService.stop();
-  serverBackupService.stopAutoBackups();
-  familyCabinetService.stop();
-  voiceRoomsService.stop();
-  flushVoiceSessions();
-  database.flush();
-  storage.flush();
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  clearInterval(applicationRecoveryTimer);
-  stopTelegramBot(telegramBot, 'SIGTERM');
-  ticketService.stop();
-  serverBackupService.stopAutoBackups();
-  familyCabinetService.stop();
-  voiceRoomsService.stop();
-  flushVoiceSessions();
-  database.flush();
-  storage.flush();
-  process.exit(0);
-});
+  const results = await Promise.allSettled([
+    () => stopTelegramBot(telegramBot, signal),
+    () => ticketService.stop(),
+    () => serverBackupService.stopAutoBackups(),
+    () => familyCabinetService.stop(),
+    () => voiceRoomsService.stop()
+  ].map(stop => Promise.resolve().then(stop)));
+  let failed = results.some(result => result.status === 'rejected');
+  if (!(await drained)) { failed = true; console.error('Shutdown drain timed out; inspect interrupted action journal.'); }
+  for (const flush of [flushVoiceSessions, () => database.flush(), () => storage.flush()]) {
+    try { flush(); } catch (error) { failed = true; console.error('Shutdown flush failed:', error); }
+  }
+  await client.destroy();
+  if (healthServer?.listening) await new Promise<void>(resolve => healthServer.close(() => resolve()));
+  clearTimeout(hardDeadline);
+  process.exit(failed ? 1 : 0);
+}
+process.once('SIGINT', () => { void shutdown('SIGINT'); });
+process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
 
 process.on('beforeExit', () => {
   flushVoiceSessions();
@@ -1755,7 +1764,7 @@ registerInteractionRuntime({
 
 const healthPort = Number(process.env.PORT || 0);
 const healthServer = healthPort ? createRuntimeHealthServer(() => ({
-  ready: client.isReady(),
+  ready: client.isReady() && !isStopping(),
   storageWritable: storage.healthStatus().writable && !storage.healthStatus().hasWriteError
 })) : null;
 if (healthServer) {
@@ -1764,8 +1773,6 @@ if (healthServer) {
     process.exit(1);
   });
   healthServer.listen(healthPort, '0.0.0.0');
-  process.once('SIGTERM', () => healthServer.close());
-  process.once('SIGINT', () => healthServer.close());
 }
 
 client.login(config.token).then(() => startTelegramBot(telegramBot)).catch((error: unknown) => {

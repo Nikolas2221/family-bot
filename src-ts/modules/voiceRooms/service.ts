@@ -3,6 +3,7 @@ import {
   PermissionFlagsBits
 } from 'discord.js';
 import type { VoiceRoomsConfig } from '../../types';
+import { trackWork } from '../../services/shutdown';
 import { VoiceRoomsStore, type VoiceRoomRecord } from './store';
 import {
   buildVoiceControlPanelComponents,
@@ -259,14 +260,14 @@ export class VoiceRoomsService {
 
   scheduleEmptyRoomCleanup(guild: any, channelId: string): void {
     if (this.cleanupTimers.has(channelId)) return;
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => { void trackWork(async () => {
       this.cleanupTimers.delete(channelId);
       const room = this.store.getRoomByChannelId(channelId);
       const channel = guild.channels.cache.get(channelId);
       if (!room || room.status !== 'active') return;
       if (channel?.type === ChannelType.GuildVoice && channel.members.size > 0) return;
       await this.deleteRoom(guild, channelId, 'комната пустая');
-    }, this.config.emptyRoomGraceMs);
+    }).catch(error => console.error('Voice room cleanup failed:', error)); }, this.config.emptyRoomGraceMs);
     this.cleanupTimers.set(channelId, timer);
   }
 

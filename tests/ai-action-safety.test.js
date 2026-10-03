@@ -1,6 +1,10 @@
 const assert = require('node:assert/strict');
 const { PermissionFlagsBits } = require('discord.js');
-const { executePendingBrainAction, handleInactiveMembersRequest } = require('../dist-ts/event-runtime');
+const { executePendingBrainAction, handleInactiveMembersRequest, configureActionJournal } = require('../dist-ts/event-runtime');
+const { ActionJournal } = require('../dist-ts/services/action-journal');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { assessInactivity } = require('../dist-ts/activity-policy');
 
 async function main() {
@@ -80,6 +84,36 @@ async function main() {
   await executePendingBrainAction(message, `confirm ${failedCode}`, pending, options);
   assert.equal(brain.audit.at(-1).status, 'failed');
   assert.equal(cooldowns.size, 0, 'failed delivery must not set cooldown');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await handleInactiveMembersRequest(message, 'тегни неактивных за 7 дней', options, pending);
+    const pingCode = Array.from(pending.keys())[0];
+    assert.ok(pingCode);
+    await executePendingBrainAction(message, `confirm ${pingCode}`, pending, options);
+  }
+  assert.equal(replies.filter(payload => payload.allowedMentions?.users?.includes('recipient')).length, 1, 'repeat mass pings must respect the cooldown');
+
+  await handleInactiveMembersRequest(message, 'тегни неактивных за 7 дней', options, pending);
+  const brokenCode = Array.from(pending.keys())[0];
+  const fetch = guild.members.fetch;
+  guild.members.fetch = async id => { if (!id) throw new Error('members unavailable'); return fetch(id); };
+  await executePendingBrainAction(message, `confirm ${brokenCode}`, pending, options);
+  assert.equal(brain.audit.at(-1).status, 'failed', 'unexpected failures must receive a final audit status');
+  assert.match(replies.at(-1).content, /Рассылка прервана/);
+  guild.members.fetch = fetch;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bulk-restart-'));
+  try {
+    const file = path.join(dir, 'actions.json');
+    configureActionJournal(new ActionJournal(file));
+    let deliveries = 0;
+    recipient.user.send = async () => { deliveries++; };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      cooldowns.clear();
+      await handleInactiveMembersRequest(message, 'отправь неактивным за 7 дней в лс', options, pending);
+      await executePendingBrainAction(message, `confirm ${Array.from(pending.keys())[0]}`, pending, options);
+      configureActionJournal(new ActionJournal(file));
+    }
+    assert.equal(deliveries, 1, 'persistent recipient journal prevents duplicates even if the main cooldown write was lost');
+  } finally { configureActionJournal(undefined); fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 module.exports = { main };

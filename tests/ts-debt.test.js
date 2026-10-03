@@ -28,6 +28,7 @@ async function main() {
   const cardStyle = fs.readFileSync(path.join(srcTsDir, 'card-style.ts'), 'utf8');
   assert.doesNotMatch(cardStyle, /\bany\b/, 'card-style must preserve factory types without any');
   const commandRuntime = fs.readFileSync(path.join(srcTsDir, 'command-runtime.ts'), 'utf8');
+  assert.doesNotMatch(fs.readFileSync(path.join(srcTsDir, 'interaction-runtime.ts'), 'utf8'), /\bany\b/, 'interaction handlers must retain typed contracts');
   for (const service of ['copy', 'embeds', 'database', 'storage', 'applicationsService', 'rankService', 'aiService', 'announcementService', 'ticketService', 'guildStorage', 'resolveGuildSettings', 'serverBackupService', 'voiceRoomsService', 'majesticApiService', 'familyCabinetService']) {
     assert.doesNotMatch(commandRuntime, new RegExp(`\\b${service}:\\s*any\\b`), `${service} must have an explicit contract`);
   }

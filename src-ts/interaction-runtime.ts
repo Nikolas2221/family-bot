@@ -1,65 +1,65 @@
 import { PermissionFlagsBits } from 'discord.js';
+import type { Client, Interaction, ChatInputCommandInteraction, ButtonInteraction, Guild, GuildMember, Role, EmbedBuilder, InteractionReplyOptions, TextChannel } from 'discord.js';
+import type { CopyCatalog, EmbedsApi, DatabaseApi, AIService, GuildRecord, GuildStorageContext, ApplicationsService, RankService, RankActionResult, RoleMenu, CustomCommandEntry, ReactionRoleEntry, ReportScheduleSlot } from './types';
+import { trackWork } from './services/shutdown';
 import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { getPlayerData, callAiAdvisor } from './services/aiAdvisor';
 
 interface InteractionRuntimeOptions {
-  client: {
-    removeAllListeners(event: string): unknown;
-    on(event: string, listener: (...args: any[]) => unknown): unknown;
-  };
-  handleCommand(interaction: any): Promise<boolean>;
+  client: Pick<Client, 'removeAllListeners' | 'on'>;
+  handleCommand(interaction: ChatInputCommandInteraction<'cached'>): Promise<boolean>;
   applicationCooldownMs: number;
-  ephemeral(payload: Record<string, unknown>): Record<string, unknown>;
-  copy: any;
-  embeds: any;
-  database: any;
-  aiService: any;
-  EmbedBuilderCtor: new () => any;
-  resolveGuildSettings(guildId: string): any;
-  getGuildRecord(guild: any): any;
-  getGuildStorage(guildId: string): any;
-  getApplicationsService(guildId: string): any;
-  getRankService(guildId: string): any;
-  canDebugConfig(interaction: any): boolean;
-  canApplications(member: any): boolean;
-  canManageRanks(member: any): boolean;
-  canUseSecurity(member: any): boolean;
+  ephemeral(payload: InteractionReplyOptions): InteractionReplyOptions;
+  copy: CopyCatalog;
+  embeds: EmbedsApi;
+  database: DatabaseApi;
+  aiService: AIService;
+  EmbedBuilderCtor: typeof EmbedBuilder;
+  resolveGuildSettings: ReturnType<typeof import('./guild-runtime').createGuildRuntimeApi>['resolveGuildSettings'];
+  getGuildRecord(guild: Guild): GuildRecord | null;
+  getGuildStorage(guildId: string): GuildStorageContext;
+  getApplicationsService(guildId: string): ApplicationsService;
+  getRankService(guildId: string): RankService;
+  canDebugConfig(interaction: Interaction<'cached'>): boolean;
+  canApplications(member: GuildMember): boolean;
+  canManageRanks(member: GuildMember): boolean;
+  canUseSecurity(member: GuildMember): boolean;
   isPremiumGuild(guildId: string): boolean;
-  fetchTextChannel(guild: any, channelId?: string | null): Promise<any>;
-  fetchMemberFast(guild: any, userId: string): Promise<any>;
-  refreshMember(member: any): Promise<any>;
-  sendWelcomeInvite(member: any, memberCount?: number): Promise<unknown>;
-  sendRankDm(guild: any, member: any, result: any): Promise<unknown>;
+  fetchTextChannel(guild: Guild, channelId?: string | null): Promise<TextChannel | null>;
+  fetchMemberFast(guild: Guild, userId: string): Promise<GuildMember | null>;
+  refreshMember(member: GuildMember): Promise<GuildMember>;
+  sendWelcomeInvite(member: GuildMember, memberCount?: number): Promise<unknown>;
+  sendRankDm(guild: Guild, member: GuildMember, result: RankActionResult): Promise<unknown>;
   getVerificationRoleId(guildId: string): string;
-  applyVerificationRole(member: any): Promise<{ ok: boolean; roleId?: string }>;
-  getRoleMenuEntries(guildId: string): any[];
-  findRoleMenu(guildId: string, menuId: string): any;
-  saveRoleMenu(guildId: string, menu: any): void;
+  applyVerificationRole(member: GuildMember): Promise<{ ok: boolean; roleId?: string }>;
+  getRoleMenuEntries(guildId: string): RoleMenu[];
+  findRoleMenu(guildId: string, menuId: string): RoleMenu | null;
+  saveRoleMenu(guildId: string, menu: RoleMenu): void;
   removeRoleMenuItem(guildId: string, menuId: string, roleId: string): void;
-  getCustomCommands(guildId: string): any[];
-  getReactionRoleEntries(guildId: string): any[];
+  getCustomCommands(guildId: string): CustomCommandEntry[];
+  getReactionRoleEntries(guildId: string): ReactionRoleEntry[];
   normalizeReactionEmoji(emojiValue?: string): string;
-  buildProfilePayload(member: any, allowRankButtons: boolean, content?: string): any;
-  buildLeaderboardLines(guild: any, limit?: number): string[];
+  buildProfilePayload(member: GuildMember, allowRankButtons: boolean, content?: string): Pick<InteractionReplyOptions, 'content' | 'embeds' | 'components'>;
+  buildLeaderboardLines(guild: Guild, limit?: number): string[];
   buildLeaderboardSummary: ReturnType<typeof import('./runtime-family-helpers').createFamilyRuntimeHelpers>['buildLeaderboardSummary'];
-  buildVoiceActivityLines(guild: any, limit?: number): string[];
+  buildVoiceActivityLines(guild: Guild, limit?: number): string[];
   buildVoiceActivitySummary: ReturnType<typeof import('./runtime-family-helpers').createFamilyRuntimeHelpers>['buildVoiceActivitySummary'];
-  buildPremiumActivityReportEmbed(guild: any, targetMember?: any): any;
-  buildAiAdvisorEmbed(guild: any, member: any): Promise<any>;
-  resolveMemberQuery(guild: any, query: string, fallbackUserId?: string): Promise<any>;
-  formatRankResult(userId: string, result: any): string;
+  buildPremiumActivityReportEmbed(guild: Guild, targetMember?: GuildMember): EmbedBuilder;
+  buildAiAdvisorEmbed(guild: Guild, member: GuildMember): Promise<EmbedBuilder>;
+  resolveMemberQuery(guild: Guild, query: string, fallbackUserId?: string): Promise<GuildMember | null>;
+  formatRankResult(userId: string, result: RankActionResult): string;
   syncAutoRanks(guildId: string, reason?: string): Promise<unknown>;
   doPanelUpdate(guildId: string, force?: boolean): Promise<unknown>;
-  sendScheduledReport(guild: any, period: string, channelId: string): Promise<boolean>;
-  getHelpCatalog(interaction: any): any;
-  supportTicketService: { handleInteraction(interaction: any): Promise<boolean> };
-  afkLeaveService: { handleInteraction(interaction: any): Promise<boolean> };
-  reportRequestService: { handleInteraction(interaction: any): Promise<boolean> };
-  mediaShareService: { handleInteraction(interaction: any): Promise<boolean> };
-  voiceRoomsService?: { handleInteraction(interaction: any): Promise<boolean> };
+  sendScheduledReport(guild: Guild, period: string, channelId: string): Promise<boolean>;
+  getHelpCatalog(interaction: Interaction<'cached'>): Parameters<EmbedsApi['buildHelpEmbed']>[0];
+  supportTicketService: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
+  afkLeaveService: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
+  reportRequestService: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
+  mediaShareService: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
+  voiceRoomsService?: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
 }
 
-async function handleWelcomeCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleWelcomeCommands(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'welcome') return false;
   if (!options.canDebugConfig(interaction)) {
@@ -173,7 +173,7 @@ async function handleWelcomeCommands(interaction: any, options: InteractionRunti
   return false;
 }
 
-async function handleAutoroleCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleAutoroleCommands(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'autorole') return false;
   if (!options.canDebugConfig(interaction)) {
@@ -211,7 +211,7 @@ async function handleAutoroleCommands(interaction: any, options: InteractionRunt
   return false;
 }
 
-async function handleReactionRoleCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleReactionRoleCommands(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'reactionrole') return false;
   if (!options.isPremiumGuild(guildId)) {
@@ -259,7 +259,7 @@ async function handleReactionRoleCommands(interaction: any, options: Interaction
     }
 
     const nextEntries = options.getReactionRoleEntries(guildId)
-      .filter((entry: any) => !(entry.messageId === messageId && entry.emojiKey === emojiKey))
+      .filter((entry) => !(entry.messageId === messageId && entry.emojiKey === emojiKey))
       .concat([{ messageId, channelId: channel.id, roleId: role.id, emoji, emojiKey }]);
 
     options.database.updateGuildSettings(guildId, { reactionRoles: nextEntries });
@@ -274,7 +274,7 @@ async function handleReactionRoleCommands(interaction: any, options: Interaction
 
   if (subcommand === options.copy.commands.reactionRoleRemoveSubcommand) {
     const currentEntries = options.getReactionRoleEntries(guildId);
-    const nextEntries = currentEntries.filter((entry: any) => !(entry.messageId === messageId && entry.emojiKey === emojiKey));
+    const nextEntries = currentEntries.filter((entry) => !(entry.messageId === messageId && entry.emojiKey === emojiKey));
     if (nextEntries.length === currentEntries.length) {
       await interaction.reply(options.ephemeral({ content: options.copy.reactionRoles.notFound }));
       return true;
@@ -291,7 +291,7 @@ async function handleReactionRoleCommands(interaction: any, options: Interaction
   return false;
 }
 
-async function handleReportScheduleCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleReportScheduleCommands(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'reportschedule') return false;
   if (!options.isPremiumGuild(guildId)) {
@@ -315,10 +315,14 @@ async function handleReportScheduleCommands(interaction: any, options: Interacti
   }
 
   const period = interaction.options.getString(options.copy.commands.periodOptionName, true);
+  if (period !== 'weekly' && period !== 'monthly') {
+    await interaction.reply(options.ephemeral({ content: 'Допустимые периоды: weekly, monthly.' }));
+    return true;
+  }
 
   if (subcommand === options.copy.commands.reportScheduleSetSubcommand) {
     const channel = interaction.options.getChannel(options.copy.commands.channelValueOptionName);
-    const patch: any = {
+    const patch: { reportSchedule: Partial<Record<'weekly' | 'monthly', ReportScheduleSlot>>; channels?: { reports: string } } = {
       reportSchedule: {
         [period]: {
           enabled: true,
@@ -332,7 +336,7 @@ async function handleReportScheduleCommands(interaction: any, options: Interacti
     options.database.updateGuildSettings(guildId, patch);
     const next = options.resolveGuildSettings(guildId);
     await interaction.reply(options.ephemeral({
-      content: options.copy.reports.enabled(periodLabel(period), patch.reportSchedule[period].channelId || settings.channels.reports),
+      content: options.copy.reports.enabled(periodLabel(period), patch.reportSchedule[period]?.channelId || settings.channels.reports),
       embeds: [options.embeds.buildReportScheduleEmbed(next.reportSchedule, next.channels)]
     }));
     return true;
@@ -366,7 +370,7 @@ async function handleReportScheduleCommands(interaction: any, options: Interacti
   return false;
 }
 
-async function handleVerificationCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleVerificationCommands(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'verification') return false;
   if (!options.canDebugConfig(interaction)) {
@@ -410,7 +414,7 @@ async function handleVerificationCommands(interaction: any, options: Interaction
   return false;
 }
 
-export function canConfirmWelcome(interaction: any, targetRole: any): boolean {
+export function canConfirmWelcome(interaction: ButtonInteraction<'cached'>, targetRole: Role | null): boolean {
   const member = interaction.member;
   if (!member || !targetRole) return false;
   if (interaction.guild?.ownerId === member.id) return true;
@@ -418,7 +422,7 @@ export function canConfirmWelcome(interaction: any, targetRole: any): boolean {
   return Boolean(permissions?.has?.(PermissionFlagsBits.Administrator));
 }
 
-function getWelcomeTargetUserId(interaction: any): string {
+function getWelcomeTargetUserId(interaction: ButtonInteraction<'cached'>): string {
   const explicitId = String(interaction.customId || '').split(':')[1] || '';
   if (/^\d{16,20}$/u.test(explicitId)) return explicitId;
   const mentionedId = interaction.message?.mentions?.users?.first?.()?.id;
@@ -435,7 +439,7 @@ function formatVerificationConfirmer(value: unknown): string {
   return /^\d{16,20}$/u.test(id) ? `<@${id}>` : (id || 'неизвестный модератор');
 }
 
-async function handleRoleMenuCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleRoleMenuCommands(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'rolemenu') return false;
   if (!options.isPremiumGuild(guildId)) {
@@ -501,7 +505,7 @@ async function handleRoleMenuCommands(interaction: any, options: InteractionRunt
     const description = (interaction.options.getString(options.copy.commands.descriptionOptionName) || '').trim().slice(0, 120);
     options.saveRoleMenu(guildId, {
       ...menu,
-      items: [...(menu.items || []).filter((item: any) => item.roleId !== role.id), { roleId: role.id, label, emoji, description }]
+      items: [...(menu.items || []).filter((item) => item.roleId !== role.id), { roleId: role.id, label, emoji, description }]
     });
     await interaction.reply(options.ephemeral({
       content: options.copy.roleMenus.itemAdded(menuId, role.id),
@@ -551,7 +555,7 @@ async function handleRoleMenuCommands(interaction: any, options: InteractionRunt
   return false;
 }
 
-async function handleCustomCommandCommands(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleCustomCommandCommands(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || interaction.commandName !== 'customcommand') return false;
   if (!options.isPremiumGuild(guildId)) {
@@ -577,8 +581,9 @@ async function handleCustomCommandCommands(interaction: any, options: Interactio
     const name = interaction.options.getString(options.copy.commands.titleOptionName, true).trim().toLowerCase().slice(0, 32);
     const trigger = interaction.options.getString(options.copy.commands.triggerOptionName, true).trim().toLowerCase().slice(0, 120);
     const response = interaction.options.getString(options.copy.commands.responseOptionName, true).trim().slice(0, 1500);
-    const mode = interaction.options.getString(options.copy.commands.modeChoiceOptionName) || 'contains';
-    const next = current.filter((item: any) => item.name !== name).concat([{ name, trigger, response, mode }]);
+    const rawMode = interaction.options.getString(options.copy.commands.modeChoiceOptionName);
+    const mode = rawMode === 'exact' || rawMode === 'startsWith' ? rawMode : 'contains';
+    const next = current.filter((item) => item.name !== name).concat([{ name, trigger, response, mode }]);
     options.database.updateGuildSettings(guildId, { customCommands: next });
     await interaction.reply(options.ephemeral({
       content: options.copy.customCommands.added(name),
@@ -589,7 +594,7 @@ async function handleCustomCommandCommands(interaction: any, options: Interactio
 
   if (subcommand === options.copy.commands.customCommandRemoveSubcommand) {
     const name = interaction.options.getString(options.copy.commands.titleOptionName, true).trim().toLowerCase();
-    const next = current.filter((item: any) => item.name !== name);
+    const next = current.filter((item) => item.name !== name);
     if (next.length === current.length) {
       await interaction.reply(options.ephemeral({ content: options.copy.customCommands.notFound }));
       return true;
@@ -605,7 +610,7 @@ async function handleCustomCommandCommands(interaction: any, options: Interactio
   return false;
 }
 
-async function handleFamilyAndAdminButtons(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleFamilyAndAdminButtons(interaction: Interaction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || !interaction.isButton?.()) return false;
 
@@ -789,7 +794,7 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
       return true;
     }
 
-    let result: any;
+    let result: RankActionResult;
     try {
       if (action === 'rank_promote') {
         result = await rankService.promote(member);
@@ -850,7 +855,7 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
 
     await interaction.deferReply({ flags: 64 });
     try {
-      const analysis = await options.aiService.analyzeApplication(application);
+      const analysis = await options.aiService.analyzeApplication({ ...application });
       const embed = new options.EmbedBuilderCtor()
         .setColor(0x3b82f6)
         .setTitle(options.copy.ai.buttonTitle)
@@ -859,8 +864,8 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
-    } catch (error: any) {
-      await interaction.editReply({ content: options.copy.ai.unavailable(error?.message) });
+    } catch (error) {
+      await interaction.editReply({ content: options.copy.ai.unavailable((error instanceof Error ? error.message : '')) });
     }
     return true;
   }
@@ -901,7 +906,7 @@ async function handleFamilyAndAdminButtons(interaction: any, options: Interactio
   return false;
 }
 
-async function handleFamilyAndAdminModals(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleFamilyAndAdminModals(interaction: Interaction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || !interaction.isModalSubmit?.()) return false;
 
@@ -940,8 +945,8 @@ async function handleFamilyAndAdminModals(interaction: any, options: Interaction
     try {
       const embed = await options.buildAiAdvisorEmbed(interaction.guild, member);
       await interaction.editReply({ embeds: [embed] });
-    } catch (error: any) {
-      await interaction.editReply({ content: options.copy.ai.unavailable(error?.message || options.copy.ai.advisorUnavailable) });
+    } catch (error) {
+      await interaction.editReply({ content: options.copy.ai.unavailable((error instanceof Error ? error.message : '') || options.copy.ai.advisorUnavailable) });
     }
     return true;
   }
@@ -1025,7 +1030,7 @@ async function handleFamilyAndAdminModals(interaction: any, options: Interaction
   return false;
 }
 
-async function handleButtonsAndModals(interaction: any, options: InteractionRuntimeOptions): Promise<boolean> {
+async function handleButtonsAndModals(interaction: Interaction<'cached'>, options: InteractionRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId) return false;
   const settings = options.resolveGuildSettings(guildId);
@@ -1197,7 +1202,7 @@ async function handleButtonsAndModals(interaction: any, options: InteractionRunt
 }
 
 /// New handler for /aiadvisor command
-async function handleAiAdvisorCommand(interaction: any, options: InteractionRuntimeOptions): Promise<void> {
+async function handleAiAdvisorCommand(interaction: ChatInputCommandInteraction<'cached'>, options: InteractionRuntimeOptions): Promise<void> {
   const guildId = interaction.guild?.id;
   if (!guildId) {
     await interaction.reply(options.ephemeral({ content: 'Команда доступна только на сервере.' }));
@@ -1229,9 +1234,9 @@ async function handleAiAdvisorCommand(interaction: any, options: InteractionRunt
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
-  } catch (error: any) {
+  } catch (error) {
     console.error('AI Advisor error:', error);
-    await interaction.editReply({ content: `❌ Ошибка: ${error.message || 'Неизвестная ошибка'}` });
+    await interaction.editReply({ content: `❌ Ошибка: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}` });
   }
 }
 
@@ -1239,7 +1244,9 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
   const { client } = options;
 
   client.removeAllListeners('interactionCreate');
-  client.on('interactionCreate', async (interaction: any) => {
+  client.on('interactionCreate', async (rawInteraction) => trackWork(async () => {
+    if (!rawInteraction.guild || (typeof rawInteraction.inCachedGuild === 'function' && !rawInteraction.inCachedGuild())) return;
+    const interaction = rawInteraction as Interaction<'cached'>;
     try {
       if (await options.supportTicketService.handleInteraction(interaction)) {
         return;
@@ -1292,5 +1299,5 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
         await interaction.reply(options.ephemeral({ content: options.copy.common.unknownError })).catch(() => null);
       }
     }
-  });
+  }));
 }

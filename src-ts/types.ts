@@ -406,6 +406,7 @@ export interface VerificationSettings {
 }
 
 export interface ReactionRoleEntry {
+  emojiKey?: string;
   messageId: string;
   channelId: string;
   emoji: string;

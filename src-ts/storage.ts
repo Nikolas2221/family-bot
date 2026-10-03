@@ -115,14 +115,28 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
   let saveTimer: NodeJS.Timeout | null = null;
   let lastWriteAt = 0;
   let lastWriteError = '';
+  let probeAt = 0;
+  let probeWritable = false;
 
   function healthStatus(): { writable: boolean; lastWriteAt: number; hasWriteError: boolean } {
-    let writable = false;
-    try {
-      fs.accessSync(fs.existsSync(dataFile) ? dataFile : path.dirname(dataFile), fs.constants.W_OK);
-      writable = true;
-    } catch { /* Report disk permissions without changing the store. */ }
-    return { writable, lastWriteAt, hasWriteError: Boolean(lastWriteError) };
+    if (!probeAt || Date.now() - probeAt >= 10000) {
+      const probe = `${dataFile}.health-${process.pid}`;
+      probeAt = Date.now();
+      probeWritable = false;
+      try {
+        fs.mkdirSync(path.dirname(dataFile), { recursive: true });
+        fs.writeFileSync(probe, 'health', { mode: 0o600 });
+        fs.renameSync(probe, `${probe}.renamed`);
+        fs.unlinkSync(`${probe}.renamed`);
+        probeWritable = true;
+      } catch { /* The health endpoint reports failed writes without exposing paths. */ }
+      finally {
+        for (const file of [probe, `${probe}.renamed`]) {
+          try { fs.unlinkSync(file); } catch { /* Already removed or unavailable. */ }
+        }
+      }
+    }
+    return { writable: probeWritable, lastWriteAt, hasWriteError: Boolean(lastWriteError) };
   }
 
   function healthLines(): string[] {

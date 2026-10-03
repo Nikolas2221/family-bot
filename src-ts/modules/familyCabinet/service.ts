@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { trackWork } from '../../services/shutdown';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { EmbedBuilder } from 'discord.js';
@@ -122,7 +123,7 @@ export class FamilyCabinetService {
   startAutoSync(): void {
     if (this.storageError || !this.config.enabled || !this.config.syncEnabled || this.timer) return;
     this.stopped = false;
-    void this.runSync('startup').catch(error => {
+    void trackWork(() => this.runSync('startup')).catch(error => {
       console.error('[family-cabinet] startup sync failed:', error);
     }).finally(() => {
       this.scheduleNextAutoSync();
@@ -136,7 +137,7 @@ export class FamilyCabinetService {
     this.nextSyncAt = Date.now() + delay;
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.runSync('auto').catch(error => {
+      void trackWork(() => this.runSync('auto')).catch(error => {
         console.error('[family-cabinet] auto sync failed:', error);
       }).finally(() => {
         this.scheduleNextAutoSync();

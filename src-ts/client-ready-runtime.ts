@@ -1,4 +1,5 @@
 import { buildCommands, getCommandsSignature, registerCommands } from './commands';
+import { trackWork } from './services/shutdown';
 import type { Client, Guild } from 'discord.js';
 import type { AutoRanksConfig, DatabaseApi } from './types';
 
@@ -121,14 +122,14 @@ async function warmGuildState(
 
 function scheduleBackgroundTasks(options: ClientReadyRuntimeOptions): void {
   setInterval(() => {
-    options.doPanelUpdateAll(false).catch(error => {
+    trackWork(() => options.doPanelUpdateAll(false)).catch(error => {
       console.error('Ошибка interval обновления панели:', error);
     });
   }, options.updateIntervalMs);
 
   if (options.autoRanks.enabled) {
     setInterval(() => {
-      options.syncAutoRanksAll('interval').catch(error => {
+      trackWork(() => options.syncAutoRanksAll('interval')).catch(error => {
         console.error('Ошибка interval авто-рангов:', error);
       });
     }, options.autoRanks.intervalMs);
@@ -136,10 +137,10 @@ function scheduleBackgroundTasks(options: ClientReadyRuntimeOptions): void {
 
   setInterval(() => {
     for (const guild of options.client.guilds.cache.values()) {
-      options.runRolelessCleanupDetailed(guild.id, 'interval').catch(error => {
+      trackWork(() => options.runRolelessCleanupDetailed(guild.id, 'interval')).catch(error => {
         console.error(`Ошибка interval очистки ${guild.id}:`, error);
       });
-      options.runAfkWarnings(guild.id).catch(error => {
+      trackWork(() => options.runAfkWarnings(guild.id)).catch(error => {
         console.error(`Ошибка interval AFK-проверки ${guild.id}:`, error);
       });
     }
@@ -148,7 +149,7 @@ function scheduleBackgroundTasks(options: ClientReadyRuntimeOptions): void {
   setInterval(() => {
     const now = new Date();
     for (const guild of options.client.guilds.cache.values()) {
-      options.runScheduledReports(guild.id, now).catch(error => {
+      trackWork(() => options.runScheduledReports(guild.id, now)).catch(error => {
         console.error(`Ошибка interval отчёта ${guild.id}:`, error);
       });
     }

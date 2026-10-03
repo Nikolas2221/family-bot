@@ -1,5 +1,9 @@
 import { AuditLogEvent, ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { randomBytes } from 'node:crypto';
+import type { ActionJournal } from './services/action-journal';
+import { isStopping, trackWork } from './services/shutdown';
+let actionJournal: ActionJournal | undefined;
+export function configureActionJournal(journal: ActionJournal | undefined): void { actionJournal = journal; }
 import { assessInactivity } from './activity-policy';
 import { getActiveLockdown } from './services/security-lockdown';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
@@ -458,7 +462,7 @@ interface EventRuntimeOptions {
   handleVoiceRoomsVoiceStateUpdate?(oldState: VoiceStateLike, newState: VoiceStateLike): Promise<boolean>;
 }
 
-interface PendingBrainAction {
+export interface PendingBrainAction {
   code: string;
   guildId: string;
   actorId: string;
@@ -867,7 +871,7 @@ export async function handleInactiveMembersRequest(
   prompt: string,
   options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'hasFamilyRole' | 'database' | 'resolveGuildSettings' | 'sendSecurityLog' | 'aiService' | 'isActivityExempt'>,
   pendingActions?: Map<string, PendingBrainAction>,
-  confirmed?: { ids: string[]; text: string }
+  confirmed?: { ids: string[]; text: string; jobId?: string }
 ): Promise<boolean> {
   if (!message.guild || !looksLikeInactiveMembersRequest(prompt)) return false;
   if (!isAdminMember(message.member)) {
@@ -900,6 +904,7 @@ export async function handleInactiveMembersRequest(
     .sort((left, right) => (Number(left.data.lastSeenAt) || 0) - (Number(right.data.lastSeenAt) || 0));
 
   if (!inactive.length) {
+    if (confirmed?.jobId) actionJournal?.finish(confirmed.jobId, 'completed');
     if (confirmed) recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
       action: messageMembers ? 'inactive_dm' : 'inactive_ping', risk: 'medium', status: 'cancelled',
       actorId: message.author.id, targetId: message.channel.id, summary: 'No eligible recipients remain after confirmation'
@@ -954,14 +959,17 @@ export async function handleInactiveMembersRequest(
   if (messageMembers) {
     for (const { member } of inactive) {
       const key = `inactive-dm:${member.id}`;
-      if (Date.now() - (guildStorage.getCooldown?.(key) || 0) < 86400000) {
+      if (Date.now() - (guildStorage.getCooldown?.(key) || 0) < 86400000
+        || actionJournal?.recentlySent(message.guild.id, 'inactive_dm', member.id)) {
         skipped += 1;
         continue;
       }
+      if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, member.id, 'sending');
       const sent = await member.user?.send?.({
         content: aiSummary,
         allowedMentions: { parse: [] }
       }).then(() => true).catch(() => false);
+      if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, member.id, sent ? 'delivered' : 'failed');
       if (sent) {
         delivered += 1;
         guildStorage.setCooldown?.(key, Date.now());
@@ -982,9 +990,16 @@ export async function handleInactiveMembersRequest(
     }).catch(() => null);
   } else if (pingMembers) {
     const batches: string[][] = [];
-    for (let index = 0; index < ids.length; index += 25) batches.push(ids.slice(index, index + 25));
+    const eligibleIds = ids.filter(id => {
+      const recent = Date.now() - (guildStorage.getCooldown?.(`inactive-ping:${id}`) || 0) < 86400000
+        || actionJournal?.recentlySent(message.guild!.id, 'inactive_ping', id);
+      if (recent) skipped++;
+      return !recent;
+    });
+    for (let index = 0; index < eligibleIds.length; index += 25) batches.push(eligibleIds.slice(index, index + 25));
     for (let index = 0; index < batches.length; index += 1) {
       const batch = batches[index];
+      for (const id of batch) if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, id, 'sending');
       const sent = await message.channel.send?.({
         content: [
           index === 0 ? `📣 ${aiSummary}\nНеактивные участники за ${days} дн. (${ids.length}):` : `Продолжение списка (${index + 1}/${batches.length}):`,
@@ -993,9 +1008,15 @@ export async function handleInactiveMembersRequest(
         ].filter(Boolean).join('\n'),
         allowedMentions: { parse: [], users: batch }
       }).then(() => true).catch(() => false);
+      for (const id of batch) {
+        if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, id, sent ? 'delivered' : 'failed');
+        if (sent) guildStorage.setCooldown?.(`inactive-ping:${id}`, Date.now());
+      }
+      guildStorage.flush?.();
       if (sent) delivered += batch.length;
       else failed += batch.length;
     }
+    await message.channel.send?.({ content: `Упоминания: доставлено ${delivered}, ошибок ${failed}, пропущено за последние 24 часа ${skipped}.`, allowedMentions: { parse: [] } }).catch(() => null);
   } else {
     const lines = inactive.map(({ member, data }, index) => {
       const lastActivity = Math.max(
@@ -1021,6 +1042,7 @@ export async function handleInactiveMembersRequest(
   }
 
   const currentSettings = options.resolveGuildSettings(message.guild.id);
+  if (confirmed?.jobId) actionJournal?.finish(confirmed.jobId, failed ? 'failed' : 'completed');
   const brain = appendBrainAudit(normalizeServerBrainSettings(currentSettings.aiBrain), {
     action: messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list'),
     risk: messageMembers || pingMembers ? 'medium' : 'read',
@@ -2229,15 +2251,31 @@ export async function executePendingBrainAction(
   }
   if (pending.action === 'inactive_dm' || pending.action === 'inactive_ping') {
     if (bulkActionLocks.has(message.guild.id)) {
+      recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
+        action: pending.action, risk: pending.risk, status: 'cancelled', actorId: message.author.id,
+        targetId: pending.targetId, summary: 'Another bulk action is running'
+      }, options);
       await message.channel.send?.({ content: 'На сервере уже выполняется массовое действие. Повтори запрос после завершения.', allowedMentions: { parse: [] } });
       return true;
     }
     bulkActionLocks.add(message.guild.id);
     const confirmedMessage = Object.create(message) as MessageLike;
     Object.defineProperty(confirmedMessage, 'member', { value: actor });
+    const jobId = randomBytes(16).toString('hex');
     try {
+      actionJournal?.start(jobId, pending.guildId, pending.action);
       await handleInactiveMembersRequest(confirmedMessage, pending.prompt || '', options, pendingActions,
-        { ids: pending.recipientIds || [], text: pending.text || '' });
+        { ids: pending.recipientIds || [], text: pending.text || '', jobId });
+    } catch (error) {
+      console.error('Bulk action failed:', error);
+      try { actionJournal?.finish(jobId, 'failed'); } catch (writeError) { console.error('Action journal write failed:', writeError); }
+      try { recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
+        action: pending.action, risk: pending.risk, status: 'failed', actorId: message.author.id,
+        targetId: pending.targetId, summary: 'Bulk action interrupted; consult persistent recipient journal before retrying'
+      }, options); } catch (auditError) { console.error('Bulk action audit write failed:', auditError); }
+      const job = actionJournal?.list().find(entry => entry.id === jobId);
+      const results = Object.values(job?.recipients || {});
+      await message.channel.send?.({ content: `Рассылка прервана. Доставлено: ${results.filter(value => value === 'delivered').length}; ошибок доставки: ${results.filter(value => value === 'failed').length}; результат неизвестен: ${results.filter(value => value === 'sending').length}. ID: ${jobId}. Проверь журнал перед повтором.`, allowedMentions: { parse: [] } }).catch(() => null);
     } finally { bulkActionLocks.delete(message.guild.id); }
     return true;
   }
@@ -2631,7 +2669,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   const welcomeInviteBatches = new Map<string, WelcomeInviteBatch>();
   const aiMentionCooldowns = new Map<string, number>();
   const aiConflictCooldowns = new Map<string, number>();
-  const pendingAiActions = new Map<string, PendingBrainAction>();
+  const pendingAiActions = actionJournal?.confirmations() || new Map<string, PendingBrainAction>();
   const rulesSyncTimers = new Map<string, NodeJS.Timeout>();
 
   function scheduleBrainSnapshot(guild: GuildLike, delayMs = 1000): void {
@@ -2737,7 +2775,8 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }
   });
 
-  client.on('messageCreate', async (message: MessageLike) => {
+  client.on('messageCreate', async (message: MessageLike) => trackWork(async () => {
+    if (isStopping()) return;
     if (!message.guild) return;
     scheduleRulesMemorySync(message.guild, message.channel.id, message.author?.id || 'system');
     if (message.author.bot && !message.webhookId) return;
@@ -2814,7 +2853,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
     if (!hasFamilyRole(message.member)) return;
     guildStorage.recordMessage(message.member.id);
-  });
+  }));
 
   client.on('messageUpdate', async (_oldMessage: MessageLike, nextMessage: MessageLike) => {
     let message = nextMessage;

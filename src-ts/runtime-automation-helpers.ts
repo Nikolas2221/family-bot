@@ -1,15 +1,8 @@
-interface RoleMenuLike {
-  menuId: string;
-  items?: Array<{ roleId: string }>;
-}
+import type { RoleMenu, CustomCommandEntry } from './types';
 
 interface GuildSettingsLike {
-  roleMenus?: RoleMenuLike[];
-  customCommands?: Array<{
-    trigger?: string;
-    response?: string;
-    mode?: 'contains' | 'startsWith' | 'exact';
-  }>;
+  roleMenus?: RoleMenu[];
+  customCommands?: CustomCommandEntry[];
   reportSchedule?: {
     weekly?: { enabled?: boolean; channelId?: string };
     monthly?: { enabled?: boolean; channelId?: string };
@@ -99,7 +92,7 @@ export function createAutomationRuntimeHelpers(options: AutomationRuntimeOptions
     return getRoleMenuEntries(guildId).find((menu) => menu.menuId === normalized) || null;
   }
 
-  function saveRoleMenu(guildId: string, nextMenu: RoleMenuLike) {
+  function saveRoleMenu(guildId: string, nextMenu: RoleMenu) {
     const current = getRoleMenuEntries(guildId).filter((menu) => menu.menuId !== nextMenu.menuId);
     database.updateGuildSettings(guildId, { roleMenus: [...current, nextMenu] });
     return findRoleMenu(guildId, nextMenu.menuId);

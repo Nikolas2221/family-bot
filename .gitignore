@@ -9,6 +9,8 @@ data/.browser-session*
 database.local.json
 storage.local.json
 *.bak
+*.actions.json*
+*.health-*
 
 # Claude Code worktrees and per-machine settings
 .claude/

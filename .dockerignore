@@ -8,6 +8,8 @@ data
 database.local.json
 storage.local.json
 *.bak
+*.actions.json*
+*.health-*
 npm-debug.log*
 .claude
 .aider*
