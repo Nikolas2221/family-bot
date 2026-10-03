@@ -520,8 +520,17 @@ export interface GuildAccess {
 }
 
 export interface GuildVisuals {
+  cards?: Record<string, { discord?: CardAppearance; telegram?: CardAppearance }>;
   familyBanner: string;
   applicationsBanner: string;
+}
+
+export interface CardAppearance {
+  title?: string;
+  color?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+  footer?: string;
 }
 
 export interface GuildFeatures {

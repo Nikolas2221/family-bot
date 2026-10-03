@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { EmbedBuilder, type Guild, type GuildMember, type User } from 'discord.js';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
+import { applyCardStyle } from './card-style';
 import type { CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
 
 const updateAnnouncementLocks = new Set<string>();
@@ -35,6 +36,7 @@ interface GuildSettingsLike {
     reports?: string;
   };
   visuals: {
+    cards?: import('./types').GuildVisuals['cards'];
     familyBanner?: string;
     applicationsBanner?: string;
   };
@@ -350,6 +352,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
   async function sendDisciplineLog(guild: Guild, embed: EmbedBuilder) {
     if (!isPremiumGuild(guild.id)) return;
     const { channels } = resolveGuildSettings(guild.id);
+    applyCardStyle(embed, resolveGuildSettings(guild.id).visuals.cards?.moderation?.discord);
     if (!channels.disciplineLogs) return;
     const channel = await fetchTextChannel(guild, channels.disciplineLogs);
     if (!channel) return;
@@ -413,7 +416,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
 
         discordSent = await channel.send({
           embeds: [
-            embeds.buildUpdateAnnouncementEmbed({
+            applyCardStyle(embeds.buildUpdateAnnouncementEmbed({
               versionLabel: productVersionLabel,
               semver: productVersionSemver,
               buildId: deployBuildId,
@@ -422,7 +425,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
               title: process.env.UPDATE_CARD_TITLE || 'KLAIZ BOT | Обновление системы',
               color: process.env.UPDATE_CARD_COLOR || '#10b981',
               imageUrl: process.env.UPDATE_CARD_BANNER_URL || resolveGuildSettings(guild.id).visuals?.familyBanner || ''
-            })
+            }), resolveGuildSettings(guild.id).visuals.cards?.updates?.discord)
           ]
         }).then(() => true).catch(error => {
           discordFailure = error instanceof Error ? error.message : String(error);
@@ -482,6 +485,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
   async function sendAutomodLog(guild: Guild, payload: Record<string, unknown>) {
     const embed = embeds.buildAutomodActionEmbed(payload);
     const settings = resolveGuildSettings(guild.id);
+    applyCardStyle(embed, settings.visuals.cards?.moderation?.discord);
     const channelId = settings.channels.automod || settings.channels.logs;
     if (!channelId) return;
     const channel = await fetchTextChannel(guild, channelId);
@@ -500,7 +504,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
 
     const aiWelcomeLine = await buildAiWelcomeLine(aiService, member, settings.familyTitle);
     const welcomeMessage = [settings.welcome.message, aiWelcomeLine ? `\n${aiWelcomeLine}` : ''].join('').trim();
-    const embed = embeds.buildWelcomeEmbed(
+    const embed = applyCardStyle(embeds.buildWelcomeEmbed(
       member,
       settings.familyTitle,
       settings.visuals.applicationsBanner,
@@ -512,7 +516,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
         verificationEnabled: settings.verification.enabled,
         memberCount: memberCount || member.guild.memberCount
       }
-    );
+    ), settings.visuals.cards?.welcome?.discord);
 
     if (channel) {
       await channel

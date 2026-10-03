@@ -80,6 +80,16 @@ async function main() {
 
     assert.equal(left.ok, true);
     assert.equal(right.ok, true);
+    let rejectedCalls = 0;
+    global.fetch = async () => { rejectedCalls++; return { ok: false, status: 401, text: async () => 'Bad credentials' }; };
+    const rejected = buildService();
+    const failed = await rejected.createBackup(firstGuild);
+    assert.equal(failed.ok, false);
+    assert.match(failed.error, /GITHUB_BACKUP_TOKEN/u);
+    const count = rejectedCalls;
+    await rejected.createBackup(secondGuild);
+    assert.equal(rejectedCalls, count, 'rejected token must stop further requests');
+    assert.match(rejected.healthLines().join('\n'), /токен отклонён/u);
   } finally {
     global.fetch = originalFetch;
   }

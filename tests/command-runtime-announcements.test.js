@@ -22,6 +22,28 @@ function createInteraction(text = 'Новость') {
 }
 
 async function main() {
+  let cards = {};
+  let result;
+  let writes = 0;
+  const cardInteraction = { commandName: 'cardstyle', guild: { id: 'guild' }, isChatInputCommand: () => true,
+    memberPermissions: { has: () => true },
+    options: { getSubcommand: () => 'set', getString: name => ({ card: 'updates', platform: 'both', title: 'KLAIZ news', color: '#ef4444', image: 'https://example.com/banner.png' })[name] ?? null },
+    reply: async payload => { result = payload; } };
+  const cardOptions = { guildStorage: { addCommend() {} }, ephemeral: payload => payload, copy: { common: { noAccess: 'denied' } },
+    resolveGuildSettings: () => ({ visuals: { cards } }),
+    database: { updateGuildSettings: (id, patch) => { cards = patch.visuals.cards; writes++; }, flush() {} } };
+  await handleCommandRuntime(cardInteraction, cardOptions);
+  assert.equal(cards.updates.discord.color, '#ef4444');
+  assert.equal(cards.updates.telegram.title, 'KLAIZ news');
+  assert.equal(cards.updates.telegram.color, undefined);
+  assert.match(result.content, /сохранено/u);
+  cardInteraction.memberPermissions.has = () => false;
+  await handleCommandRuntime(cardInteraction, cardOptions);
+  assert.equal(writes, 1, 'non-admin must not modify styles');
+  cardInteraction.memberPermissions.has = () => true;
+  cardInteraction.options.getSubcommand = () => 'reset';
+  await handleCommandRuntime(cardInteraction, cardOptions);
+  assert.deepEqual(cards.updates, {});
   const disabled = createInteraction('Telegram выключен');
   const handledDisabled = await handleCommandRuntime(disabled.interaction, {
     guildStorage: { addCommend() {} },

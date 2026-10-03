@@ -1,6 +1,8 @@
 import { Telegraf } from 'telegraf';
+import type { CardAppearance } from '../types';
 
 export interface TelegramSenderLike {
+  sendPhoto?(chatId: string, photo: string, options?: Record<string, unknown>): Promise<unknown>;
   sendMessage(chatId: string, text: string, options?: Record<string, unknown>): Promise<unknown>;
 }
 
@@ -44,6 +46,7 @@ export interface AfkRequestNotificationInput {
 }
 
 export interface TelegramNotificationService {
+  previewCard(guildId: string, category: string): Promise<boolean>;
   enabled: boolean;
   allowsGuild(guildId?: string | null): boolean;
   notifyApplicationCreated(input: ApplicationNotificationInput): Promise<boolean>;
@@ -200,6 +203,7 @@ export function createTelegramNotificationService(options: {
   allowedGuildIds?: string[];
   sender?: TelegramSenderLike | null;
   logger?: Pick<Console, 'warn'>;
+  getCardStyle?(guildId: string, category: string): CardAppearance;
 }): TelegramNotificationService {
   const token = String(options.token || '').trim();
   const adminChatId = String(options.adminChatId || '').trim();
@@ -232,12 +236,32 @@ export function createTelegramNotificationService(options: {
     return (await sendWithResult(chatId, text, sendOptions)).ok;
   }
 
+  async function sendStyled(chatId: string, body: string, guildId: string | undefined, category: string, sendOptions: Record<string, unknown> = {}): Promise<boolean> {
+    const style = guildId ? options.getCardStyle?.(guildId, category) || {} : {};
+    const escape = (value: string) => sendOptions.parse_mode === 'HTML'
+      ? value.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;') : value;
+    const text = (style.title ? `${escape(style.title)}\n${body.split('\n').slice(1).join('\n')}` : body)
+      + (style.footer ? `\n\n${escape(style.footer)}` : '');
+    if (style.imageUrl && sender?.sendPhoto && enabled) {
+      try {
+        if (text.length <= 1024) {
+          await sender.sendPhoto(chatId, style.imageUrl, { ...sendOptions, caption: text });
+          return true;
+        }
+        await sender.sendPhoto(chatId, style.imageUrl, { caption: (style.title || 'KLAIZ').slice(0, 256) });
+      } catch (error) { logger.warn('Telegram card image failed; sending text instead.'); }
+    }
+    return send(chatId, text, sendOptions);
+  }
+
   function allowsGuild(guildId?: string | null): boolean {
     const id = String(guildId || '').trim();
     return !allowedGuildIds.length || (Boolean(id) && allowedGuildIds.includes(id));
   }
 
   return {
+    previewCard: (guildId, category) => allowsGuild(guildId)
+      ? sendStyled(adminChatId, `KLAIZ | ${category}\n\nПредпросмотр карточки\nУчастник: Test User\nСтатус: пример`, guildId, category) : Promise.resolve(false),
     enabled,
     allowsGuild,
     notifyApplicationCreated(input) {
@@ -246,18 +270,18 @@ export function createTelegramNotificationService(options: {
       const buttons: Array<Array<Record<string, string>>> = [];
       if (url) buttons.push([{ text: 'Открыть тикет', url }]);
       buttons.push([{ text: 'Взять в работу', callback_data: `ticket_take:${input.application.id}` }]);
-      return send(adminChatId, buildNewApplicationMessage(input), {
+      return sendStyled(adminChatId, buildNewApplicationMessage(input), input.guild?.id, 'applications', {
         reply_markup: { inline_keyboard: buttons }
       });
     },
     notifyApplicationAccepted: input => allowsGuild(input.guild?.id)
-      ? send(adminChatId, buildDecisionMessage('✅ Заявка одобрена', { ...input, status: 'approved' }))
+      ? sendStyled(adminChatId, buildDecisionMessage('✅ Заявка одобрена', { ...input, status: 'approved' }), input.guild?.id, 'applications')
       : Promise.resolve(false),
     notifyApplicationRejected: input => allowsGuild(input.guild?.id)
-      ? send(adminChatId, buildDecisionMessage('❌ Заявка отклонена', { ...input, status: 'rejected' }))
+      ? sendStyled(adminChatId, buildDecisionMessage('❌ Заявка отклонена', { ...input, status: 'rejected' }), input.guild?.id, 'applications')
       : Promise.resolve(false),
     notifyTicketClosed: input => allowsGuild(input.guild?.id)
-      ? send(adminChatId, buildDecisionMessage('✅ Тикет закрыт', { ...input, status: input.status || 'closed' }))
+      ? sendStyled(adminChatId, buildDecisionMessage('✅ Тикет закрыт', { ...input, status: input.status || 'closed' }), input.guild?.id, 'applications')
       : Promise.resolve(false),
     notifyTicketActivity(input) {
       if (!allowsGuild(input.guildId)) return Promise.resolve(false);
@@ -280,7 +304,7 @@ export function createTelegramNotificationService(options: {
       const createdAt = input.member.createdAt instanceof Date
         ? input.member.createdAt.toLocaleString('ru-RU')
         : 'неизвестно';
-      return send(adminChatId, [
+      return sendStyled(adminChatId, [
         '👋 Новый участник на Discord-сервере',
         '',
         `Сервер: ${clean(input.guild.name, input.guild.id, 100)}`,
@@ -288,7 +312,7 @@ export function createTelegramNotificationService(options: {
         `Пользователь: ${memberName}`,
         `Discord ID: ${input.member.id}`,
         `Аккаунт создан: ${createdAt}`
-      ].filter(Boolean).join('\n'), {
+      ].filter(Boolean).join('\n'), input.guild.id, 'welcome', {
         reply_markup: {
           inline_keyboard: [[{
             text: '✅ Подтвердить и выдать роль',
@@ -306,7 +330,7 @@ export function createTelegramNotificationService(options: {
         input.deleted ? 'сообщение удалено' : 'сообщение НЕ удалено',
         input.muted ? `мут ${clean(input.timeoutMinutes)} мин.` : 'мут НЕ выдан'
       ].join(', ');
-      return send(adminChatId, [
+      return sendStyled(adminChatId, [
         '🚨 Scam guard сработал',
         '',
         `Сервер: ${guildName}`,
@@ -316,20 +340,20 @@ export function createTelegramNotificationService(options: {
         `Результат: ${status}`,
         '',
         `Фрагмент: ${clean(input.content, 'без текста', 1200)}`
-      ].join('\n'));
+      ].join('\n'), input.guild?.id, 'moderation');
     },
     notifySecurityAlert(input) {
       if (!allowsGuild(input.guild?.id)) return Promise.resolve(false);
       const title = clean(input.title, '🛡️ Security alert', 200);
       const guildName = clean(input.guild?.name || input.guild?.id, 'сервер', 100);
       const actorName = clean(input.actor?.globalName || input.actor?.username || input.actor?.id, 'неизвестно', 100);
-      return send(adminChatId, [
+      return sendStyled(adminChatId, [
         title,
         '',
         `Сервер: ${guildName}`,
         input.actor ? `Инициатор: ${actorName} (${clean(input.actor?.id, 'unknown', 32)})` : '',
         clean(input.content, '', 2500)
-      ].filter(Boolean).join('\n'));
+      ].filter(Boolean).join('\n'), input.guild?.id, 'moderation');
     },
     notifyAfkRequestCreated(input) {
       const request = input.request;
@@ -357,7 +381,7 @@ export function createTelegramNotificationService(options: {
     },
     notifyUpdateAnnouncement(input) {
       if (!allowsGuild(input.guildId)) return Promise.resolve(false);
-      return send(announcementsChatId, buildUpdateAnnouncementHtml(input), {
+      return sendStyled(announcementsChatId, buildUpdateAnnouncementHtml(input), input.guildId, 'updates', {
         parse_mode: 'HTML'
       });
     },

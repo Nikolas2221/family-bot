@@ -16,6 +16,7 @@ const ROLES = require('./roles').default || require('./roles');
 const { containsDiscordInvite, detectScamGift, explainKickFailure, fetchDeletedChannelExecutor, restoreDeletedChannel } = require('./security');
 const { createStorage } = require('./storage');
 const { createTelegramNotificationService } = require('./telegram');
+const { createStyledEmbeds, applyCardStyle } = require('./card-style');
 const { createTelegramBot, startTelegramBot, stopTelegramBot } = require('./telegram/bot');
 const { registerTelegramHandlers } = require('./telegram/handlers');
 const { buildDiscordOnlineMembersText } = require('./services/online-members');
@@ -170,7 +171,8 @@ const telegramNotifications = createTelegramNotificationService({
   adminChatId: config.telegramAdminChatId,
   announcementsChatId: config.telegramAnnouncementsChatId,
   allowedGuildIds: config.telegramAllowedGuildIds,
-  sender: telegramBot?.telegram || null
+  sender: telegramBot?.telegram || null,
+  getCardStyle: (guildId: string, category: string) => resolveGuildSettings(guildId).visuals.cards?.[category]?.telegram || {}
 });
 const afkLeaveService = createAfkLeaveService({
   storage,
@@ -619,7 +621,7 @@ function buildServerStatsReportEmbed(guild: any, period = 'weekly') {
     (item: any) => `${getChannelLabel(guild, item.channelId)} - ${formatMinutesLong(item.value)}`
   );
 
-  return new EmbedBuilder()
+  return applyCardStyle(new EmbedBuilder()
     .setColor(period === 'monthly' ? 0xf59e0b : 0x2563eb)
     .setTitle(`📊 ${formatPeriodLabel(period)}`)
     .setDescription(formatPeriodRangeLabel(analytics))
@@ -662,7 +664,7 @@ function buildServerStatsReportEmbed(guild: any, period = 'weekly') {
       }
     )
     .setFooter({ text: `KLAIZ - ${period === 'monthly' ? 'Monthly Stats' : 'Weekly Stats'}` })
-    .setTimestamp();
+    .setTimestamp(), settings.visuals.cards?.reports?.discord);
 }
 
 function normalizeMemberQuery(value: any) {
@@ -1245,7 +1247,7 @@ function getApplicationsService(guildId: any) {
     familyRoles: settings.roles,
     applicationAccessRoleIds: settings.access.applications,
     client,
-    embeds,
+    embeds: createStyledEmbeds(embeds, () => resolveGuildSettings(guildId).visuals),
     sendAcceptLog,
     sendAcceptanceDm,
     sendRejectionDm,
@@ -1261,6 +1263,7 @@ async function refreshMember(member: any) {
 }
 
 function buildProfilePayload(member: any, allowRankButtons: any, content = '') {
+  const styled = createStyledEmbeds(embeds, () => resolveGuildSettings(member.guild.id).visuals);
   const guildStorage = getGuildStorage(member.guild.id);
   const rankService = getRankService(member.guild.id);
   const memberData = { ...guildStorage.ensureMemberRecord(member.id), voiceMinutes: getLiveVoiceMinutes(member) };
@@ -1271,7 +1274,7 @@ function buildProfilePayload(member: any, allowRankButtons: any, content = '') {
   };
   const payload: any = {
     embeds: [
-      embeds.buildProfileEmbed(member, {
+      styled.buildProfileEmbed(member, {
         activityScore: guildStorage.getActivityScore,
         memberData,
         familyRoleIds: getRoleIds(member.guild.id),
@@ -1721,7 +1724,7 @@ registerInteractionRuntime({
     doPanelUpdate,
     editReplyAndAutoDelete,
     EmbedBuilderCtor: EmbedBuilder,
-    embeds,
+    embeds: createStyledEmbeds(embeds, () => resolveGuildSettings(guildId).visuals),
     ephemeral,
     enforceBlacklist,
     fetchMemberFast,
@@ -1787,8 +1790,10 @@ registerInteractionRuntime({
       `Telegram: ${require('./telegram/bot').telegramHealth(telegramBot)}`,
       ...aiService.healthLines(),
       ...storage.healthLines(),
+      ...serverBackupService.healthLines(),
       ...familyCabinetService.statusLines().filter((line: string) => !line.startsWith('Файл') && !line.startsWith('Scraper'))
-    ]
+    ],
+    previewTelegramCard: (guildId: string, category: string) => telegramNotifications.previewCard(guildId, category)
   });
   },
   applicationCooldownMs: APPLICATION_COOLDOWN_MS,

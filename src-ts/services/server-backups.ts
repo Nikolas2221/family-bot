@@ -111,6 +111,9 @@ function githubApiBase(config: BackupConfig): string {
 
 export function createServerBackupService({ client, config }: { client: any; config: BackupConfig }) {
   let autoTimer: NodeJS.Timeout | null = null;
+  let authenticationFailed = false;
+  let lastError = '';
+  let lastSuccessAt = '';
   const inProgressGuilds = new Set<string>();
 
   function isConfigured() {
@@ -180,8 +183,12 @@ export function createServerBackupService({ client, config }: { client: any; con
     });
 
     if (!result.ok) {
-      const text = await result.text().catch(() => '');
-      throw new Error(`GitHub HTTP ${result.status}: ${text.slice(0, 300)}`);
+      if (result.status === 401) {
+        authenticationFailed = true;
+        stopAutoBackups();
+        throw new Error('GitHub HTTP 401: GITHUB_BACKUP_TOKEN истёк или отозван. Обновите токен в Railway и перезапустите сервис. Автобэкапы остановлены.');
+      }
+      throw new Error(`GitHub HTTP ${result.status}: резервная копия не сохранена. Проверьте доступ токена к репозиторию.`);
     }
 
     const json = await result.json();
@@ -189,6 +196,7 @@ export function createServerBackupService({ client, config }: { client: any; con
   }
 
   async function createBackup(guild: any, reason = 'manual'): Promise<BackupResult> {
+    if (authenticationFailed) return { ok: false, error: lastError || 'Обновите GITHUB_BACKUP_TOKEN и перезапустите сервис.' };
     if (!isConfigured()) return { ok: false, error: 'GitHub backup env is not configured.' };
     const guildId = String(guild?.id || 'unknown');
     if (inProgressGuilds.has(guildId)) {
@@ -207,9 +215,12 @@ export function createServerBackupService({ client, config }: { client: any; con
         JSON.stringify(snapshot, null, 2),
         `Server backup ${guild.name} ${backupId}`
       );
+      lastSuccessAt = new Date().toISOString();
+      lastError = '';
       return { ok: true, id: backupId, path: filePath, url: uploaded.url };
     } catch (error: any) {
-      console.error('Server backup failed:', error);
+      lastError = error?.message || 'Unknown backup error.';
+      console.warn('Server backup failed:', lastError);
       return { ok: false, error: error?.message || 'Unknown backup error.' };
     } finally {
       inProgressGuilds.delete(guildId);
@@ -333,12 +344,13 @@ export function createServerBackupService({ client, config }: { client: any; con
   }
 
   function startAutoBackups() {
-    if (!config.enabled || !isConfigured() || autoTimer) return;
+    if (authenticationFailed || !config.enabled || !isConfigured() || autoTimer) return;
     const intervalMs = Math.max(1, Number(config.intervalHours) || 48) * 60 * 60 * 1000;
 
     const runAutoBackup = (reason: string) => {
       void (async () => {
         for (const guild of client.guilds.cache.values()) {
+          if (authenticationFailed) break;
           const result = await createBackup(guild, reason);
           if (!result.ok && result.skipped) {
             console.warn(`Auto server backup skipped for ${guild.id}: ${result.error}`);
@@ -361,6 +373,11 @@ export function createServerBackupService({ client, config }: { client: any; con
   }
 
   return {
+    healthLines: () => [
+      `GitHub backup: ${authenticationFailed ? 'остановлен: токен отклонён' : isConfigured() ? 'настроен' : 'не настроен'}`,
+      `Последний успешный backup: ${lastSuccessAt || 'в этом запуске ещё не было'}`,
+      ...(lastError ? [`Ошибка backup: ${lastError}`] : [])
+    ],
     config,
     isConfigured,
     createSnapshot,

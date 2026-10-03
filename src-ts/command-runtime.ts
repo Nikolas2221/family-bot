@@ -1,5 +1,6 @@
 ﻿import { createGuildStorageContext } from './guild-runtime';
 import { canSendDiscordAnnouncement, formatAnnouncementResultMessage } from './services/announcements';
+import { applyCardStyle, CARD_CATEGORIES } from './card-style';
 import { buildDiscordOnlineMembersText } from './services/online-members';
 import { setActiveLockdown } from './services/security-lockdown';
 import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
@@ -233,6 +234,7 @@ interface CommandRuntimeOptions {
   majesticApiService?: any;
   familyCabinetService?: any;
   healthLines?(): string[];
+  previewTelegramCard?(guildId: string, category: string): Promise<boolean>;
 }
 
 function adminPanelReply(interaction: any, options: CommandRuntimeOptions, record: any, content?: string) {
@@ -550,6 +552,70 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       });
     }
     return true;
+  }
+
+  if (interaction.commandName === 'cardstyle') {
+    if (!interaction.memberPermissions?.has?.(PermissionFlagsBits.Administrator) && !interaction.member?.permissions?.has?.(PermissionFlagsBits.Administrator)) {
+      await interaction.reply(ephemeral({ content: copy.common.noAccess })); return true;
+    }
+    const sub = interaction.options.getSubcommand();
+    const category = interaction.options.getString('card', true);
+    if (!(CARD_CATEGORIES as readonly string[]).includes(category)) return true;
+    const settings = resolveGuildSettings(guildId);
+    const cards: Record<string, any> = structuredClone(settings.visuals.cards || {});
+    const current = cards[category] || {};
+    if (sub === 'preview') {
+      if (interaction.options.getString('platform') === 'telegram') {
+        await interaction.deferReply({ flags: 64 });
+        const sent = await options.previewTelegramCard?.(guildId, category);
+        await interaction.editReply({ content: sent ? 'Предпросмотр отправлен в настроенный Telegram-чат.' : 'Не удалось отправить предпросмотр: проверь Telegram и доступ сервера.' });
+        return true;
+      }
+      const embed = applyCardStyle(new EmbedBuilderCtor().setTitle(`KLAIZ | ${category}`).setDescription('Предпросмотр оформления. Данные настоящих карточек сохраняются.').setColor(0x10b981), current.discord);
+      await interaction.reply(ephemeral({ embeds: [embed] })); return true;
+    }
+    if (sub === 'show') {
+      await interaction.reply(ephemeral({ content: `**${category}**\n\`\`\`json\n${JSON.stringify(current, null, 2).slice(0, 1750)}\n\`\`\`` })); return true;
+    }
+    const platform = interaction.options.getString('platform', true);
+    if (platform === 'telegram' && ['family', 'reports'].includes(category)) {
+      await interaction.reply(ephemeral({ content: 'Семейные карточки и отчёты этого типа сейчас отправляются только в Discord.' })); return true;
+    }
+    const platforms = platform === 'both' ? ['discord', 'telegram'] : [platform];
+    const patch: Record<string, string | undefined> = {};
+    if (sub === 'set') {
+      for (const [option, field] of [['title', 'title'], ['color', 'color'], ['image', 'imageUrl'], ['thumbnail', 'thumbnailUrl'], ['footer', 'footer']]) {
+        const raw = interaction.options.getString(option);
+        if (raw === null || raw === undefined) continue;
+        const value = raw.trim();
+        if (/^(off|clear|reset)$/iu.test(value)) { patch[field] = undefined; continue; }
+        if (field === 'color' && !/^#[0-9a-f]{6}$/iu.test(value)) {
+          await interaction.reply(ephemeral({ content: 'Цвет укажи в формате #10b981.' })); return true;
+        }
+        if ((field === 'imageUrl' || field === 'thumbnailUrl') && (!value.startsWith('https://') || !isRenderableArtUrl(value))) {
+          await interaction.reply(ephemeral({ content: 'Нужна прямая HTTPS-ссылка на изображение PNG, JPG, GIF или WebP.' })); return true;
+        }
+        patch[field] = value;
+      }
+      if (!Object.keys(patch).length) {
+        await interaction.reply(ephemeral({ content: 'Укажи хотя бы один параметр оформления.' })); return true;
+      }
+      if (platform === 'telegram' && ('color' in patch || 'thumbnailUrl' in patch)) {
+        await interaction.reply(ephemeral({ content: 'Telegram поддерживает фото, заголовок и подпись. Цвет и миниатюра доступны в Discord.' })); return true;
+      }
+    }
+    for (const target of platforms) {
+      if (sub === 'reset') delete current[target];
+      else {
+        const next = { ...(current[target] || {}), ...patch };
+        if (target === 'telegram') { delete next.color; delete next.thumbnailUrl; }
+        current[target] = next;
+      }
+    }
+    cards[category] = current;
+    database.updateGuildSettings(guildId, { visuals: { cards } });
+    database.flush?.();
+    await interaction.reply(ephemeral({ content: `Оформление **${category}** (${platform}) ${sub === 'reset' ? 'сброшено' : 'сохранено'}. Оно применяется к новым карточкам и последующим обновлениям существующих.` })); return true;
   }
 
   if (interaction.commandName === 'health') {

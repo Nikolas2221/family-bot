@@ -3,6 +3,23 @@ const assert = require('node:assert/strict');
 const { createTelegramNotificationService } = require('../dist-ts/telegram');
 
 async function main() {
+  const photos = [];
+  const texts = [];
+  let photoFails = false;
+  const styled = createTelegramNotificationService({ adminChatId: 'admin',
+    getCardStyle: () => ({ title: 'Custom application', imageUrl: 'https://example.com/banner.png', footer: 'KLAIZ Family' }),
+    sender: { sendPhoto: async (chatId, photo, options) => { if (photoFails) throw new Error('image offline'); photos.push({ chatId, photo, options }); },
+      sendMessage: async (chatId, text, options) => { texts.push({ text, options }); } }, logger: { warn() {} } });
+  await styled.notifyApplicationCreated({ guild: { id: 'guild' }, application: { id: 'app', nickname: 'Tester' } });
+  assert.equal(photos.length, 1);
+  assert.match(photos[0].options.caption, /Custom application/);
+  assert.match(photos[0].options.caption, /KLAIZ Family/);
+  assert.equal(photos[0].options.reply_markup.inline_keyboard.at(-1)[0].callback_data, 'ticket_take:app');
+  photoFails = true;
+  await styled.notifyApplicationCreated({ guild: { id: 'guild' }, application: { id: 'app', nickname: 'Tester' } });
+  assert.equal(texts.length, 1, 'failed images must fall back to text');
+  await styled.notifyApplicationCreated({ guild: { id: 'guild' }, application: { id: 'app', about: 'x'.repeat(1500) } });
+  assert.match(texts.at(-1).text, /x{500}/);
   const sent = [];
   const service = createTelegramNotificationService({
     adminChatId: '-1001234567890',

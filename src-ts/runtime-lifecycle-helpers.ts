@@ -289,6 +289,9 @@ export function createRuntimeLifecycleHelpers(options: LifecycleRuntimeHelpersOp
         imageUrl: settings.visuals?.familyBanner
       });
 
+      const { applyCardStyle } = await import('./card-style');
+      const style = (settings as any).visuals?.cards?.family?.discord;
+      familyEmbeds.forEach(embed => applyCardStyle(embed, style));
       const resolvedFixedMessageId = guild.id === fixedGuildId ? fixedMessageId : '';
       const panelMessageId = storage.getGuildPanelMessageId(guild.id, resolvedFixedMessageId);
       if (panelMessageId) {

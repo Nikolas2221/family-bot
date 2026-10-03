@@ -88,6 +88,15 @@ async function testSubscriptionCanBeUpdated() {
 }
 
 async function main() {
+  const styleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'card-style-db-'));
+  const styleFile = path.join(styleDir, 'database.json');
+  const styleDb = createDatabase({ dataFile: styleFile });
+  styleDb.updateGuildSettings('styled-guild', { visuals: { cards: { updates: { discord: { color: '#ef4444' }, telegram: { title: 'Release' } } } } });
+  styleDb.flush();
+  const restored = createDatabase({ dataFile: styleFile });
+  assert.equal(restored.getGuild('styled-guild').settings.visuals.cards.updates.telegram.title, 'Release');
+  restored.updateGuildSettings('styled-guild', { visuals: { familyBanner: 'https://example.com/banner.png' } });
+  assert.equal(restored.getGuild('styled-guild').settings.visuals.cards.updates.discord.color, '#ef4444');
   await runTest('database setup creates guild record', testSetupCreatesGuildRecord);
   await runTest('database subscription can be updated', testSubscriptionCanBeUpdated);
   console.log('ALL DATABASE TESTS PASSED');

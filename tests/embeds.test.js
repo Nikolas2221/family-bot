@@ -473,6 +473,16 @@ async function testEmbedsPublicApiStaysComplete() {
 }
 
 async function main() {
+  const { createStyledEmbeds } = require('../dist-ts/card-style');
+  let visuals = { familyBanner: '', applicationsBanner: '', cards: { applications: { discord: { color: '#ef4444', title: 'Custom applications', imageUrl: 'https://example.com/banner.png', footer: 'Custom footer' } } } };
+  const styled = createStyledEmbeds(embeds, () => visuals);
+  const application = styled.buildApplicationEmbed({ user: { id: '123' }, nickname: 'Tester', about: 'Details' }).toJSON();
+  assert.equal(application.title, 'Custom applications');
+  assert.equal(application.color, 0xef4444);
+  assert.equal(application.image.url, 'https://example.com/banner.png');
+  assert.match(JSON.stringify(application.fields), /Tester/);
+  visuals = { ...visuals, cards: {} };
+  assert.notEqual(styled.buildApplicationEmbed({ user: { id: '123' } }).toJSON().title, 'Custom applications');
   await runTest('debug config embed shows healthy config state', testDebugConfigEmbedShowsHealthyState);
   await runTest('debug config embed shows validation errors', testDebugConfigEmbedShowsErrors);
   await runTest('welcome embed shows join flow', testWelcomeEmbedShowsJoinFlow);

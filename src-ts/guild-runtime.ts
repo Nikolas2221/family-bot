@@ -232,6 +232,7 @@ export function createGuildRuntimeApi(options: {
       verificationRoleId: settings.roles?.verification || '',
       guestRoleId: settings.roles?.guest || (allowEnvDefaults ? defaults.guestRoleId : ''),
       visuals: {
+        cards: settings.visuals?.cards || {},
         familyBanner: settings.visuals?.familyBanner || '',
         applicationsBanner: settings.visuals?.applicationsBanner || ''
       },
@@ -340,6 +341,7 @@ export function createGuildRuntimeApi(options: {
           ranks: settings.access.ranks
         },
         visuals: {
+          cards: settings.visuals.cards || {},
           familyBanner: settings.visuals.familyBanner,
           applicationsBanner: settings.visuals.applicationsBanner
         },

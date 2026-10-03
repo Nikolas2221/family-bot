@@ -6,6 +6,7 @@ import { buildVoiceRoomsCommandData } from './modules/voiceRooms';
 
 const ADMIN_VISIBLE_COMMANDS = new Set([
   'health',
+  'cardstyle',
   'setup',
   'adminpanel',
   'serverbackup',
@@ -57,6 +58,23 @@ function commandJsonWithDefaults(command: { toJSON(): unknown }): CommandJson {
 
 export function buildCommands(): CommandJson[] {
   return [
+    new SlashCommandBuilder().setName('cardstyle').setDescription('Оформление карточек Discord и Telegram')
+      .addSubcommand(sub => sub.setName('set').setDescription('Изменить оформление')
+        .addStringOption(opt => opt.setName('card').setDescription('Карточка').setRequired(true).addChoices(...['updates', 'applications', 'family', 'welcome', 'reports', 'moderation'].map(value => ({ name: value, value }))))
+        .addStringOption(opt => opt.setName('platform').setDescription('Платформа').setRequired(true).addChoices({ name: 'Discord', value: 'discord' }, { name: 'Telegram', value: 'telegram' }, { name: 'Обе', value: 'both' }))
+        .addStringOption(opt => opt.setName('title').setDescription('Заголовок; off для сброса').setMaxLength(256))
+        .addStringOption(opt => opt.setName('color').setDescription('Цвет Discord: #10b981; off для сброса'))
+        .addStringOption(opt => opt.setName('image').setDescription('HTTPS-ссылка на баннер или фото; off для сброса'))
+        .addStringOption(opt => opt.setName('thumbnail').setDescription('HTTPS-ссылка на иконку Discord; off для сброса'))
+        .addStringOption(opt => opt.setName('footer').setDescription('Подпись; off для сброса').setMaxLength(500)))
+      .addSubcommand(sub => sub.setName('show').setDescription('Посмотреть сохранённое оформление')
+        .addStringOption(opt => opt.setName('card').setDescription('Карточка').setRequired(true).addChoices(...['updates', 'applications', 'family', 'welcome', 'reports', 'moderation'].map(value => ({ name: value, value })))))
+      .addSubcommand(sub => sub.setName('preview').setDescription('Предпросмотр карточки в Discord или Telegram')
+        .addStringOption(opt => opt.setName('card').setDescription('Карточка').setRequired(true).addChoices(...['updates', 'applications', 'family', 'welcome', 'reports', 'moderation'].map(value => ({ name: value, value }))))
+        .addStringOption(opt => opt.setName('platform').setDescription('Где показать').addChoices({ name: 'Discord', value: 'discord' }, { name: 'Telegram', value: 'telegram' })))
+      .addSubcommand(sub => sub.setName('reset').setDescription('Сбросить оформление')
+        .addStringOption(opt => opt.setName('card').setDescription('Карточка').setRequired(true).addChoices(...['updates', 'applications', 'family', 'welcome', 'reports', 'moderation'].map(value => ({ name: value, value }))))
+        .addStringOption(opt => opt.setName('platform').setDescription('Платформа').setRequired(true).addChoices({ name: 'Discord', value: 'discord' }, { name: 'Telegram', value: 'telegram' }, { name: 'Обе', value: 'both' }))),
     new SlashCommandBuilder().setName('health').setDescription('Состояние сервисов бота и очереди доставки'),
     new SlashCommandBuilder().setName('family').setDescription(copy.commands.familyDescription),
     new SlashCommandBuilder().setName('apply').setDescription(copy.commands.applyDescription),

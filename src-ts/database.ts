@@ -258,6 +258,7 @@ function normalizeGuildRecord(guildId: string, guild: GuildRecordPatch = {}): Gu
         ranks: [...(guild.settings?.access?.ranks || [])]
       },
       visuals: {
+        cards: guild.settings?.visuals?.cards || {},
         familyBanner: guild.settings?.visuals?.familyBanner || '',
         applicationsBanner: guild.settings?.visuals?.applicationsBanner || ''
       },
