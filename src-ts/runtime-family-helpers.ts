@@ -1,14 +1,13 @@
 import { EmbedBuilder, type Guild, type GuildMember } from 'discord.js';
-import type { CopyCatalog, GuildStorageContext, RankService } from './types';
+import type { CopyCatalog, GuildStorageContext, GuildVisuals, MemberRecord, RankService } from './types';
+import { applyCardStyle } from './card-style';
 
 interface VoiceSessionState {
   startedAt?: number;
 }
 
 interface FamilyRuntimeSettings {
-  visuals?: {
-    familyBanner?: string;
-  };
+  visuals?: Partial<GuildVisuals>;
 }
 
 interface FamilyRuntimeHelpersOptions {
@@ -31,6 +30,18 @@ function getRoleName(rankService: RankService, member: GuildMember): string {
 
 export function formatVoiceHours(minutes: number): string {
   return (Math.max(0, Number(minutes) || 0) / 60).toFixed(1);
+}
+
+export function isMemberInactive(
+  data: Pick<MemberRecord, 'lastSeenAt' | 'lastMessageAt' | 'lastVoiceAt' | 'observedSince'>,
+  joinedTimestamp: number | null | undefined,
+  thresholdMs: number,
+  now = Date.now()
+): boolean {
+  const activity = Math.max(Number(data.lastSeenAt) || 0, Number(data.lastMessageAt) || 0, Number(data.lastVoiceAt) || 0);
+  const anchor = activity || Number(data.observedSince) || 0;
+  if (!anchor || thresholdMs <= 0 || !Number.isFinite(thresholdMs)) return false;
+  return now - Math.max(anchor, Number(joinedTimestamp) || 0) >= thresholdMs;
 }
 
 export function formatTimeAgo(timestamp: number): string {
@@ -60,6 +71,10 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
     memberSessionKey,
     EmbedBuilderCtor
   } = options;
+
+  function styleReport(guild: Guild, embed: EmbedBuilder): EmbedBuilder {
+    return applyCardStyle(embed, resolveGuildSettings(guild.id).visuals?.cards?.reports?.discord);
+  }
 
   function hasFamilyRole(member: GuildMember): boolean {
     const roleIds = new Set(getRoleIds(member.guild.id));
@@ -113,7 +128,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
 
     const afkRiskCount = familyMembers.filter((member) => {
       const data = guildStorage.ensureMemberRecord(member.id);
-      return Date.now() - Number(data.lastSeenAt || 0) >= afkWarningThresholdMs;
+      return isMemberInactive(data, member.joinedTimestamp, afkWarningThresholdMs);
     }).length;
     const totalWarnings = familyMembers.reduce((sum, member) => {
       const data = guildStorage.ensureMemberRecord(member.id);
@@ -278,7 +293,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
 
     if (targetMember) {
       const data = guildStorage.ensureMemberRecord(targetMember.id);
-      return new EmbedBuilderCtor()
+      return styleReport(guild, new EmbedBuilderCtor()
         .setColor(0x2563eb)
         .setTitle(`Отчёт по участнику: ${targetMember.displayName}`)
         .setDescription(`Сервер: **${guild.name}**`)
@@ -297,10 +312,11 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
           }
         )
         .setFooter({ text: 'KLAIZ - Activity Report' })
-        .setTimestamp();
+        .setTimestamp());
     }
 
-    const lines = getFamilyMembers(guild)
+    const members = getFamilyMembers(guild);
+    const lines = members
       .map((member) => {
         const data = guildStorage.ensureMemberRecord(member.id);
         return {
@@ -312,16 +328,16 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
       .slice(0, 25)
       .map((item) => item.line);
 
-    return new EmbedBuilderCtor()
+    return styleReport(guild, new EmbedBuilderCtor()
       .setColor(0x7c3aed)
       .setTitle('Отчёт по активности семьи')
-      .setDescription(`Сервер: **${guild.name}**\nУчастников с семейными ролями: ${lines.length}`)
+      .setDescription(`Сервер: **${guild.name}**\nУчастников с семейными ролями: ${members.length}`)
       .addFields({
         name: 'Список',
         value: lines.length ? lines.join('\n').slice(0, 1024) : 'Нет участников с семейными ролями.'
       })
       .setFooter({ text: 'KLAIZ - Activity Report' })
-      .setTimestamp();
+      .setTimestamp());
   }
 
   function buildPremiumActivityReportEmbed(guild: Guild, targetMember: GuildMember | null = null) {
@@ -379,7 +395,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
         embed.setImage(familyBanner);
       }
 
-      return embed;
+      return styleReport(guild, embed);
     }
 
     const members = getFamilyMembers(guild);
@@ -398,7 +414,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
     );
     const afkRiskCount = members.filter((member) => {
       const data = guildStorage.ensureMemberRecord(member.id);
-      return Date.now() - Number(data.lastSeenAt || 0) >= afkWarningThresholdMs;
+      return isMemberInactive(data, member.joinedTimestamp, afkWarningThresholdMs);
     }).length;
 
     const embed = new EmbedBuilderCtor()
@@ -433,7 +449,7 @@ export function createFamilyRuntimeHelpers(options: FamilyRuntimeHelpersOptions)
       embed.setImage(familyBanner);
     }
 
-    return embed;
+    return styleReport(guild, embed);
   }
 
   return {

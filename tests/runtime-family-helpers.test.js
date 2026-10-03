@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 
 const {
   createFamilyRuntimeHelpers,
+  isMemberInactive,
   formatTimeAgo,
   formatVoiceHours
 } = require('../dist-ts/runtime-family-helpers');
@@ -20,6 +21,16 @@ function buildMember(id, displayName, roleIds, status = 'offline', isBot = false
 }
 
 async function main() {
+  const now = 1_800_000_000_000;
+  const day = 86_400_000;
+  const emptyActivity = { lastSeenAt: 0, lastMessageAt: 0, lastVoiceAt: 0 };
+  assert.equal(isMemberInactive(emptyActivity, null, 3 * day, now), false);
+  assert.equal(isMemberInactive({ ...emptyActivity, observedSince: now - day }, null, 3 * day, now), false);
+  assert.equal(isMemberInactive({ ...emptyActivity, observedSince: now - 4 * day }, null, 3 * day, now), true);
+  assert.equal(isMemberInactive({ ...emptyActivity, lastSeenAt: now - 4 * day }, now - day, 3 * day, now), false);
+  assert.equal(isMemberInactive({ ...emptyActivity, lastSeenAt: now - 4 * day, lastVoiceAt: now - day }, null, 3 * day, now), false);
+  assert.equal(isMemberInactive({ ...emptyActivity, lastSeenAt: now - 3 * day }, null, 3 * day, now), true);
+  assert.equal(isMemberInactive({ ...emptyActivity, lastSeenAt: now - 4 * day }, null, NaN, now), false);
   assert.equal(formatVoiceHours(90), '1.5');
   assert.equal(formatTimeAgo(0), 'нет данных');
   assert.match(formatTimeAgo(Date.now() - 5 * 60 * 1000), /назад/u);
@@ -74,7 +85,10 @@ async function main() {
         member.id === '1' ? { name: 'Лидер' } : member.id === '2' ? { name: 'Заместитель' } : null
     }),
     isPremiumGuild: () => true,
-    resolveGuildSettings: () => ({ visuals: { familyBanner: 'https://example.com/banner.png' } }),
+    resolveGuildSettings: () => ({ visuals: {
+      familyBanner: 'https://example.com/banner.png',
+      cards: { reports: { discord: { title: 'Custom activity', color: '#123456', footer: 'Custom footer' } } }
+    } }),
     memberSessionKey: (guildId, memberId) => `${guildId}:${memberId}`,
     EmbedBuilderCtor: require('discord.js').EmbedBuilder
   });
@@ -86,6 +100,25 @@ async function main() {
   assert.equal(stats.pendingApplications, 2);
   assert.equal(stats.afkRiskCount, 1);
   assert.equal(stats.planLabel, 'Premium - 5$');
+  for (const report of [helpers.buildActivityReportEmbed(guild), helpers.buildActivityReportEmbed(guild, leader), helpers.buildPremiumActivityReportEmbed(guild), helpers.buildPremiumActivityReportEmbed(guild, leader)]) {
+    const data = report.toJSON();
+    assert.equal(data.title, 'Custom activity');
+    assert.equal(data.color, 0x123456);
+    assert.equal(data.footer.text, 'Custom footer');
+    assert.ok(data.fields.length > 0);
+  }
+  const oldLeader = memberRecords['1'];
+  memberRecords['1'] = { ...oldLeader, lastSeenAt: 0, observedSince: Date.now() };
+  assert.equal(helpers.buildFamilyDashboardStats(guild).afkRiskCount, 1);
+  memberRecords['1'] = oldLeader;
+  for (let i = 4; i <= 30; i += 1) {
+    const extra = buildMember(String(i), `Extra ${i}`, ['role-leader']);
+    guild.members.cache.set(extra.id, extra);
+    memberRecords[extra.id] = { lastSeenAt: Date.now() };
+  }
+  const largeReport = helpers.buildActivityReportEmbed(guild).toJSON();
+  assert.match(largeReport.description, /29$/u);
+  for (let i = 4; i <= 30; i += 1) guild.members.cache.delete(String(i));
 
   const leaderboard = helpers.buildLeaderboardLines(guild, 5);
   assert.equal(leaderboard.length, 2);

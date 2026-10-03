@@ -66,6 +66,7 @@ const {
 } = require('./runtime-access-helpers');
 const { createAutomationRuntimeHelpers } = require('./runtime-automation-helpers');
 const { createFamilyRuntimeHelpers } = require('./runtime-family-helpers');
+import { isMemberInactive } from './runtime-family-helpers';
 const { createRuntimeLifecycleHelpers } = require('./runtime-lifecycle-helpers');
 const { createNotificationRuntimeHelpers } = require('./runtime-notification-helpers');
 const { createGuildRuntimeApi, memberSessionKey: buildMemberSessionKey } = require('./guild-runtime');
@@ -1505,12 +1506,7 @@ async function runAfkWarnings(guildId: any) {
     if (member.user?.bot || !hasFamilyRole(member)) continue;
 
     const memberData = guildStorage.ensureMemberRecord(member.id);
-    const activityAnchor = Math.max(Number(memberData.lastSeenAt) || 0, Number(memberData.lastMessageAt) || 0, Number(memberData.lastVoiceAt) || 0)
-      || Number(memberData.observedSince) || 0;
-    if (!activityAnchor) continue;
-    const inactiveMs = Date.now() - Math.max(activityAnchor, Number(member.joinedTimestamp) || 0);
-
-    if (inactiveMs < AFK_WARNING_THRESHOLD_MS) {
+    if (!isMemberInactive(memberData, member.joinedTimestamp, AFK_WARNING_THRESHOLD_MS)) {
       guildStorage.clearAfkWarningSent(member.id);
       continue;
     }
@@ -1519,7 +1515,8 @@ async function runAfkWarnings(guildId: any) {
       continue;
     }
 
-    await sendAfkWarningDm(member).catch(() => {});
+    const delivered = await sendAfkWarningDm(member).catch(() => false);
+    if (!delivered) continue;
     guildStorage.markAfkWarningSent(member.id);
     warned.push(`<@${member.id}>`);
   }
