@@ -1,5 +1,5 @@
-import fs from 'node:fs';
 import { writeSnapshot, createWriteProbe } from './services/file-persistence';
+import { readValidated, validDatabase, refuseEmptyRecovery } from './services/state-validation';
 
 import type { BotMode, DatabaseApi, DatabaseState, GuildRecord, GuildSettings, GuildSettingsPatch, ModuleFlags } from './types';
 import { normalizeAutomodConfig } from './automod';
@@ -305,12 +305,7 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
   let lastWriteError = false;
 
   function readJsonFile(filePath: string): DatabaseState | null {
-    try {
-      if (!fs.existsSync(filePath)) return null;
-      return JSON.parse(fs.readFileSync(filePath, 'utf8')) as DatabaseState;
-    } catch {
-      return null;
-    }
+    return readValidated<DatabaseState>(filePath, validDatabase);
   }
 
   function hasMeaningfulDatabaseData(value: DatabaseState | null): boolean {
@@ -323,6 +318,7 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
     const parsed = hasMeaningfulDatabaseData(primary)
       ? primary
       : backup || primary;
+    if (!parsed) refuseEmptyRecovery(dataFile);
 
     const normalized = defaultDatabase();
     for (const [guildId, guild] of Object.entries(parsed?.guilds || {})) {

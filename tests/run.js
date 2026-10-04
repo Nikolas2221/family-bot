@@ -1,4 +1,6 @@
 async function main() {
+  await require('./state-validation.test').main();
+  await require('./natural-timeout.test').main();
   await require('./error-handling.test').main();
   await require('./reliability-recovery.test').main();
   await require('./ai-action-safety.test').main();

@@ -2345,7 +2345,7 @@ export async function executePendingBrainAction(
   return true;
 }
 
-async function handleNaturalAdminCommand(
+export async function handleNaturalAdminCommand(
   message: MessageLike,
   prompt: string,
   options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog' | 'getGuildStorage' | 'hasFamilyRole' | 'isActivityExempt'>,
@@ -2394,7 +2394,7 @@ async function handleNaturalAdminCommand(
       return true;
     }
 
-    const targetMember = await message.guild?.members.fetch(targetId).catch(() => null);
+    const targetMember = await fetchFreshMember(message.guild, targetId);
     if (!targetMember) {
       await message.channel.send?.({
         content: `<@${message.author.id}>, участник <@${targetId}> не найден на сервере.`,
@@ -2462,6 +2462,18 @@ async function handleNaturalAdminCommand(
       return true;
     }
     let ok = false;
+    const actor = await fetchFreshMember(message.guild, message.author.id);
+    if (!actor || !isAdminMember(actor) || actor.id === targetMember.id
+      || (actor.id !== message.guild.ownerId && (isAdminMember(targetMember)
+        || !(Number(actor.roles.highest?.position) > Number(targetMember.roles.highest?.position))))
+      || targetMember.moderatable === false) {
+      recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
+        action, risk, status: 'failed', actorId: message.author.id, targetId,
+        summary: 'Timeout denied by fresh permissions, hierarchy or target protection'
+      }, options);
+      await message.channel.send?.({ content: 'Мут не изменён: проверь действующие права, иерархию ролей и возможность модерации цели.', allowedMentions: { parse: [] } });
+      return true;
+    }
     if (action === 'unmute') {
       ok = await targetMember.timeout?.(null, reason).then(() => true).catch(() => false) || false;
     } else {

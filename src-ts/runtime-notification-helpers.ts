@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { EmbedBuilder, type Guild, type GuildMember, type User } from 'discord.js';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { applyCardStyle } from './card-style';
+import { getReleaseNotes } from './release-notes';
 import type { CardAppearance, CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
 
 const updateAnnouncementLocks = new Set<string>();
@@ -385,6 +386,12 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
   }
 
   async function announceBuildUpdate(guild: Guild) {
+    const documentedRelease = getReleaseNotes(productVersionSemver);
+    if (!/^release(?:\s|:)/iu.test(deployCommitMessage.trim()) || !documentedRelease
+      || ![...documentedRelease.added, ...documentedRelease.updated, ...documentedRelease.fixed].some(line => line.trim())) {
+      console.log(`[update-card] skipped ${guild.id}: not a documented release`);
+      return;
+    }
     const record = database.getGuild(guild.id);
     const changeLines = getUpdateChangeGroups(deployCommitMessage, getCurrentReleaseChangeGroups);
     const updateAnnouncementId = buildUpdateAnnouncementId(productVersionSemver, deployCommitMessage, changeLines);
@@ -392,6 +399,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     const lastUpdateAnnouncementId = record.maintenance?.lastUpdateAnnouncementId || '';
     if (
       lastUpdateAnnouncementId === updateAnnouncementId ||
+      lastUpdateAnnouncementId.startsWith(`${productVersionSemver}:`) ||
       lastUpdateAnnouncementId === currentBuildSignature ||
       updateAnnouncementLocks.has(lockKey)
     ) {

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { writeSnapshot } from './services/file-persistence';
+import { readValidated, validStore, refuseEmptyRecovery } from './services/state-validation';
 
 import type {
   ApplicationFieldsInput,
@@ -151,12 +152,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
   }
 
   function readJsonFile(filePath: string): StoreState | null {
-    try {
-      if (!fs.existsSync(filePath)) return null;
-      return JSON.parse(fs.readFileSync(filePath, 'utf8')) as StoreState;
-    } catch {
-      return null;
-    }
+    return readValidated<StoreState>(filePath, validStore);
   }
 
   function hasMeaningfulStoreData(value: StoreState | null): boolean {
@@ -191,6 +187,7 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
 
     if (primary) return { ...defaultStore(), ...primary };
     if (backup) return { ...defaultStore(), ...backup };
+    refuseEmptyRecovery(dataFile);
     return defaultStore();
   }
 

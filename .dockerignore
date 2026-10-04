@@ -8,6 +8,7 @@ data
 database.local.json
 storage.local.json
 *.bak
+*.corrupt-*
 *.actions.json*
 *.health-*
 npm-debug.log*

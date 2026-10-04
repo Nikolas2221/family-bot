@@ -50,6 +50,7 @@ async function main() {
     }
   };
 
+  let lastAnnouncement = '';
   const helpers = createNotificationRuntimeHelpers({
     copy: {
       applications: {
@@ -59,8 +60,8 @@ async function main() {
     },
     embeds,
     database: {
-      getGuild: () => ({ maintenance: {} }),
-      updateGuildMaintenance: (guildId, patch) => maintenanceUpdates.push({ guildId, patch })
+      getGuild: () => ({ maintenance: { lastUpdateAnnouncementId: lastAnnouncement } }),
+      updateGuildMaintenance: (guildId, patch) => { lastAnnouncement = patch.lastUpdateAnnouncementId; maintenanceUpdates.push({ guildId, patch }); }
     },
     EmbedBuilderCtor: require('discord.js').EmbedBuilder,
     fetchTextChannel: async () => channel,
@@ -96,7 +97,7 @@ async function main() {
     productVersionLabel: 'KLAIZ BOT 1.0 RELEASE',
     productVersionSemver: '1.0.16',
     deployBuildId: 'abc1234',
-    deployCommitMessage: 'extract notification helpers',
+    deployCommitMessage: 'Release 1.0.16: notification helpers',
     getUpdateChangeGroups: () => ({ added: ['notification helper'], updated: [], fixed: [] }),
     getCurrentReleaseChangeGroups: () => ({ added: ['notification helper'], updated: [], fixed: [] })
   });
@@ -122,6 +123,14 @@ async function main() {
 
   await helpers.announceBuildUpdate(member.guild);
   assert.equal(maintenanceUpdates.length, 1);
+  lastAnnouncement = '1.0.16:old-commit-hash';
+  await helpers.announceBuildUpdate(member.guild);
+  assert.equal(maintenanceUpdates.length, 1, 'a different commit must not repeat an announced version');
+  for (const [version, commit] of [['1.3.0', 'Fix storage recovery'], ['99.0.0', 'Release 99.0.0']]) {
+    const silent = createNotificationRuntimeHelpers({ productVersionSemver: version, deployCommitMessage: commit,
+      database: { getGuild() { throw new Error('no announcement should be prepared'); } } });
+    await silent.announceBuildUpdate(member.guild);
+  }
   assert.equal(sentPayloads.length >= 2, true);
 
   const telegramOnlyUpdates = [];
@@ -146,7 +155,7 @@ async function main() {
     productVersionLabel: 'KLAIZ BOT 1.0.57',
     productVersionSemver: '1.0.57',
     deployBuildId: 'def5678',
-    deployCommitMessage: 'capabilities update',
+    deployCommitMessage: 'Release 1.0.57: capabilities update',
     getUpdateChangeGroups: () => ({ added: ['capabilities'], updated: [], fixed: [] }),
     getCurrentReleaseChangeGroups: () => ({ added: ['capabilities'], updated: [], fixed: [] }),
     telegramNotifications: {
