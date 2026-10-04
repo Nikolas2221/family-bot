@@ -2,6 +2,7 @@ import { PermissionFlagsBits } from 'discord.js';
 import type { Client, Interaction, ChatInputCommandInteraction, ButtonInteraction, Guild, GuildMember, Role, EmbedBuilder, InteractionReplyOptions, TextChannel } from 'discord.js';
 import type { CopyCatalog, EmbedsApi, DatabaseApi, AIService, GuildRecord, GuildStorageContext, ApplicationsService, RankService, RankActionResult, RoleMenu, CustomCommandEntry, ReactionRoleEntry, ReportScheduleSlot } from './types';
 import { trackWork } from './services/shutdown';
+import { finishInteractionError } from './interaction-helpers';
 import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { getPlayerData, callAiAdvisor } from './services/aiAdvisor';
 
@@ -1295,9 +1296,9 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
       }
     } catch (error) {
       console.error('Interaction runtime error:', error);
-      if (interaction?.isRepliable?.() && !interaction.replied && !interaction.deferred) {
-        await interaction.reply(options.ephemeral({ content: options.copy.common.unknownError })).catch(() => null);
-      }
+      await finishInteractionError(interaction, options.copy.common.unknownError).catch(replyError => {
+        console.error('Failed to deliver interaction error:', replyError);
+      });
     }
   }));
 }

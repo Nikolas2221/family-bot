@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createRuntimeHealthServer } from './services/runtime-health';
 import { ActionJournal } from './services/action-journal';
 import { drainWork, isStopping, trackWork } from './services/shutdown';
+import { registerFatalHandlers } from './services/fatal-errors';
 import { Client, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
 import { createAIService } from './ai';
 import { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } from './automod';
@@ -1577,6 +1578,7 @@ registerEventRuntime({
 });
 
 let shutdownStarted = false;
+let fatalExitRequested = false;
 async function shutdown(signal: string): Promise<void> {
   if (shutdownStarted) return;
   shutdownStarted = true;
@@ -1599,7 +1601,7 @@ async function shutdown(signal: string): Promise<void> {
   await client.destroy();
   if (healthServer?.listening) await new Promise<void>(resolve => healthServer.close(() => resolve()));
   clearTimeout(hardDeadline);
-  process.exit(failed ? 1 : 0);
+  process.exit(failed || fatalExitRequested ? 1 : 0);
 }
 process.once('SIGINT', () => { void shutdown('SIGINT'); });
 process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
@@ -1610,12 +1612,13 @@ process.on('beforeExit', () => {
   storage.flush();
 });
 
-process.on('unhandledRejection', error => {
-  console.error('Unhandled rejection:', error);
-});
-
-process.on('uncaughtException', error => {
-  console.error('Uncaught exception:', error);
+registerFatalHandlers(() => {
+  fatalExitRequested = true;
+  process.exitCode = 1;
+  void shutdown('fatal').catch(error => {
+    console.error('Fatal shutdown failed:', error);
+    process.exit(1);
+  });
 });
 
 registerInteractionRuntime({

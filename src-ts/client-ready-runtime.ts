@@ -1,5 +1,5 @@
 import { buildCommands, getCommandsSignature, registerCommands } from './commands';
-import { trackWork } from './services/shutdown';
+import { trackWork, trackListener } from './services/shutdown';
 import type { Client, Guild } from 'discord.js';
 import type { AutoRanksConfig, DatabaseApi } from './types';
 
@@ -162,16 +162,16 @@ export function registerClientReadyRuntime(options: ClientReadyRuntimeOptions): 
   client.removeAllListeners('clientReady');
   client.removeAllListeners('guildCreate');
 
-  client.on('guildCreate', async guild => {
+  client.on('guildCreate', trackListener(async guild => {
     try {
       await syncGuildCommands(guild, { database });
       await warmGuildState(guild, options);
     } catch (error) {
       console.error(`Ошибка подключения нового guild ${guild.id}:`, error);
     }
-  });
+  }));
 
-  client.on('clientReady', async () => {
+  client.on('clientReady', trackListener(async () => {
     try {
       if (client.user?.tag) {
         console.log(`Бот запущен как ${client.user.tag}`);
@@ -180,11 +180,11 @@ export function registerClientReadyRuntime(options: ClientReadyRuntimeOptions): 
       await syncGuildCommandsOnReady({ client, database });
 
       setImmediate(() => {
-        void (async () => {
+        void trackWork(async () => {
           for (const guild of client.guilds.cache.values()) {
             await warmGuildState(guild, options);
           }
-        })().catch(error => {
+        }).catch(error => {
           console.error('Startup guild warmup failed:', error);
         });
       });
@@ -193,5 +193,5 @@ export function registerClientReadyRuntime(options: ClientReadyRuntimeOptions): 
     } catch (error) {
       console.error('Критическая ошибка clientReady:', error);
     }
-  });
+  }));
 }

@@ -1,7 +1,8 @@
 import { AuditLogEvent, ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { randomBytes } from 'node:crypto';
 import type { ActionJournal } from './services/action-journal';
-import { isStopping, trackWork } from './services/shutdown';
+import { isStopping, trackWork, trackListener } from './services/shutdown';
+import { deliverOnce } from './services/delivery-result';
 let actionJournal: ActionJournal | undefined;
 export function configureActionJournal(journal: ActionJournal | undefined): void { actionJournal = journal; }
 import { assessInactivity } from './activity-policy';
@@ -279,7 +280,7 @@ async function enforceLeakGuard(
   }).catch(() => null);
   if (notice) {
     setTimeout(() => {
-      void notice.delete().catch(() => null);
+      void trackWork(() => notice.delete()).catch(() => null);
     }, 10000);
   }
   return true;
@@ -885,6 +886,10 @@ export async function handleInactiveMembersRequest(
   const days = requestedInactiveDays(prompt);
   const pingMembers = shouldPingInactiveMembers(prompt);
   const messageMembers = shouldMessageInactiveMembers(prompt);
+  if ((messageMembers || pingMembers) && actionJournal && !actionJournal.isAvailable()) {
+    await message.channel.send?.({ content: 'Журнал массовых действий повреждён или недоступен. Рассылка заблокирована до восстановления журнала.', allowedMentions: { parse: [] } });
+    return true;
+  }
   if (/(отправ|напиши|разошли|предупреди)/u.test(prompt.toLowerCase()) && !messageMembers && !pingMembers) {
     await message.channel.send?.({ content: 'Укажи место отправки: «отправь неактивным в ЛС». Для списка: «покажи неактивных».', allowedMentions: { parse: [] } });
     return true;
@@ -955,6 +960,7 @@ export async function handleInactiveMembersRequest(
   }
   let delivered = 0;
   let failed = 0;
+  let uncertain = 0;
   let skipped = 0;
   if (messageMembers) {
     for (const { member } of inactive) {
@@ -965,23 +971,25 @@ export async function handleInactiveMembersRequest(
         continue;
       }
       if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, member.id, 'sending');
-      const sent = await member.user?.send?.({
+      const result = await deliverOnce(member.user?.send ? () => member.user!.send!({
         content: aiSummary,
         allowedMentions: { parse: [] }
-      }).then(() => true).catch(() => false);
-      if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, member.id, sent ? 'delivered' : 'failed');
-      if (sent) {
+      }) : undefined);
+      if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, member.id, result);
+      if (result === 'delivered') {
         delivered += 1;
         guildStorage.setCooldown?.(key, Date.now());
         guildStorage.flush?.();
       }
-      else failed += 1;
+      else if (result === 'failed') failed += 1;
+      else uncertain += 1;
     }
     await message.channel.send?.({
       content: [
-        failed ? 'Рассылка завершена с ошибками доставки.' : 'Рассылка завершена.',
+        failed || uncertain ? 'Рассылка завершена с ошибками доставки.' : 'Рассылка завершена.',
         `Доставлено: **${delivered}**`,
         `Не доставлено: **${failed}**`,
+        `Результат неизвестен: **${uncertain}**`,
         `Уже предупреждены за последние 24 часа: **${skipped}**`,
         '',
         `**Текст сообщения:**\n${aiSummary}`
@@ -1000,23 +1008,24 @@ export async function handleInactiveMembersRequest(
     for (let index = 0; index < batches.length; index += 1) {
       const batch = batches[index];
       for (const id of batch) if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, id, 'sending');
-      const sent = await message.channel.send?.({
+      const result = await deliverOnce(message.channel.send ? () => message.channel.send!({
         content: [
           index === 0 ? `📣 ${aiSummary}\nНеактивные участники за ${days} дн. (${ids.length}):` : `Продолжение списка (${index + 1}/${batches.length}):`,
           batch.map(id => `<@${id}>`).join(' '),
           index === 0 ? 'Пожалуйста, отметьтесь и сообщите о своей активности.' : ''
         ].filter(Boolean).join('\n'),
         allowedMentions: { parse: [], users: batch }
-      }).then(() => true).catch(() => false);
+      }) : undefined);
       for (const id of batch) {
-        if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, id, sent ? 'delivered' : 'failed');
-        if (sent) guildStorage.setCooldown?.(`inactive-ping:${id}`, Date.now());
+        if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, id, result);
+        if (result === 'delivered') guildStorage.setCooldown?.(`inactive-ping:${id}`, Date.now());
       }
       guildStorage.flush?.();
-      if (sent) delivered += batch.length;
-      else failed += batch.length;
+      if (result === 'delivered') delivered += batch.length;
+      else if (result === 'failed') failed += batch.length;
+      else uncertain += batch.length;
     }
-    await message.channel.send?.({ content: `Упоминания: доставлено ${delivered}, ошибок ${failed}, пропущено за последние 24 часа ${skipped}.`, allowedMentions: { parse: [] } }).catch(() => null);
+    await message.channel.send?.({ content: `Упоминания: доставлено ${delivered}, ошибок ${failed}, результат неизвестен ${uncertain}, пропущено за последние 24 часа ${skipped}.`, allowedMentions: { parse: [] } }).catch(() => null);
   } else {
     const lines = inactive.map(({ member, data }, index) => {
       const lastActivity = Math.max(
@@ -1042,19 +1051,19 @@ export async function handleInactiveMembersRequest(
   }
 
   const currentSettings = options.resolveGuildSettings(message.guild.id);
-  if (confirmed?.jobId) actionJournal?.finish(confirmed.jobId, failed ? 'failed' : 'completed');
+  if (confirmed?.jobId) actionJournal?.finish(confirmed.jobId, failed || uncertain ? 'failed' : 'completed');
   const brain = appendBrainAudit(normalizeServerBrainSettings(currentSettings.aiBrain), {
     action: messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list'),
     risk: messageMembers || pingMembers ? 'medium' : 'read',
-    status: failed ? 'failed' : 'completed',
+    status: failed || uncertain ? 'failed' : 'completed',
     actorId: message.author.id,
     targetId: message.channel.id,
-    summary: `${messageMembers ? `ЛС доставлено ${delivered}, ошибок ${failed}` : (pingMembers ? 'Упомянуты' : 'Показаны')} неактивные участники: ${ids.length}; период: ${days} дн.`
+    summary: `${messageMembers ? `ЛС доставлено ${delivered}, ошибок ${failed}, неизвестно ${uncertain}` : (pingMembers ? `Упоминания: ${delivered}, ошибок ${failed}, неизвестно ${uncertain}` : 'Показаны')} неактивные участники: ${ids.length}; период: ${days} дн.`
   });
   saveBrainSettings(message.guild.id, brain, options);
   await options.sendSecurityLog(
     message.guild,
-    `AI action ${messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list')}: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, delivered=${delivered}, failed=${failed}, days=${days}, risk=${messageMembers || pingMembers ? 'medium' : 'read'}, status=${failed ? 'failed' : 'completed'}`
+    `AI action ${messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list')}: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, delivered=${delivered}, failed=${failed}, uncertain=${uncertain}, days=${days}, risk=${messageMembers || pingMembers ? 'medium' : 'read'}, status=${failed || uncertain ? 'failed' : 'completed'}`
   ).catch(() => null);
   return true;
 }
@@ -2674,9 +2683,11 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
   function scheduleBrainSnapshot(guild: GuildLike, delayMs = 1000): void {
     setTimeout(() => {
-      const settings = resolveGuildSettings(guild.id);
-      const brain = snapshotServerMap(guild, settings, settings.aiBrain);
-      saveBrainSettings(guild.id, brain, options);
+      void trackWork(async () => {
+        const settings = resolveGuildSettings(guild.id);
+        const brain = snapshotServerMap(guild, settings, settings.aiBrain);
+        saveBrainSettings(guild.id, brain, options);
+      });
     }, delayMs);
   }
 
@@ -2688,7 +2699,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     if (current) clearTimeout(current);
     rulesSyncTimers.set(key, setTimeout(() => {
       rulesSyncTimers.delete(key);
-      void syncRulesChannelMemory(guild, channelId, actorId, options).catch(() => null);
+      void trackWork(() => syncRulesChannelMemory(guild, channelId, actorId, options)).catch(() => null);
     }, 1000));
   }
 
@@ -2703,7 +2714,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     batch.items.push(member);
     if (batch.timer) clearTimeout(batch.timer);
     batch.timer = setTimeout(() => {
-      void flushWelcomeInvites(guildId);
+      void trackWork(() => flushWelcomeInvites(guildId));
     }, 1000);
   }
 
@@ -2735,7 +2746,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     if (batch.items.length) {
       if (batch.timer) clearTimeout(batch.timer);
       batch.timer = setTimeout(() => {
-        void flushWelcomeInvites(guildId);
+        void trackWork(() => flushWelcomeInvites(guildId));
       }, 1000);
       return;
     }
@@ -2767,15 +2778,15 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     client.removeAllListeners(eventName);
   }
 
-  client.on('clientReady', () => {
+  client.on('clientReady', trackListener(() => {
     for (const guild of collectionValues<GuildLike>(client.guilds?.cache)) {
       scheduleBrainSnapshot(guild, 1500);
       const rulesChannelId = resolveGuildSettings(guild.id).channels?.rules || '';
       if (rulesChannelId) scheduleRulesMemorySync(guild, rulesChannelId, 'startup');
     }
-  });
+  }));
 
-  client.on('messageCreate', async (message: MessageLike) => trackWork(async () => {
+  client.on('messageCreate', trackListener(async (message: MessageLike) => trackWork(async () => {
     if (isStopping()) return;
     if (!message.guild) return;
     scheduleRulesMemorySync(message.guild, message.channel.id, message.author?.id || 'system');
@@ -2853,9 +2864,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
     if (!hasFamilyRole(message.member)) return;
     guildStorage.recordMessage(message.member.id);
-  }));
+  })));
 
-  client.on('messageUpdate', async (_oldMessage: MessageLike, nextMessage: MessageLike) => {
+  client.on('messageUpdate', trackListener(async (_oldMessage: MessageLike, nextMessage: MessageLike) => {
     let message = nextMessage;
     if (message.partial && typeof message.fetch === 'function') {
       message = await message.fetch().catch(() => message);
@@ -2878,25 +2889,25 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       sendSecurityLog,
       copySecurity
     });
-  });
+  }));
 
-  client.on('messageDelete', (message: MessageLike) => {
+  client.on('messageDelete', trackListener((message: MessageLike) => {
     if (!message.guild) return;
     scheduleRulesMemorySync(message.guild, message.channel.id, message.author?.id || 'system');
-  });
+  }));
 
-  client.on('presenceUpdate', (_oldPresence: PresenceLike | null, presence: PresenceLike | null) => {
+  client.on('presenceUpdate', trackListener((_oldPresence: PresenceLike | null, presence: PresenceLike | null) => {
     const member = presence?.member;
     if (!member || !hasFamilyRole(member)) return;
     getGuildStorage(member.guild.id).recordPresence(member.id);
-  });
+  }));
 
-  client.on('voiceStateUpdate', (oldState: VoiceStateLike, newState: VoiceStateLike) => {
+  client.on('voiceStateUpdate', trackListener(async (oldState: VoiceStateLike, newState: VoiceStateLike) => {
     const member = newState.member || oldState.member;
     if (!member || member.user?.bot) return;
 
     if (handleVoiceRoomsVoiceStateUpdate) {
-      void handleVoiceRoomsVoiceStateUpdate(oldState, newState).catch(error => {
+      await handleVoiceRoomsVoiceStateUpdate(oldState, newState).catch(error => {
         console.warn('Voice Rooms handler failed:', error);
       });
     }
@@ -2918,9 +2929,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       stopVoiceSession(member);
       startVoiceSession(member);
     }
-  });
+  }));
 
-  client.on('guildMemberAdd', async (member: MemberLike) => {
+  client.on('guildMemberAdd', trackListener(async (member: MemberLike) => {
     if (member.user?.bot) return;
     getGuildStorage(member.guild.id).trackJoin();
     const blocked = await enforceBlacklist(member);
@@ -2935,14 +2946,14 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       }
       scheduleWelcomeInvite(member);
     }
-  });
+  }));
 
-  client.on('guildMemberRemove', (member: MemberLike) => {
+  client.on('guildMemberRemove', trackListener((member: MemberLike) => {
     if (member.user?.bot) return;
     getGuildStorage(member.guild.id).trackLeave();
-  });
+  }));
 
-  client.on('messageReactionAdd', async (reaction: ReactionLike, user: UserLike) => {
+  client.on('messageReactionAdd', trackListener(async (reaction: ReactionLike, user: UserLike) => {
     if (!user || user.bot) return;
     const hydratedReaction = await hydrateReaction(reaction);
     if (!hydratedReaction?.message?.guild) return;
@@ -2959,9 +2970,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       isPremiumGuild,
       isModuleEnabled
     });
-  });
+  }));
 
-  client.on('messageReactionRemove', async (reaction: ReactionLike, user: UserLike) => {
+  client.on('messageReactionRemove', trackListener(async (reaction: ReactionLike, user: UserLike) => {
     if (!user || user.bot) return;
     const hydratedReaction = await hydrateReaction(reaction);
     if (!hydratedReaction?.message?.guild) return;
@@ -2971,19 +2982,19 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       isPremiumGuild,
       isModuleEnabled
     });
-  });
+  }));
 
-  client.on('guildMemberUpdate', (oldMember: MemberLike, newMember: MemberLike) => {
+  client.on('guildMemberUpdate', trackListener((oldMember: MemberLike, newMember: MemberLike) => {
     const before = hasFamilyRole(oldMember);
     const after = hasFamilyRole(newMember);
     if (before === after) return;
 
     setTimeout(() => {
-      void doPanelUpdate(newMember.guild.id, false).catch(() => null);
+      void trackWork(() => doPanelUpdate(newMember.guild.id, false)).catch(() => null);
     }, 2000);
-  });
+  }));
 
-  client.on('channelCreate', async (channel: ChannelLike) => {
+  client.on('channelCreate', trackListener(async (channel: ChannelLike) => {
     if (channel.guild) scheduleBrainSnapshot(channel.guild);
     await applyActiveLockdownToNewChannel(channel, {
       sendSecurityLog,
@@ -2991,13 +3002,13 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }).catch(error => {
       console.error('Ошибка применения lockdown к новому каналу:', error);
     });
-  });
+  }));
 
-  client.on('channelUpdate', (_oldChannel: ChannelLike, newChannel: ChannelLike) => {
+  client.on('channelUpdate', trackListener((_oldChannel: ChannelLike, newChannel: ChannelLike) => {
     if (newChannel.guild) scheduleBrainSnapshot(newChannel.guild);
-  });
+  }));
 
-  client.on('channelDelete', async (channel: ChannelDeleteLike) => {
+  client.on('channelDelete', trackListener(async (channel: ChannelDeleteLike) => {
     if (channel?.guild) scheduleBrainSnapshot(channel.guild);
     if (!channelGuard.enabled || !channel?.guild || !isPremiumGuild(channel.guild.id)) return;
 
@@ -3017,9 +3028,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     } catch (error) {
       console.error('Ошибка защиты каналов:', error);
     }
-  });
+  }));
 
-  client.on('roleCreate', async (role: RoleEventLike) => {
+  client.on('roleCreate', trackListener(async (role: RoleEventLike) => {
     if (role.guild) scheduleBrainSnapshot(role.guild);
     await handleDangerousRoleCreate(role, {
       isPremiumGuild,
@@ -3030,9 +3041,9 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }).catch(error => {
       console.error('Ошибка защиты ролей:', error);
     });
-  });
+  }));
 
-  client.on('roleUpdate', async (oldRole: RoleEventLike, newRole: RoleEventLike) => {
+  client.on('roleUpdate', trackListener(async (oldRole: RoleEventLike, newRole: RoleEventLike) => {
     if (newRole.guild) scheduleBrainSnapshot(newRole.guild);
     await handleDangerousRoleUpdate(oldRole, newRole, {
       isPremiumGuild,
@@ -3043,13 +3054,13 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }).catch(error => {
       console.error('Ошибка защиты ролей:', error);
     });
-  });
+  }));
 
-  client.on('roleDelete', (role: RoleEventLike) => {
+  client.on('roleDelete', trackListener((role: RoleEventLike) => {
     if (role.guild) scheduleBrainSnapshot(role.guild);
-  });
+  }));
 
-  client.on('webhooksUpdate', async (channel: ChannelLike) => {
+  client.on('webhooksUpdate', trackListener(async (channel: ChannelLike) => {
     await handleWebhookUpdate(channel, {
       isPremiumGuild,
       isModuleEnabled,
@@ -3059,5 +3070,5 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }).catch(error => {
       console.error('Ошибка защиты webhook:', error);
     });
-  });
+  }));
 }

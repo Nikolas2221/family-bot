@@ -1,4 +1,12 @@
 import { MessageFlags } from 'discord.js';
+import type { Interaction } from 'discord.js';
+
+export async function finishInteractionError(interaction: Interaction, content: string): Promise<void> {
+  if (!interaction.isRepliable()) return;
+  if (interaction.deferred) await interaction.editReply({ content, embeds: [], components: [] });
+  else if (interaction.replied) await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+  else await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+}
 
 interface WebhookLike {
   deleteMessage(messageId: string): Promise<unknown>;

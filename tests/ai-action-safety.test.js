@@ -113,6 +113,19 @@ async function main() {
       configureActionJournal(new ActionJournal(file));
     }
     assert.equal(deliveries, 1, 'persistent recipient journal prevents duplicates even if the main cooldown write was lost');
+    recipient.id = 'uncertain-recipient';
+    records.set(recipient.id, { observedSince: now - 20 * day, lastSeenAt: now - 10 * day });
+    let attempts = 0;
+    recipient.user.send = async () => { attempts++; throw Object.assign(new Error('response lost'), { code: 'ETIMEDOUT' }); };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      cooldowns.clear();
+      await handleInactiveMembersRequest(message, 'отправь неактивным за 7 дней в лс', options, pending);
+      await executePendingBrainAction(message, `confirm ${Array.from(pending.keys())[0]}`, pending, options);
+      configureActionJournal(new ActionJournal(file));
+    }
+    assert.equal(attempts, 1, 'ambiguous network errors must not permit duplicate delivery after restart');
+    const restored = new ActionJournal(file);
+    assert.ok(restored.list().some(job => job.recipients[recipient.id] === 'sending'));
   } finally { configureActionJournal(undefined); fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
