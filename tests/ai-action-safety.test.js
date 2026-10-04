@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { PermissionFlagsBits } = require('discord.js');
-const { executePendingBrainAction, handleInactiveMembersRequest, configureActionJournal } = require('../dist-ts/event-runtime');
+const { executePendingBrainAction, handleInactiveMembersRequest, configureActionJournal, cancelBulkAction } = require('../dist-ts/event-runtime');
 const { ActionJournal } = require('../dist-ts/services/action-journal');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -18,6 +18,7 @@ async function main() {
   const logs = [];
   let brain;
   const actor = { id: 'actor', roles: { highest: { position: 10 } }, permissions: { has: p => administrator && p === PermissionFlagsBits.Administrator } };
+  actor.fetch = async force => { assert.equal(force, true); return actor; };
   const target = { id: 'target', roles: { highest: { position: 1 } }, ban: async () => { bans++; } };
   const recipients = [];
   const guild = { id: 'safety-guild', ownerId: 'owner', members: {
@@ -127,6 +128,25 @@ async function main() {
     const restored = new ActionJournal(file);
     assert.ok(restored.list().some(job => job.recipients[recipient.id] === 'sending'));
   } finally { configureActionJournal(undefined); fs.rmSync(dir, { recursive: true, force: true }); }
+  const second = { ...recipient, id: 'second', user: { send: async () => { throw new Error('must not send after stopping'); } } };
+  recipients.push(second);
+  records.set(second.id, { observedSince: now - 20 * day, lastSeenAt: now - 10 * day });
+  for (const reason of ['revoked', 'cancelled']) {
+    administrator = true;
+    cooldowns.clear();
+    let firstSent = 0;
+    recipient.user.send = async () => {
+      firstSent++;
+      if (reason === 'revoked') administrator = false;
+      else await cancelBulkAction(message, 'отмени рассылку');
+    };
+    await handleInactiveMembersRequest(message, 'отправь неактивным за 7 дней в лс', options, pending);
+    await executePendingBrainAction(message, `confirm ${Array.from(pending.keys())[0]}`, pending, options);
+    assert.equal(firstSent, 1);
+    assert.equal(brain.audit.at(-1).status, 'cancelled');
+    assert.equal(cooldowns.has('inactive-dm:second'), false);
+    administrator = true;
+  }
 }
 
 module.exports = { main };

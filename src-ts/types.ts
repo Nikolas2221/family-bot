@@ -639,6 +639,7 @@ export interface DatabaseState {
 }
 
 export interface DatabaseApi {
+  healthStatus(): { writable: boolean; lastWriteAt: number; hasWriteError: boolean };
   ensureGuild(guildId: string, defaults?: Partial<GuildRecord>): GuildRecord;
   flush(): void;
   getGuild(guildId: string): GuildRecord;

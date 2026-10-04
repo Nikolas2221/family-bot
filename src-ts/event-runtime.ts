@@ -35,6 +35,7 @@ interface RoleLike {
 }
 
 interface MemberLike {
+  fetch?(force: boolean): Promise<MemberLike>;
   bannable?: boolean;
   kickable?: boolean;
   joinedTimestamp?: number | null;
@@ -479,7 +480,21 @@ export interface PendingBrainAction {
   text?: string;
 }
 
-const bulkActionLocks = new Set<string>();
+const bulkActionLocks = new Map<string, { actorId: string; cancelled: boolean }>();
+async function fetchFreshMember(guild: GuildLike, id: string): Promise<MemberLike | null> {
+  const member = await guild.members.fetch(id).catch(() => null);
+  return member?.fetch ? member.fetch(true).catch(() => null) : member;
+}
+export async function cancelBulkAction(message: MessageLike, prompt: string): Promise<boolean> {
+  if (!message.guild || !/^(отмени|останови)\s+рассылку[.!]?$/iu.test(prompt.trim())) return false;
+  const action = bulkActionLocks.get(message.guild.id);
+  const permitted = action?.actorId === message.author.id || isAdminMember(message.member);
+  if (action && permitted) action.cancelled = true;
+  await message.channel.send?.({ content: action && permitted
+    ? 'Остановка запрошена. Текущая отправка завершится, следующие будут отменены.'
+    : action ? 'Отменить рассылку может её инициатор или администратор.' : 'Активной рассылки нет.', allowedMentions: { parse: [] } });
+  return true;
+}
 
 interface WelcomeInviteBatch {
   items: MemberLike[];
@@ -962,8 +977,19 @@ export async function handleInactiveMembersRequest(
   let failed = 0;
   let uncertain = 0;
   let skipped = 0;
+  let stopReason = '';
+  const mayContinue = async (): Promise<boolean> => {
+    if (!confirmed) return true;
+    if (bulkActionLocks.get(message.guild!.id)?.cancelled) stopReason = 'Отменено по запросу.';
+    else {
+      const actor = await fetchFreshMember(message.guild!, message.author.id);
+      if (!actor || !isAdminMember(actor)) stopReason = 'Права администратора отозваны или не удалось их проверить.';
+    }
+    return !stopReason;
+  };
   if (messageMembers) {
     for (const { member } of inactive) {
+      if (!(await mayContinue())) break;
       const key = `inactive-dm:${member.id}`;
       if (Date.now() - (guildStorage.getCooldown?.(key) || 0) < 86400000
         || actionJournal?.recentlySent(message.guild.id, 'inactive_dm', member.id)) {
@@ -986,7 +1012,7 @@ export async function handleInactiveMembersRequest(
     }
     await message.channel.send?.({
       content: [
-        failed || uncertain ? 'Рассылка завершена с ошибками доставки.' : 'Рассылка завершена.',
+        stopReason || (failed || uncertain ? 'Рассылка завершена с ошибками доставки.' : 'Рассылка завершена.'),
         `Доставлено: **${delivered}**`,
         `Не доставлено: **${failed}**`,
         `Результат неизвестен: **${uncertain}**`,
@@ -1006,6 +1032,7 @@ export async function handleInactiveMembersRequest(
     });
     for (let index = 0; index < eligibleIds.length; index += 25) batches.push(eligibleIds.slice(index, index + 25));
     for (let index = 0; index < batches.length; index += 1) {
+      if (!(await mayContinue())) break;
       const batch = batches[index];
       for (const id of batch) if (confirmed?.jobId) actionJournal?.recipient(confirmed.jobId, id, 'sending');
       const result = await deliverOnce(message.channel.send ? () => message.channel.send!({
@@ -1025,7 +1052,7 @@ export async function handleInactiveMembersRequest(
       else if (result === 'failed') failed += batch.length;
       else uncertain += batch.length;
     }
-    await message.channel.send?.({ content: `Упоминания: доставлено ${delivered}, ошибок ${failed}, результат неизвестен ${uncertain}, пропущено за последние 24 часа ${skipped}.`, allowedMentions: { parse: [] } }).catch(() => null);
+    await message.channel.send?.({ content: `${stopReason}\nУпоминания: доставлено ${delivered}, ошибок ${failed}, результат неизвестен ${uncertain}, пропущено за последние 24 часа ${skipped}.`, allowedMentions: { parse: [] } }).catch(() => null);
   } else {
     const lines = inactive.map(({ member, data }, index) => {
       const lastActivity = Math.max(
@@ -1051,19 +1078,19 @@ export async function handleInactiveMembersRequest(
   }
 
   const currentSettings = options.resolveGuildSettings(message.guild.id);
-  if (confirmed?.jobId) actionJournal?.finish(confirmed.jobId, failed || uncertain ? 'failed' : 'completed');
+  if (confirmed?.jobId) actionJournal?.finish(confirmed.jobId, failed || uncertain || stopReason ? 'failed' : 'completed');
   const brain = appendBrainAudit(normalizeServerBrainSettings(currentSettings.aiBrain), {
     action: messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list'),
     risk: messageMembers || pingMembers ? 'medium' : 'read',
-    status: failed || uncertain ? 'failed' : 'completed',
+    status: stopReason ? 'cancelled' : failed || uncertain ? 'failed' : 'completed',
     actorId: message.author.id,
     targetId: message.channel.id,
-    summary: `${messageMembers ? `ЛС доставлено ${delivered}, ошибок ${failed}, неизвестно ${uncertain}` : (pingMembers ? `Упоминания: ${delivered}, ошибок ${failed}, неизвестно ${uncertain}` : 'Показаны')} неактивные участники: ${ids.length}; период: ${days} дн.`
+    summary: `${stopReason} ${messageMembers ? `ЛС доставлено ${delivered}, ошибок ${failed}, неизвестно ${uncertain}` : (pingMembers ? `Упоминания: ${delivered}, ошибок ${failed}, неизвестно ${uncertain}` : 'Показаны')} неактивные участники: ${ids.length}; период: ${days} дн.`
   });
   saveBrainSettings(message.guild.id, brain, options);
   await options.sendSecurityLog(
     message.guild,
-    `AI action ${messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list')}: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, delivered=${delivered}, failed=${failed}, uncertain=${uncertain}, days=${days}, risk=${messageMembers || pingMembers ? 'medium' : 'read'}, status=${failed || uncertain ? 'failed' : 'completed'}`
+    `AI action ${messageMembers ? 'inactive_dm' : (pingMembers ? 'inactive_ping' : 'inactive_list')}: actor=${message.author.id}, channel=${message.channel.id}, users=${ids.length}, delivered=${delivered}, failed=${failed}, uncertain=${uncertain}, days=${days}, risk=${messageMembers || pingMembers ? 'medium' : 'read'}, status=${stopReason ? 'cancelled' : failed || uncertain ? 'failed' : 'completed'}`
   ).catch(() => null);
   return true;
 }
@@ -2249,7 +2276,7 @@ export async function executePendingBrainAction(
   }
 
   pendingActions.delete(code);
-  const actor = await message.guild.members.fetch(message.author.id).catch(() => null);
+  const actor = await fetchFreshMember(message.guild, message.author.id);
   if (!actor || !isAdminMember(actor)) {
     recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
       action: pending.action, risk: pending.risk, status: 'failed', actorId: message.author.id,
@@ -2267,7 +2294,7 @@ export async function executePendingBrainAction(
       await message.channel.send?.({ content: 'На сервере уже выполняется массовое действие. Повтори запрос после завершения.', allowedMentions: { parse: [] } });
       return true;
     }
-    bulkActionLocks.add(message.guild.id);
+    bulkActionLocks.set(message.guild.id, { actorId: message.author.id, cancelled: false });
     const confirmedMessage = Object.create(message) as MessageLike;
     Object.defineProperty(confirmedMessage, 'member', { value: actor });
     const jobId = randomBytes(16).toString('hex');
@@ -2288,7 +2315,7 @@ export async function executePendingBrainAction(
     } finally { bulkActionLocks.delete(message.guild.id); }
     return true;
   }
-  const targetMember = await message.guild.members.fetch(pending.targetId).catch(() => null);
+  const targetMember = await fetchFreshMember(message.guild, pending.targetId);
   let ok = false;
   if (targetMember && targetMember.id !== message.guild.ownerId && targetMember.id !== actor.id
     && (!isAdminMember(targetMember) || actor.id === message.guild.ownerId)
@@ -2324,6 +2351,7 @@ async function handleNaturalAdminCommand(
   options: Pick<EventRuntimeOptions, 'client' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog' | 'getGuildStorage' | 'hasFamilyRole' | 'isActivityExempt'>,
   pendingActions: Map<string, PendingBrainAction>
 ): Promise<boolean> {
+  if (await cancelBulkAction(message, prompt)) return true;
   if (await executePendingBrainAction(message, prompt, pendingActions, options)) {
     return true;
   }

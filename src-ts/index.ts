@@ -1708,6 +1708,8 @@ registerInteractionRuntime({
       `Telegram: ${telegramHealth(telegramBot)}`,
       ...(aiService.healthLines?.() || []),
       ...storage.healthLines(),
+      `База настроек: ${database.healthStatus().writable && !database.healthStatus().hasWriteError ? 'доступна' : 'ошибка записи'}`,
+      `Журнал действий: ${actionJournal.healthStatus() ? 'доступен' : 'недоступен'}`,
       ...serverBackupService.healthLines(),
       ...familyCabinetService.statusLines().filter((line: string) => !line.startsWith('Файл') && !line.startsWith('Scraper'))
     ],
@@ -1768,7 +1770,9 @@ registerInteractionRuntime({
 const healthPort = Number(process.env.PORT || 0);
 const healthServer = healthPort ? createRuntimeHealthServer(() => ({
   ready: client.isReady() && !isStopping(),
-  storageWritable: storage.healthStatus().writable && !storage.healthStatus().hasWriteError
+  storageWritable: storage.healthStatus().writable && !storage.healthStatus().hasWriteError,
+  databaseWritable: database.healthStatus().writable && !database.healthStatus().hasWriteError,
+  journalWritable: actionJournal.healthStatus()
 })) : null;
 if (healthServer) {
   healthServer.on('error', (error) => {

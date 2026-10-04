@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createWriteProbe } from './file-persistence';
 import type { PendingBrainAction } from '../event-runtime';
 
 export interface ActionJob {
@@ -18,7 +19,9 @@ export class ActionJournal {
   private pending: Record<string, PendingBrainAction> = {};
   private unavailable = false;
   private recoveryBlockUntil = 0;
+  private readonly probeWritable: () => boolean;
   constructor(private readonly file: string) {
+    this.probeWritable = createWriteProbe(file);
     const exists = fs.existsSync(file) || fs.existsSync(`${file}.bak`);
     if (!exists) return;
     const read = (name: string): JournalState | null => {
@@ -49,6 +52,7 @@ export class ActionJournal {
     }
   }
   isAvailable(): boolean { return !this.unavailable; }
+  healthStatus(): boolean { return !this.unavailable && this.probeWritable(); }
   private save(): void {
     if (this.unavailable) throw new Error('Action journal unavailable; restore it before executing bulk actions');
     const cutoff = Date.now() - 30 * 86400000;

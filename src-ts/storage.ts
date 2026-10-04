@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { writeSnapshot } from './services/file-persistence';
 
 import type {
   ApplicationFieldsInput,
@@ -203,15 +204,10 @@ function createStorage(options: { dataFile: string; saveDelayMs?: number }): Sto
       saveTimer = null;
     }
 
-    const backupFile = `${dataFile}.bak`;
-    const tempFile = `${dataFile}.tmp`;
     const payload = JSON.stringify(store, null, 2);
 
     try {
-      fs.mkdirSync(path.dirname(dataFile), { recursive: true });
-      fs.writeFileSync(tempFile, payload, 'utf8');
-      fs.renameSync(tempFile, dataFile);
-      fs.writeFileSync(backupFile, payload, 'utf8');
+      writeSnapshot(dataFile, payload);
       lastWriteAt = Date.now();
       lastWriteError = '';
     } catch (error) {

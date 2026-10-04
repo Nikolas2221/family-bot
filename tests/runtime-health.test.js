@@ -18,6 +18,15 @@ async function main() {
   assert.equal(request().code, 503);
   assert.equal(request('/').code, 404);
   assert.equal(request('/healthz', 'POST').code, 404);
+  status = { ready: true, storageWritable: true, databaseWritable: false, journalWritable: true };
+  assert.equal(request().code, 503);
+  assert.equal(JSON.parse(request().body).components.database, false);
+  status.databaseWritable = true;
+  status.journalWritable = false;
+  assert.equal(request().code, 503);
+  assert.equal(JSON.parse(request().body).components.journal, false);
+  status.journalWritable = true;
+  assert.equal(request().code, 200);
   const failing = createRuntimeHealthServer(() => { throw new Error('private path'); });
   let body;
   failing.emit('request', { url: '/healthz', method: 'GET' }, { writeHead(code) { assert.equal(code, 503); return this; }, end(value) { body = value; } });

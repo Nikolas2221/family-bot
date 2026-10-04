@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import path from 'node:path';
+import { writeSnapshot, createWriteProbe } from './services/file-persistence';
 
 import type { BotMode, DatabaseApi, DatabaseState, GuildRecord, GuildSettings, GuildSettingsPatch, ModuleFlags } from './types';
 import { normalizeAutomodConfig } from './automod';
@@ -300,6 +300,9 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
 
   let database: DatabaseState = loadDatabase();
   let saveTimer: NodeJS.Timeout | null = null;
+  const probeWritable = createWriteProbe(dataFile);
+  let lastWriteAt = 0;
+  let lastWriteError = false;
 
   function readJsonFile(filePath: string): DatabaseState | null {
     try {
@@ -334,14 +337,13 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
       saveTimer = null;
     }
 
-    const backupFile = `${dataFile}.bak`;
-    const tempFile = `${dataFile}.tmp`;
     const payload = JSON.stringify(database, null, 2);
 
-    fs.mkdirSync(path.dirname(dataFile), { recursive: true });
-    fs.writeFileSync(tempFile, payload, 'utf8');
-    fs.renameSync(tempFile, dataFile);
-    fs.writeFileSync(backupFile, payload, 'utf8');
+    try {
+      writeSnapshot(dataFile, payload);
+      lastWriteAt = Date.now();
+      lastWriteError = false;
+    } catch (error) { lastWriteError = true; throw error; }
   }
 
   function save(): void {
@@ -497,6 +499,7 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
 
   return {
     ensureGuild,
+    healthStatus: () => ({ writable: probeWritable(), lastWriteAt, hasWriteError: lastWriteError }),
     flush,
     getGuild,
     getSubscription,

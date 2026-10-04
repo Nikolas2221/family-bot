@@ -5,6 +5,8 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { ActionJournal } = require('../dist-ts/services/action-journal');
 const { createStorage } = require('../dist-ts/storage');
+const { createDatabase } = require('../dist-ts/database');
+const { writeSnapshot } = require('../dist-ts/services/file-persistence');
 
 async function main() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-recovery-'));
@@ -70,6 +72,25 @@ async function main() {
       assert.equal(failed.healthStatus().writable, false, 'permissions alone must not report a writable disk');
     } finally { fs.renameSync = rename; }
     assert.equal(fs.readdirSync(dir).some(name => name.includes('.health-')), false);
+    const atomicFile = path.join(dir, 'atomic.json');
+    writeSnapshot(atomicFile, '{"version":1}');
+    try {
+      fs.renameSync = (source, target) => {
+        if (target === `${atomicFile}.bak`) throw new Error('backup rename interrupted');
+        return rename(source, target);
+      };
+      assert.throws(() => writeSnapshot(atomicFile, '{"version":2}'), /interrupted/);
+      assert.deepEqual(JSON.parse(fs.readFileSync(atomicFile, 'utf8')), { version: 2 });
+      assert.deepEqual(JSON.parse(fs.readFileSync(`${atomicFile}.bak`, 'utf8')), { version: 1 });
+    } finally { fs.renameSync = rename; }
+    const db = createDatabase({ dataFile: path.join(dir, 'database.json') });
+    try {
+      fs.renameSync = () => { throw new Error('disk error'); };
+      assert.throws(() => db.flush(), /disk error/);
+      assert.equal(db.healthStatus().hasWriteError, true);
+    } finally { fs.renameSync = rename; }
+    db.flush();
+    assert.equal(db.healthStatus().hasWriteError, false);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 
   execFileSync(process.execPath, ['-e', `

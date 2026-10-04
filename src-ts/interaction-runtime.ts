@@ -1246,7 +1246,12 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
 
   client.removeAllListeners('interactionCreate');
   client.on('interactionCreate', async (rawInteraction) => trackWork(async () => {
-    if (!rawInteraction.guild || (typeof rawInteraction.inCachedGuild === 'function' && !rawInteraction.inCachedGuild())) return;
+    if (!rawInteraction.guild || (typeof rawInteraction.inCachedGuild === 'function' && !rawInteraction.inCachedGuild())) {
+      await finishInteractionError(rawInteraction, rawInteraction.guildId
+        ? 'Данные сервера временно недоступны. Повтори запрос после восстановления соединения.'
+        : 'Эта команда доступна только на сервере.').catch(error => console.error('Interaction availability reply failed:', error));
+      return;
+    }
     const interaction = rawInteraction as Interaction<'cached'>;
     try {
       if (await options.supportTicketService.handleInteraction(interaction)) {

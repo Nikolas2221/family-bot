@@ -5,6 +5,7 @@ const path = require('node:path');
 const { deliverOnce } = require('../dist-ts/services/delivery-result');
 const { finishInteractionError } = require('../dist-ts/interaction-helpers');
 const { registerFatalHandlers } = require('../dist-ts/services/fatal-errors');
+const { registerInteractionRuntime } = require('../dist-ts/interaction-runtime');
 
 async function main() {
   assert.equal(await deliverOnce(async () => {}), 'delivered');
@@ -27,6 +28,15 @@ async function main() {
     assert.equal(calls[0][1].content, 'Failed');
   }
   await finishInteractionError({ isRepliable: () => false }, 'Ignored');
+  let handler;
+  registerInteractionRuntime({ client: { removeAllListeners() {}, on(_name, listener) { handler = listener; } } });
+  for (const guildId of [null, 'not-cached']) {
+    let reply;
+    await handler({ guild: null, guildId, isRepliable: () => true,
+      reply: async payload => { reply = payload; } });
+    assert.ok(reply);
+    assert.match(reply.content, guildId ? /временно недоступны/ : /только на сервере/);
+  }
   const source = new EventEmitter();
   const fatal = [];
   registerFatalHandlers(error => fatal.push(error), source);
