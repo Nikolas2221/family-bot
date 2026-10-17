@@ -1,5 +1,21 @@
 # Conversational replies
 
+Shared AI text instructions require scoped facts, concise answers, no automatic
+agreement with false assumptions and no invented sources or action outcomes.
+Programming questions explicitly distinguish arrays across languages and zero-based
+from one-based indexing. These are prompting safeguards, not a factual verifier.
+Tests verify the instructions sent to the model, not live model correctness.
+
+Manual model evaluation examples: explain an array without a language; explain a
+mixed JavaScript array; compare Lua and Python indexing; correct a false premise;
+produce a short announcement without extra headings. Validate generated answers
+with the selected provider after deployment, since free-router models can vary.
+
+Release 1.4.0 notes include these changes. To announce a previously missed release,
+use a commit message starting with Release. The existing per-version delivery marker
+is preserved; already announced guilds are not forcibly re-notified. No update card
+is sent locally by these changes.
+
 Discord mentions use the configured AI provider for general questions. Conversation
 history holds up to three exchanges per guild/channel/user, expires after 15 minutes,
 and is lost on restart. It does not authorize actions or carry tool confirmations.

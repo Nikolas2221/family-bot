@@ -1,4 +1,5 @@
 import copy from './copy';
+import { buildAnswerQualityInstructions } from './services/answer-quality';
 import type {
   AIService,
   ApplicationAnalysisInput,
@@ -404,6 +405,7 @@ export function createAIService({
         role: 'system',
         content: [
           _systemPrompt || 'Ты помощник Discord-семьи.',
+          buildAnswerQualityInstructions(userPrompt),
           'Отвечай по-русски, понятно и по делу.',
           'По умолчанию давай один готовый ответ, а не несколько вариантов.',
           'Если пользователь просит текст или объявление, сразу пиши готовый текст без пояснений.',
