@@ -297,13 +297,8 @@ async function main() {
     delete: async () => {}
   });
   assert.equal(aiReplies[0], '<@user-1> AI reply: подскажи текст');
-  assert.match(aiSystems[0], /ФАКТИЧЕСКИЙ КОНТЕКСТ DISCORD-СЕРВЕРА/u);
-  assert.match(aiSystems[0], /ПУБЛИЧНЫЕ DISCORD-ПРОФИЛИ/u);
-  assert.match(aiSystems[0], /display name=Inactive Member/u);
-  assert.match(aiSystems[0], /username=inactive_public/u);
-  assert.match(aiSystems[0], /Discord ID=inactive-user/u);
-  assert.match(aiSystems[0], /роли=KLAIZ/u);
-  assert.match(aiSystems[0], /Discord ID=public-100/u);
+  assert.doesNotMatch(aiSystems[0], /ФАКТИЧЕСКИЙ КОНТЕКСТ DISCORD-СЕРВЕРА/u);
+  assert.doesNotMatch(aiSystems[0], /Discord ID=|display name=/u);
   additionalMembers.length = 0;
 
   const aiCallsBeforeStats = aiSystems.length;

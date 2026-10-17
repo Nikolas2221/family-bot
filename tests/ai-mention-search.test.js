@@ -26,13 +26,22 @@ async function main() {
     }, new Map());
     assert.equal(handled, true);
     assert.equal(memberLoads, 0);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].content, /Search key is missing/);
+    message.content = '<@123456789012345678> объясни как работают массивы';
+    await handleAiMentionMessage(message, new Map(), {
+      client: { user: { id: '123456789012345678' } },
+      aiMention: { enabled: true, cooldownSeconds: 3, maxChars: 700 },
+      getGuildStorage: () => { throw Error('General questions must not load storage'); },
+      aiService: { aiText: async () => 'General answer' }
+    }, new Map());
+    assert.equal(memberLoads, 0);
     assert.equal(sent.length, 2);
-    assert.match(sent[0].content, /Ищу информацию/);
-    assert.match(sent[1].content, /Search key is missing/);
+    assert.match(sent[1].content, /General answer/);
   } finally {
     if (key === undefined) delete process.env.TAVILY_API_KEY;
     else process.env.TAVILY_API_KEY = key;
   }
-  console.log('PASS mention web search does not fetch server members and acknowledges requests');
+  console.log('PASS general and web questions avoid server data and send one answer');
 }
 module.exports = { main };

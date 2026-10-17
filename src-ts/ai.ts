@@ -76,7 +76,8 @@ function formatMemberForModel(profile: MemberRecommendationInput): string {
 
 async function safeChat(
   chatCompletion: ChatCompletionLike | undefined,
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{ role: string; content: string }>,
+  strict = false
 ): Promise<string | null> {
   if (!chatCompletion?.enabled) return null;
   try {
@@ -85,6 +86,7 @@ async function safeChat(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || 'unknown error');
     console.warn(`External AI request failed, falling back to local helper: ${message}`);
+    if (strict) throw error;
     return null;
   }
 }
@@ -384,7 +386,7 @@ export function createAIService({
         if (normalizeText(result)) lastSuccessAt = Date.now();
         return result;
       } catch (error) {
-        lastResult = 'ошибка провайдера; используется локальный ответ';
+        lastResult = 'ошибка провайдера';
         throw error;
       }
     }
@@ -392,6 +394,9 @@ export function createAIService({
   async function aiText(_systemPrompt: string, userPrompt: string): Promise<string> {
     if (!enabled) {
       throw new Error(copy.ai.disabled);
+    }
+    if (_systemPrompt.includes('[conversation]') && !chatCompletion?.enabled) {
+      throw new Error('AI provider not configured');
     }
 
     const external = await safeChat(chatCompletion || undefined, [
@@ -406,7 +411,7 @@ export function createAIService({
         ].join(' ')
       },
       { role: 'user', content: userPrompt }
-    ]);
+    ], _systemPrompt.includes('[conversation]'));
     if (external) return external;
 
     if (_systemPrompt.includes('[tool-result-only]')) return '';

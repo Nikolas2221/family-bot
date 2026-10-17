@@ -95,9 +95,15 @@ export function createOpenRouterChatCompletion(options: DeepSeekOptions) {
   const timeoutMs = options.timeoutMs || 10_000;
   const fetchImpl = options.fetchImpl || fetch;
   const referer = options.referer || 'https://github.com/your-repo';
+  const isOpenRouter = new URL(baseUrl).hostname === 'openrouter.ai';
+  let cooldownUntil = 0;
+  let activeRequests = 0;
 
   async function chat(messages: Array<{ role: string; content: string }>): Promise<string | null> {
     if (!apiKey) return null;
+    if (cooldownUntil > Date.now()) throw new Error('OpenRouter HTTP 429 cooldown');
+    if (activeRequests >= 2) throw new Error('OpenRouter busy; try later');
+    activeRequests++;
 
     const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -112,7 +118,8 @@ export function createOpenRouterChatCompletion(options: DeepSeekOptions) {
         body: JSON.stringify({
           model,
           temperature: 0.7,
-          max_tokens: 1024,
+          max_tokens: 2048,
+          ...(isOpenRouter ? { reasoning: { effort: 'low', exclude: true } } : {}),
           messages
         }),
         signal: controller.signal
@@ -126,14 +133,31 @@ export function createOpenRouterChatCompletion(options: DeepSeekOptions) {
       const response = await Promise.race([request, hardTimeout]);
 
       if (!response.ok) {
+        if (response.status === 429 || response.status === 503) {
+          const header = response.headers?.get('retry-after');
+          const value = header ? Number(header) : NaN;
+          const wait = Number.isFinite(value) ? value * 1000 : header ? Date.parse(header) - Date.now() : 60000;
+          cooldownUntil = Date.now() + (Number.isFinite(wait) ? Math.max(1000, wait) : 60000);
+        }
         throw new Error(`OpenRouter HTTP ${response.status}`);
       }
 
-      const payload = await response.json() as any;
-      const content = String(payload?.choices?.[0]?.message?.content || '').trim();
-      return content || null;
+      const payload: unknown = await Promise.race([response.json(), hardTimeout]);
+      if (!payload || typeof payload !== 'object') throw new Error('OpenRouter empty response');
+      if ('error' in payload && payload.error) {
+        const error = payload.error;
+        const code = typeof error === 'object' && 'code' in error ? Number(error.code) : 0;
+        if (code === 429 || code === 503) cooldownUntil = Date.now() + 60000;
+        throw new Error(`OpenRouter response error ${Number.isFinite(code) ? code : 0}`);
+      }
+      const choices = 'choices' in payload && Array.isArray(payload.choices) ? payload.choices : [];
+      const value: unknown = choices[0]?.message?.content;
+      const content = typeof value === 'string' ? value.trim() : '';
+      if (!content) throw new Error('OpenRouter empty content; inspect model and output token budget');
+      return content;
     } finally {
       if (timeout) clearTimeout(timeout);
+      activeRequests--;
     }
   }
 

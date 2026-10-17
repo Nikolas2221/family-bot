@@ -124,7 +124,10 @@ export function createDiscordRateLimitGuard(file: string, options: {
           defer(duration);
           continue;
         }
-        if (response.status === 401) throw new Error('Discord rejected TOKEN (HTTP 401). Automatic login stopped.');
+        if (response.status === 401) {
+          defer(15 * 60_000);
+          throw new Error('Discord rejected TOKEN (HTTP 401). Automatic login stopped.');
+        }
         if (!response.ok) {
           log(`[discord] Gateway preflight HTTP ${response.status}; retry delayed.`);
           defer(response.status === 403 ? 15 * 60_000 : 60_000);

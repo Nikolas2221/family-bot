@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { createDeepSeekService } = require('../dist-ts/services/deepseek');
+const { createDeepSeekService, createOpenRouterChatCompletion } = require('../dist-ts/services/deepseek');
 
 async function main() {
   let request = null;
@@ -51,6 +51,32 @@ async function main() {
     () => hanging.answerLawQuestion('Вопрос', [{ excerpt: 'Норма' }]),
     /DeepSeek timeout after 10ms/
   );
+  let routerCalls = 0;
+  const router = createOpenRouterChatCompletion({ apiKey: 'secret', fetchImpl: async (_url, init) => {
+    routerCalls++;
+    const input = JSON.parse(init.body);
+    assert.equal(input.reasoning.effort, 'low');
+    assert.equal(input.max_tokens, 2048);
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'Answer' } }] }));
+  } });
+  assert.equal(await router.chat([]), 'Answer');
+  const limited = createOpenRouterChatCompletion({ apiKey: 'secret', fetchImpl: async () => {
+    routerCalls++;
+    return new Response('{}', { status: 429, headers: { 'retry-after': '60' } });
+  } });
+  await assert.rejects(limited.chat([]), /429/);
+  const before = routerCalls;
+  await assert.rejects(limited.chat([]), /cooldown/);
+  assert.equal(routerCalls, before);
+  const empty = createOpenRouterChatCompletion({ apiKey: 'secret', fetchImpl: async () =>
+    new Response(JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: '' } }] })) });
+  await assert.rejects(empty.chat([]), /empty content/);
+  const bodyError = createOpenRouterChatCompletion({ apiKey: 'secret', fetchImpl: async () =>
+    new Response(JSON.stringify({ error: { code: 503, message: 'Private provider details' } })) });
+  await assert.rejects(bodyError.chat([]), /response error 503/);
+  const hangingBody = createOpenRouterChatCompletion({ apiKey: 'secret', timeoutMs: 10,
+    fetchImpl: async () => ({ ok: true, json: async () => new Promise(() => {}) }) });
+  await assert.rejects(hangingBody.chat([]), /timeout/);
   console.log('ALL DEEPSEEK TESTS PASSED');
 }
 

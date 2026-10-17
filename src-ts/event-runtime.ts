@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { ActionJournal } from './services/action-journal';
 import { isStopping, trackWork, trackListener } from './services/shutdown';
 import { deliverOnce } from './services/delivery-result';
-import { createAgentReplies } from './services/agent-replies';
+import { createAgentReplies, needsServerContext } from './services/agent-replies';
 import { createWebSearch, needsWebSearch } from './services/web-search';
 const agentReply = createAgentReplies();
 const searchWeb = createWebSearch(() => process.env.TAVILY_API_KEY);
@@ -1230,7 +1230,7 @@ async function handleLiveActivityQuestion(
 
 async function buildAggregateServerContext(
   message: MessageLike,
-  options: Pick<EventRuntimeOptions, 'getGuildStorage' | 'resolveGuildSettings' | 'hasFamilyRole'>
+  options: Pick<EventRuntimeOptions, 'client' | 'getGuildStorage' | 'resolveGuildSettings' | 'hasFamilyRole'>
 ): Promise<string> {
   if (!message.guild) return '';
   const guildStorage = options.getGuildStorage(message.guild.id);
@@ -1246,8 +1246,17 @@ async function buildAggregateServerContext(
     .map(role => role.name)
     .join(', ');
   const rules = String(settings.aiBrain?.rules?.text || '').trim().slice(0, 1200);
-  const requestedIds = new Set(parseTargetUserIds(message.content, ''));
-  const memberProfiles = (await loadActivityMembers(message.guild))
+  const requestedIds = new Set(parseTargetUserIds(message.content, options.client.user?.id || ''));
+  if (/(?:мой|моя|мою|мои)\s/iu.test(message.content)) requestedIds.add(message.author.id);
+  const contextMembers = new Map(collectionValues<MemberLike>(message.guild.members.cache)
+    .filter(member => requestedIds.has(member.id)).map(member => [member.id, member]));
+  if (requestedIds.has(message.author.id) && message.member) contextMembers.set(message.author.id, message.member);
+  for (const id of [...requestedIds].filter(id => id !== message.guild!.id).slice(0, 3)) {
+    if (contextMembers.has(id)) continue;
+    const member = await message.guild.members.fetch(id).catch(() => null);
+    if (member) contextMembers.set(id, member);
+  }
+  const memberProfiles = [...contextMembers.values()]
     .filter(member => !member.user?.bot)
     .sort((left, right) => Number(requestedIds.has(right.id)) - Number(requestedIds.has(left.id)))
     .map((member, index) => {
@@ -1285,7 +1294,7 @@ async function buildAggregateServerContext(
     channels ? `Каналы и назначения: ${channels}.` : '',
     roles ? `Роли сверху вниз: ${roles}.` : '',
     rules ? `Актуальные правила из настроенного канала:\n${rules}` : '',
-    memberProfiles.length ? `ПУБЛИЧНЫЕ DISCORD-ПРОФИЛИ И СТАТИСТИКА КАЖДОГО СЕМЕЙНОГО УЧАСТНИКА:\n${memberProfiles.join('\n')}` : '',
+    memberProfiles.length ? `ПУБЛИЧНЫЕ DISCORD-ПРОФИЛИ И СТАТИСТИКА ИЗ КЕША И ЯВНОГО ЗАПРОСА (СПИСОК МОЖЕТ БЫТЬ НЕПОЛНЫМ):\n${memberProfiles.join('\n')}` : '',
     'Не утверждай, что у тебя нет доступа к серверу. Используй этот контекст и встроенные функции бота. Не выдумывай отсутствующие данные.'
   ].filter(Boolean).join('\n');
 }
@@ -2668,13 +2677,9 @@ export async function handleAiMentionMessage(
 
   try {
     const wantsWeb = needsWebSearch(prompt);
-    if (wantsWeb) {
-      await message.channel.send?.({ content: 'Ищу информацию в интернете…', allowedMentions: { parse: [] } })
-        .catch(error => console.warn('[ai-mention] Cannot send search acknowledgement:', error));
-    }
-    const liveContext = wantsWeb
-      ? 'Общий веб-вопрос: данные участников и внутренняя статистика сервера для него не загружались.'
-      : await buildAggregateServerContext(message, options);
+    const liveContext = !wantsWeb && needsServerContext(prompt)
+      ? await buildAggregateServerContext(message, options)
+      : 'Общий вопрос: внутренняя статистика сервера и профили участников не загружались.';
     const web = await searchWeb(prompt);
     const answer = await agentReply(JSON.stringify([message.guild.id, message.channel.id, message.author.id]),
       options.aiService, `${buildMentionSystemPrompt()}\n\n${liveContext}\n\n${web.context}`, prompt);
@@ -2740,15 +2745,19 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
   const aiConflictCooldowns = new Map<string, number>();
   const pendingAiActions = actionJournal?.confirmations() || new Map<string, PendingBrainAction>();
   const rulesSyncTimers = new Map<string, NodeJS.Timeout>();
+  const snapshotTimers = new Map<string, NodeJS.Timeout>();
 
   function scheduleBrainSnapshot(guild: GuildLike, delayMs = 1000): void {
-    setTimeout(() => {
+    const previous = snapshotTimers.get(guild.id);
+    if (previous) clearTimeout(previous);
+    snapshotTimers.set(guild.id, setTimeout(() => {
+      snapshotTimers.delete(guild.id);
       void trackWork(async () => {
         const settings = resolveGuildSettings(guild.id);
         const brain = snapshotServerMap(guild, settings, settings.aiBrain);
         saveBrainSettings(guild.id, brain, options);
       });
-    }, delayMs);
+    }, delayMs));
   }
 
   function scheduleRulesMemorySync(guild: GuildLike, channelId: string, actorId = 'system'): void {
@@ -2886,7 +2895,8 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     });
 
     guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
-    await handleCustomTriggerMessage(message).catch(() => null);
+    const directBotQuestion = botWasMentioned(message, client.user?.id || '');
+    if (!directBotQuestion) await handleCustomTriggerMessage(message).catch(() => null);
 
     if (await enforceBotInsultGuard(message, {
       client,
@@ -2903,7 +2913,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       return;
     }
 
-    await handleAiSoftConflict(message, aiConflictCooldowns, { aiMention }).catch(() => null);
+    if (!directBotQuestion) await handleAiSoftConflict(message, aiConflictCooldowns, { aiMention }).catch(() => null);
 
     if (await handleAiMentionMessage(message, aiMentionCooldowns, {
       isActivityExempt: options.isActivityExempt,

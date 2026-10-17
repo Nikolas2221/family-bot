@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
-const { createAgentReplies, generateNotificationIntro } = require('../dist-ts/services/agent-replies');
+const { createAgentReplies, generateNotificationIntro, needsServerContext } = require('../dist-ts/services/agent-replies');
+const { createAIService } = require('../dist-ts/ai');
 
 async function main() {
   let time = 0;
@@ -19,6 +20,16 @@ async function main() {
   await reply('guild:channel:user', service, '', 'After expiry');
   assert.doesNotMatch(requests[3].prompt, /First request/);
   const offline = { aiText: async () => '' };
+  assert.equal(needsServerContext('объясни массивы'), false);
+  assert.equal(needsServerContext('проверь мой профиль'), true);
+  const failed = code => ({ aiText: async () => { throw Error(code); } });
+  assert.match(await reply('error', failed('OpenRouter HTTP 429'), '', ''), /лимита/);
+  assert.match(await reply('error', failed('OpenRouter HTTP 401'), '', ''), /ключа/);
+  assert.match(await reply('error', failed('OpenRouter empty content'), '', ''), /пустой/);
+  const brokenProvider = createAIService({ enabled: true, chatCompletion: {
+    enabled: true, model: 'test', chat: async () => { throw Error('OpenRouter HTTP 401'); }
+  } });
+  assert.match(await reply('provider', brokenProvider, '', 'hello'), /ключа/);
   assert.match(await reply('offline', offline, '', 'Question'), /модель не ответила/);
   assert.equal(await generateNotificationIntro(offline, 'Event', 'Facts'), '');
   assert.equal(await generateNotificationIntro({ aiText: async () => { throw Error('offline'); } }, '', ''), '');

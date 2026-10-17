@@ -5,7 +5,8 @@ import { createRuntimeHealthServer } from './services/runtime-health';
 import { ActionJournal } from './services/action-journal';
 import { drainWork, isStopping, trackWork } from './services/shutdown';
 import { registerFatalHandlers } from './services/fatal-errors';
-import { Client, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
+import { Client, DefaultRestOptions, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
+import { protectDiscordRequests } from './services/discord-request-safety';
 import { createAIService } from './ai';
 import { watchDiscordStartup } from './services/discord-startup';
 import { createDiscordRateLimitGuard, retryAfterMs } from './services/discord-rate-limit';
@@ -124,7 +125,20 @@ const DEPLOY_COMMIT_MESSAGE = (process.env.RAILWAY_GIT_COMMIT_MESSAGE || process
 const DEPLOY_BUILD_ID = (DEPLOY_COMMIT_SHA ? DEPLOY_COMMIT_SHA.slice(0, 7) : (process.env.RAILWAY_DEPLOYMENT_ID || PRODUCT_VERSION_SEMVER));
 const CURRENT_BUILD_SIGNATURE = buildCurrentBuildSignature(DEPLOY_BUILD_ID);
 
+const discordRateLimit = createDiscordRateLimitGuard(`${DATA_FILE}.discord-rate-limit.json`, {
+  networkChangeId: process.env.DISCORD_NETWORK_CHANGE_ID
+});
 const client = new Client({
+  rest: {
+    globalRequestsPerSecond: 8,
+    offset: 250,
+    invalidRequestWarningInterval: 10,
+    makeRequest: protectDiscordRequests(DefaultRestOptions.makeRequest, {
+      blocked: () => discordRateLimit.blocked(),
+      pause: ms => discordRateLimit.defer(ms),
+      stopping: isStopping
+    })
+  },
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
@@ -1784,9 +1798,6 @@ if (healthServer) {
   healthServer.listen(healthPort, '0.0.0.0');
 }
 
-const discordRateLimit = createDiscordRateLimitGuard(`${DATA_FILE}.discord-rate-limit.json`, {
-  networkChangeId: process.env.DISCORD_NETWORK_CHANGE_ID
-});
 let stopStartupWatch: () => void = () => {};
 function armStartupWatch(): void {
   stopStartupWatch();

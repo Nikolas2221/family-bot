@@ -63,6 +63,47 @@ or labels to evade restrictions. Only one IP lookup is made per process startup.
 
 # Discord connection restrictions
 
+## Preventive REST limits
+
+All requests through the main Discord client's REST transport have additional
+conservative protection: SDK global budget 8 requests/second, dispatch spacing
+150ms, maximum four in flight and maximum 64 pending. Admission waits expire after
+eight seconds; aborted requests never reach the network. Ordinary Discord route
+limits still take precedence and remain managed by discord.js.
+
+HTTP 403/404 temporarily suppress repeated requests to the same method/resource for
+10 minutes (permission changes can take that long to be noticed). HTTP 401 with bot
+authentication stops further requests for the process; check credentials before
+restart. Webhook-only authentication failures suppress that resource, not the bot.
+Forty invalid responses within ten minutes trigger a persisted 15-minute pause.
+Shared-scope 429s do not count towards this threshold, matching Discord guidance:
+https://docs.discord.com/developers/topics/rate-limits
+
+These are local safety budgets, not claims about Discord's published limits.
+Ordinary mention questions skip server storage, analytics and profiles entirely.
+Only explicitly server-scoped questions collect context; profiles are limited to
+requested users, with at most three missing profiles fetched individually.
+Explicit activity reports and bulk-action eligibility still load the full list.
+Locally suppressed work fails instead of silently executing later; workflows may
+need a manual retry or their existing delivery queue. Gateway traffic, other
+processes and the hosting provider's shared IP are outside this REST protection.
+
+## AI request failures and redundant events
+
+General mention replies now preserve provider failure categories instead of hiding
+all failures behind an empty reply. No auto-retry loop is added. OpenRouter uses a
+2048-token output budget with low reasoning effort, at most two in-flight requests,
+and a cooldown on 429/503 (respecting Retry-After). The request deadline also covers
+response JSON parsing. HTTP 200 error envelopes and empty content are diagnosed.
+This cannot guarantee availability of an external free model. API guidance:
+https://openrouter.ai/docs/api/reference/errors-and-debugging
+https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
+
+Web questions send one final answer, without a separate search announcement.
+Direct bot questions do not also run custom phrase replies or soft-conflict chatter;
+moderation guards still run. Repeated channel/role events debounce server-map writes
+per guild rather than scheduling an independent snapshot on every event.
+
 Before login the bot checks the Discord gateway endpoint once. HTTP 429 pauses
 login according to Retry-After (seconds or HTTP date), with JSON retry_after as a
 fallback. Missing or invalid values use a conservative one-minute delay. Network
