@@ -4,7 +4,7 @@ import type { ActionJournal } from './services/action-journal';
 import { isStopping, trackWork, trackListener } from './services/shutdown';
 import { deliverOnce } from './services/delivery-result';
 import { createAgentReplies } from './services/agent-replies';
-import { createWebSearch } from './services/web-search';
+import { createWebSearch, needsWebSearch } from './services/web-search';
 const agentReply = createAgentReplies();
 const searchWeb = createWebSearch(() => process.env.TAVILY_API_KEY);
 let actionJournal: ActionJournal | undefined;
@@ -2569,7 +2569,7 @@ export async function handleNaturalAdminCommand(
   return true;
 }
 
-async function handleAiMentionMessage(
+export async function handleAiMentionMessage(
   message: MessageLike,
   state: Map<string, number>,
   options: Pick<EventRuntimeOptions, 'client' | 'aiMention' | 'aiService' | 'announcementService' | 'familyAnnouncementRoleId' | 'database' | 'resolveGuildSettings' | 'doPanelUpdate' | 'sendSecurityLog' | 'getGuildStorage' | 'hasFamilyRole' | 'isActivityExempt'>,
@@ -2667,15 +2667,23 @@ async function handleAiMentionMessage(
   await message.channel.sendTyping?.().catch(() => null);
 
   try {
-    const liveContext = await buildAggregateServerContext(message, options);
+    const wantsWeb = needsWebSearch(prompt);
+    if (wantsWeb) {
+      await message.channel.send?.({ content: 'Ищу информацию в интернете…', allowedMentions: { parse: [] } })
+        .catch(error => console.warn('[ai-mention] Cannot send search acknowledgement:', error));
+    }
+    const liveContext = wantsWeb
+      ? 'Общий веб-вопрос: данные участников и внутренняя статистика сервера для него не загружались.'
+      : await buildAggregateServerContext(message, options);
     const web = await searchWeb(prompt);
     const answer = await agentReply(JSON.stringify([message.guild.id, message.channel.id, message.author.id]),
       options.aiService, `${buildMentionSystemPrompt()}\n\n${liveContext}\n\n${web.context}`, prompt);
     await message.channel.send?.({
       content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800 - web.sources.length)}${web.sources}`,
       allowedMentions: { parse: [], users: [message.author.id] }
-    }).catch(() => null);
+    }).catch(error => console.warn('[ai-mention] Cannot send answer:', error));
   } catch (error: any) {
+    console.warn('[ai-mention] Request failed:', error);
     await message.channel.send?.({
       content: `<@${message.author.id}>, AI сейчас не ответил: ${String(error?.message || 'неизвестная ошибка').slice(0, 300)}`,
       allowedMentions: { parse: [], users: [message.author.id] }

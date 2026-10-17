@@ -7,6 +7,7 @@ import { drainWork, isStopping, trackWork } from './services/shutdown';
 import { registerFatalHandlers } from './services/fatal-errors';
 import { Client, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
 import { createAIService } from './ai';
+import { watchDiscordStartup } from './services/discord-startup';
 import { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } from './automod';
 import { createApplicationsService } from './applications';
 import { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } from './config';
@@ -1782,7 +1783,22 @@ if (healthServer) {
   healthServer.listen(healthPort, '0.0.0.0');
 }
 
+console.log('[discord] Connecting to Discord; waiting for clientReady (timeout 120s).');
+const stopStartupWatch = watchDiscordStartup(() => client.isReady(), () => {
+  console.error(`[discord] Startup timed out: clientReady not received within 120s; gateway status=${client.ws.status}. Check network access to Discord and privileged intents. Exiting for supervisor recovery.`);
+  process.exit(1);
+});
+client.once('clientReady', () => {
+  stopStartupWatch();
+  console.log('[discord] Gateway ready.');
+});
+client.on('shardReady', shardId => console.log(`[discord] Shard ${shardId} ready.`));
+client.on('shardReconnecting', shardId => console.warn(`[discord] Shard ${shardId} reconnecting.`));
+client.on('shardDisconnect', (event, shardId) => console.warn(`[discord] Shard ${shardId} disconnected; code=${event.code}.`));
+client.on('shardError', (error, shardId) => console.error(`[discord] Shard ${shardId} error; type=${error.name}.`));
+client.on('error', error => console.error(`[discord] Client error; type=${error.name}.`));
 client.login(config.token).then(() => startTelegramBot(telegramBot)).catch((error: unknown) => {
+  stopStartupWatch();
   console.error('Discord login failed:', error);
   process.exit(1);
 });

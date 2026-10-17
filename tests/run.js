@@ -1,4 +1,6 @@
 async function main() {
+  await require('./discord-startup.test').main();
+  await require('./ai-mention-search.test').main();
   await require('./web-search.test').main();
   await require('./agent-replies.test').main();
   await require('./state-validation.test').main();
