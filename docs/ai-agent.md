@@ -32,6 +32,35 @@ the general Discord mention path, not Telegram or all slash commands.
 
 Example: @KLAIZ BOT поищи в интернете последние новости Discord
 
+# One recovery check after a network migration
+
+After an operator-confirmed region/network migration, set DISCORD_NETWORK_CHANGE_ID
+to a unique label for that migration, for example amsterdam-2026-10-17. This is an
+operator authorization; the bot additionally checks observed public IPv4 against
+the previously saved address before allowing a recovery request.
+Apply it only to the migrated service, never to the old running instance.
+
+At startup the bot obtains public IPv4 from https://api.ipify.org?format=json
+(https://www.ipify.org/), with a five-second timeout and without Discord credentials.
+The validated address is saved with the restriction state; raw IPs are not logged.
+Deploy this version BEFORE migrating so the old address is recorded. With legacy
+state that contains no address, the bot records a baseline but does not infer a
+change or skip the deadline. Lookup failure or conflicting primary/backup IPs also
+fail closed. A lookup failure never blocks ordinary login after the deadline.
+
+While a saved restriction is active, an unused label AND a changed observed IPv4
+authorize one gateway check. Neither a marker alone nor an IP change alone suffices.
+The label is consumed on disk before the request. HTTP 200 clears the old deadline;
+429, network errors and other failures retain or extend the pause. A restart cannot
+reuse a consumed label. Do not rotate labels to keep retrying a blocked network.
+Remove the variable after recovery. Up to 64 labels are retained; further probes
+then require operator review, not automatic pruning. Keep the state and backup.
+
+This measures the address observed by ipify, not the source IP seen by Discord.
+Destination-dependent NAT, multiple outbound addresses and IPv6 can differ; the
+subsequent Discord request is the actual availability check. Do not rotate regions
+or labels to evade restrictions. Only one IP lookup is made per process startup.
+
 # Discord connection restrictions
 
 Before login the bot checks the Discord gateway endpoint once. HTTP 429 pauses

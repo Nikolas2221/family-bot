@@ -1784,7 +1784,9 @@ if (healthServer) {
   healthServer.listen(healthPort, '0.0.0.0');
 }
 
-const discordRateLimit = createDiscordRateLimitGuard(`${DATA_FILE}.discord-rate-limit.json`);
+const discordRateLimit = createDiscordRateLimitGuard(`${DATA_FILE}.discord-rate-limit.json`, {
+  networkChangeId: process.env.DISCORD_NETWORK_CHANGE_ID
+});
 let stopStartupWatch: () => void = () => {};
 function armStartupWatch(): void {
   stopStartupWatch();
