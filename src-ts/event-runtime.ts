@@ -3,6 +3,10 @@ import { randomBytes } from 'node:crypto';
 import type { ActionJournal } from './services/action-journal';
 import { isStopping, trackWork, trackListener } from './services/shutdown';
 import { deliverOnce } from './services/delivery-result';
+import { createAgentReplies } from './services/agent-replies';
+import { createWebSearch } from './services/web-search';
+const agentReply = createAgentReplies();
+const searchWeb = createWebSearch(() => process.env.TAVILY_API_KEY);
 let actionJournal: ActionJournal | undefined;
 export function configureActionJournal(journal: ActionJournal | undefined): void { actionJournal = journal; }
 import { assessInactivity } from './activity-policy';
@@ -770,6 +774,9 @@ function buildMentionSystemPrompt(): string {
   return [
     'Ты KLAIZ BOT, живой AI-помощник Discord-семьи.',
     'Отвечай по-русски, дружелюбно, уверенно и коротко.',
+    'Отвечай также на общие вопросы: технологии, игры, обучение, идеи и повседневные темы. Не ограничивайся функциями сервера.',
+    'Статус веб-поиска передан в текущем контексте. Не представляй непроверенные сведения как проверенные.',
+    'Данные сервера используй только из текущего контекста. Не утверждай, что выполнил действие, если его результат не передан кодом бота.',
     'По умолчанию давай один готовый ответ, а не список из многих вариантов.',
     'Если просят объявление, текст, ответ участнику или идею, сразу дай готовый вариант.',
     'Если данных мало, задай один короткий уточняющий вопрос.',
@@ -2625,8 +2632,11 @@ async function handleAiMentionMessage(
   }
 
   if (isCapabilityQuestion(prompt)) {
+    const capabilities = await buildAiToolSummary(options.aiService,
+      'Объясни свои возможности по переданному списку, применительно к вопросу пользователя. Не обещай неподдерживаемых действий. Отвечай естественно и кратко.',
+      `${prompt}\n\n${buildMentionCapabilitiesText()}`, buildMentionCapabilitiesText());
     await message.channel.send?.({
-      content: `<@${message.author.id}>\n${buildMentionCapabilitiesText()}`.slice(0, 1800),
+      content: `<@${message.author.id}>\n${capabilities}`.slice(0, 1800),
       allowedMentions: { parse: [], users: [message.author.id] }
     }).catch(() => null);
     return true;
@@ -2658,9 +2668,11 @@ async function handleAiMentionMessage(
 
   try {
     const liveContext = await buildAggregateServerContext(message, options);
-    const answer = await options.aiService.aiText(`${buildMentionSystemPrompt()}\n\n${liveContext}`, prompt);
+    const web = await searchWeb(prompt);
+    const answer = await agentReply(JSON.stringify([message.guild.id, message.channel.id, message.author.id]),
+      options.aiService, `${buildMentionSystemPrompt()}\n\n${liveContext}\n\n${web.context}`, prompt);
     await message.channel.send?.({
-      content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800)}`,
+      content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800 - web.sources.length)}${web.sources}`,
       allowedMentions: { parse: [], users: [message.author.id] }
     }).catch(() => null);
   } catch (error: any) {

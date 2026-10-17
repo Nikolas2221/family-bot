@@ -3,6 +3,7 @@ import { EmbedBuilder, type Guild, type GuildMember, type User } from 'discord.j
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { applyCardStyle } from './card-style';
 import { getReleaseNotes } from './release-notes';
+import { generateNotificationIntro } from './services/agent-replies';
 import type { CardAppearance, CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
 
 const updateAnnouncementLocks = new Set<string>();
@@ -122,7 +123,7 @@ async function buildAiWelcomeLine(
   return Promise.race([request, fallbackTimer]);
 }
 
-async function sendDirectNotification(
+async function sendDirectNotificationPayload(
   user: User | null | undefined,
   {
     title,
@@ -155,6 +156,16 @@ async function sendDirectNotification(
 }
 
 export function createNotificationRuntimeHelpers(options: NotificationHelpersOptions) {
+  async function sendDirectNotification(...args: Parameters<typeof sendDirectNotificationPayload>): Promise<boolean> {
+    if (!args[0]) return false;
+    const [user, payload, ctor] = args;
+    const intro = await generateNotificationIntro(options.aiService, payload.title, payload.description);
+    return sendDirectNotificationPayload(user, {
+      ...payload,
+      description: intro && intro.length + payload.description.length + 2 <= 4096
+        ? `${intro}\n\n${payload.description}` : payload.description
+    }, ctor);
+  }
   const {
     copy,
     embeds,
