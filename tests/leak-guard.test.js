@@ -635,7 +635,8 @@ async function main() {
     },
     delete: async () => {}
   });
-  assert.match(aiReplies.at(-1), /подожди ещё/u);
+  assert.match(aiReplies.at(-1), /AI reply:/u);
+  assert.doesNotMatch(aiReplies.at(-1), /подожди ещё/u);
 }
 
 if (require.main === module) {

@@ -137,7 +137,7 @@ async function testOpenRouterConfigKeepsKeySecretAndUsesSelectedModel() {
   assert.equal(config.aiMentionCooldownSeconds, 30);
   assert.match(validation.notes.join('\n'), /OpenRouter/);
   assert.match(summary, /OpenRouter enabled \(nvidia\/nemotron-3-ultra-550b-a55b:free\)/);
-  assert.match(summary, /AI mentions: enabled \(30s cooldown\)/);
+  assert.match(summary, /AI mentions: enabled \(no post-reply cooldown\)/);
   assert.doesNotMatch(summary, /openrouter-secret/);
 }
 

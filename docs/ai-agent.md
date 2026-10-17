@@ -19,12 +19,21 @@ is sent locally by these changes.
 Discord mentions use the configured AI provider for general questions. Conversation
 history holds up to three exchanges per guild/channel/user, expires after 15 minutes,
 and is lost on restart. It does not authorize actions or carry tool confirmations.
+Ordinary mention conversations have no post-reply delay: the next question may be
+sent immediately after the answer. Only overlapping general questions from the same
+member on the same guild are prevented. Activity/bulk action and provider rate limits
+remain separate. AI_MENTION_COOLDOWN_SECONDS still influences soft-conflict notices
+and Telegram cooldowns, not the gap between general Discord replies.
 Capabilities questions also use the model, with the supported feature list as facts.
 
 Private notifications for application decisions, discipline, ranks, blacklist and
-AFK warnings request a fresh AI introduction on every send. Exact event details
-remain unchanged below it. If generation fails or exceeds eight seconds, delivery
-uses the existing factual notification. Bulk warnings retain their approved preview
+AFK warnings request a fresh event-specific AI message body on every send, rather
+than appending an introduction to a duplicated canned paragraph. Each request has
+a random variation identifier to encourage different phrasing (it is not displayed).
+Exact event details remain unchanged below the generated text. The model may still
+occasionally repeat wording; uniqueness is not guaranteed and no extra retry is made.
+If generation fails or exceeds eight seconds, a short local message and exact facts
+are delivered instead. Bulk warnings retain their approved preview
 text; they are not silently regenerated after confirmation. Other DM flows are not
 changed by this integration.
 
@@ -45,6 +54,12 @@ Up to three HTTPS sources are appended to replies. Search excerpts are untrusted
 context, not action instructions. Missing credentials or provider errors are reported
 to the model without invented search results. Search is currently integrated into
 the general Discord mention path, not Telegram or all slash commands.
+
+Release-date questions such as "когда выйдет GTA 6", "дата релиза" and "release
+date" also trigger search. When a search-required question has no usable sources,
+the bot returns the search failure or setup notice directly instead of asking the
+language model to guess fresh facts. /health includes key presence, last actual
+attempt and result; [web-search] logs contain no queries, keys or server profiles.
 
 Example: @KLAIZ BOT поищи в интернете последние новости Discord
 

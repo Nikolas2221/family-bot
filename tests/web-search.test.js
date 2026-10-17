@@ -2,6 +2,9 @@ const assert = require('node:assert/strict');
 const { createWebSearch, needsWebSearch } = require('../dist-ts/services/web-search');
 async function main() {
   assert.equal(needsWebSearch('погода сегодня'), true);
+  assert.equal(needsWebSearch('когда выйдет GTA 6'), true);
+  assert.equal(needsWebSearch('дата релиза GTA VI'), true);
+  assert.equal(needsWebSearch('GTA 6 release date'), true);
   assert.equal(needsWebSearch('объясни массивы'), false);
   let calls = 0;
   const search = createWebSearch(() => 'test-key', async (url, options) => {

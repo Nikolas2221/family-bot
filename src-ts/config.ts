@@ -426,7 +426,7 @@ export function summarizeConfig(config: AppConfig): string[] {
     `- storage file: ${config.storageFile || 'local ./storage.json'}`,
     `- database file: ${config.databaseFile || 'local ./database.json'}`,
     `- AI: ${config.aiEnabled ? (config.openRouterApiKey ? `OpenRouter enabled (${config.openRouterModel || config.aiModel})` : (config.deepSeekApiKey ? `DeepSeek enabled (${config.deepSeekModel || config.aiModel})` : 'offline helper enabled')) : 'disabled'}`,
-    `- AI mentions: ${config.aiEnabled && config.aiMentionEnabled ? `enabled (${config.aiMentionCooldownSeconds}s cooldown)` : 'disabled'}`,
+    `- AI mentions: ${config.aiEnabled && config.aiMentionEnabled ? 'enabled (no post-reply cooldown)' : 'disabled'}`,
     `- auto ranks: ${autoRanksSummary}`,
     `- leak guard: ${leakGuardSummary}`,
     `- scam guard: ${scamGuardSummary}`,

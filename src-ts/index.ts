@@ -7,6 +7,7 @@ import { drainWork, isStopping, trackWork } from './services/shutdown';
 import { registerFatalHandlers } from './services/fatal-errors';
 import { Client, DefaultRestOptions, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
 import { protectDiscordRequests } from './services/discord-request-safety';
+import { webSearchHealthLines } from './services/web-search';
 import { createAIService } from './ai';
 import { watchDiscordStartup } from './services/discord-startup';
 import { createDiscordRateLimitGuard, retryAfterMs } from './services/discord-rate-limit';
@@ -1723,6 +1724,7 @@ registerInteractionRuntime({
       `Discord: ${client.isReady() ? 'подключён' : 'нет соединения'}; ping ${client.ws.ping} мс`,
       `Telegram: ${telegramHealth(telegramBot)}`,
       ...(aiService.healthLines?.() || []),
+      ...webSearchHealthLines(),
       ...storage.healthLines(),
       `База настроек: ${database.healthStatus().writable && !database.healthStatus().hasWriteError ? 'доступна' : 'ошибка записи'}`,
       `Журнал действий: ${actionJournal.healthStatus() ? 'доступен' : 'недоступен'}`,

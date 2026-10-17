@@ -2660,19 +2660,16 @@ export async function handleAiMentionMessage(
     return true;
   }
 
-  const cooldownMs = Math.max(3, Number(options.aiMention.cooldownSeconds) || 30) * 1000;
   const cooldownKey = `${message.guild.id}:${message.author.id}`;
-  const lastAt = state.get(cooldownKey) || 0;
-  const waitMs = cooldownMs - (Date.now() - lastAt);
-  if (waitMs > 0) {
+  if (state.get(cooldownKey) === Infinity) {
     await message.channel.send?.({
-      content: `<@${message.author.id}>, подожди ещё ${Math.ceil(waitMs / 1000)} сек. перед следующим AI-вопросом.`,
+      content: `<@${message.author.id}>, ещё отвечаю на твой предыдущий вопрос. После ответа можно сразу продолжить.`,
       allowedMentions: { parse: [], users: [message.author.id] }
     }).catch(() => null);
     return true;
   }
 
-  state.set(cooldownKey, Date.now());
+  state.set(cooldownKey, Infinity);
   await message.channel.sendTyping?.().catch(() => null);
 
   try {
@@ -2681,8 +2678,9 @@ export async function handleAiMentionMessage(
       ? await buildAggregateServerContext(message, options)
       : 'Общий вопрос: внутренняя статистика сервера и профили участников не загружались.';
     const web = await searchWeb(prompt);
-    const answer = await agentReply(JSON.stringify([message.guild.id, message.channel.id, message.author.id]),
-      options.aiService, `${buildMentionSystemPrompt()}\n\n${liveContext}\n\n${web.context}`, prompt);
+    const answer = wantsWeb && !web.sources ? web.unavailableReply
+      : await agentReply(JSON.stringify([message.guild.id, message.channel.id, message.author.id]),
+        options.aiService, `${buildMentionSystemPrompt()}\n\nДата запроса: ${new Date().toISOString()}\n${liveContext}\n\n${web.context}`, prompt);
     await message.channel.send?.({
       content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800 - web.sources.length)}${web.sources}`,
       allowedMentions: { parse: [], users: [message.author.id] }
@@ -2693,6 +2691,8 @@ export async function handleAiMentionMessage(
       content: `<@${message.author.id}>, AI сейчас не ответил: ${String(error?.message || 'неизвестная ошибка').slice(0, 300)}`,
       allowedMentions: { parse: [], users: [message.author.id] }
     }).catch(() => null);
+  } finally {
+    state.delete(cooldownKey);
   }
 
   return true;

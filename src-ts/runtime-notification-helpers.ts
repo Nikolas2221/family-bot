@@ -137,6 +137,7 @@ async function sendDirectNotificationPayload(
     color?: number;
     footer?: string;
     style?: CardAppearance;
+    fallbackText?: string;
   },
   EmbedBuilderCtor: typeof EmbedBuilder
 ): Promise<boolean> {
@@ -160,10 +161,11 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
     if (!args[0]) return false;
     const [user, payload, ctor] = args;
     const intro = await generateNotificationIntro(options.aiService, payload.title, payload.description);
+    const text = intro || payload.fallbackText || '';
     return sendDirectNotificationPayload(user, {
       ...payload,
-      description: intro && intro.length + payload.description.length + 2 <= 4096
-        ? `${intro}\n\n${payload.description}` : payload.description
+      description: text && text.length + payload.description.length + 2 <= 4096
+        ? `${text}\n\n${payload.description}` : payload.description
     }, ctor);
   }
   const {
@@ -204,13 +206,12 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       member.user,
       {
         title: 'Ваша заявка принята',
+        fallbackText: 'Поздравляем с принятием в семью!',
         style: resolveGuildSettings(guild.id).visuals.cards?.applications?.discord,
         color: 0x10b981,
         footer: 'KLAIZ - Family',
         description: [
-          `Ваша заявка в семью **${resolveGuildSettings(guild.id).familyTitle}** была принята.`,
-          'Поздравляем, вы прошли этап рассмотрения заявки.',
-          '',
+          `Семья: **${resolveGuildSettings(guild.id).familyTitle}**`,
           `Модератор: <@${moderatorUser.id}>`,
           `Причина: ${reason}`,
           `Выданный ранг: ${rankName}`,
@@ -240,13 +241,12 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       user,
       {
         title: 'Ваша заявка отклонена',
+        fallbackText: 'Спасибо за интерес к нашей семье. По вашей заявке принято отрицательное решение.',
         style: resolveGuildSettings(guild.id).visuals.cards?.applications?.discord,
         color: 0xef4444,
         footer: `${familyTitle} - Applications`,
         description: [
-          `Ваша заявка в семью **${familyTitle}** была отклонена.`,
-          'Спасибо за проявленный интерес к нашей семье.',
-          '',
+          `Семья: **${familyTitle}**`,
           `Модератор: <@${moderatorUser.id}>`,
           `Причина: ${reason || 'не указана'}`,
           applicationUrl ? '' : null,
@@ -269,17 +269,14 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       targetUser,
       {
         title: isWarn ? 'Получен выговор' : 'Получена похвала',
+        fallbackText: isWarn ? 'Обрати внимание на замечание администрации.' : 'Спасибо за участие в жизни семьи!',
         style: resolveGuildSettings(guild.id).visuals.cards?.moderation?.discord,
         color: isWarn ? 0xf97316 : 0x2563eb,
         footer: 'KLAIZ - Discipline',
         description: [
           `Сервер: **${guild.name}**`,
           `Модератор: <@${moderatorUser.id}>`,
-          `Причина: ${reason}`,
-          '',
-          isWarn
-            ? 'Следи за активностью и дисциплиной, чтобы не получить дополнительные санкции.'
-            : 'Так держать. Активность и вклад в семью замечены.'
+          `Причина: ${reason}`
         ].join('\n')
       },
       EmbedBuilderCtor
@@ -296,6 +293,7 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       member.user,
       {
         title,
+        fallbackText: isPromotion ? 'Поздравляем с повышением ранга!' : 'Твой ранг на сервере изменён.',
         color: isPromotion ? 0x10b981 : 0xe11d48,
         style: resolveGuildSettings(guild.id).visuals.cards?.family?.discord,
         footer: 'KLAIZ - Ranks',
@@ -317,14 +315,13 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       user,
       {
         title: 'Чёрный список',
+        fallbackText: 'Доступ на сервер ограничен. Если считаешь это ошибкой, обратись к администрации.',
         style: resolveGuildSettings(guild.id).visuals.cards?.moderation?.discord,
         color: 0xe11d48,
         footer: 'KLAIZ - Security',
         description: [
-          `Твой доступ на сервер **${guild.name}** ограничен.`,
-          `Причина: ${reason}`,
-          '',
-          'Если это ошибка, свяжись с администрацией сервера.'
+          `Сервер: **${guild.name}**`,
+          `Причина: ${reason}`
         ].join('\n')
       },
       EmbedBuilderCtor
@@ -336,14 +333,13 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       member.user,
       {
         title: 'Предупреждение об AFK',
+        fallbackText: 'Пожалуйста, прояви активность или сообщи администрации о своём отсутствии.',
         style: resolveGuildSettings(member.guild.id).visuals.cards?.family?.discord,
         color: 0xf59e0b,
         footer: 'KLAIZ - Activity',
         description: [
-          `На сервере **${member.guild.name}** от тебя не было активности уже 3 дня.`,
-          'Если не проявишь активность, администрация может кикнуть тебя за AFK.',
-          '',
-          'Отправь сообщение, зайди в голосовой канал или просто прояви активность в Discord.'
+          `Сервер: **${member.guild.name}**`,
+          'Период без активности: 3 дня.'
         ].join('\n')
       },
       EmbedBuilderCtor
