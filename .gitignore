@@ -12,6 +12,7 @@ storage.local.json
 *.corrupt-*
 *.actions.json*
 *.health-*
+*.discord-rate-limit.json*
 
 # Claude Code worktrees and per-machine settings
 .claude/

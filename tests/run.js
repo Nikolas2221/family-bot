@@ -1,4 +1,5 @@
 async function main() {
+  await require('./discord-rate-limit.test').main();
   await require('./discord-startup.test').main();
   await require('./ai-mention-search.test').main();
   await require('./web-search.test').main();

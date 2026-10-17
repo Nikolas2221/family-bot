@@ -11,6 +11,7 @@ storage.local.json
 *.corrupt-*
 *.actions.json*
 *.health-*
+*.discord-rate-limit.json*
 npm-debug.log*
 .claude
 .aider*

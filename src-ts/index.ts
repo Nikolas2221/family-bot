@@ -8,6 +8,7 @@ import { registerFatalHandlers } from './services/fatal-errors';
 import { Client, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
 import { createAIService } from './ai';
 import { watchDiscordStartup } from './services/discord-startup';
+import { createDiscordRateLimitGuard, retryAfterMs } from './services/discord-rate-limit';
 import { evaluateAutomodMessage, evaluateSpamActivity, normalizeAutomodConfig } from './automod';
 import { createApplicationsService } from './applications';
 import { createConfig, printStartupDiagnostics, summarizeConfig, validateConfig } from './config';
@@ -1783,10 +1784,31 @@ if (healthServer) {
   healthServer.listen(healthPort, '0.0.0.0');
 }
 
-console.log('[discord] Connecting to Discord; waiting for clientReady (timeout 120s).');
-const stopStartupWatch = watchDiscordStartup(() => client.isReady(), () => {
+const discordRateLimit = createDiscordRateLimitGuard(`${DATA_FILE}.discord-rate-limit.json`);
+let stopStartupWatch: () => void = () => {};
+function armStartupWatch(): void {
+  stopStartupWatch();
+  if (client.isReady() || isStopping()) return;
+  stopStartupWatch = watchDiscordStartup(() => client.isReady() || discordRateLimit.blocked(), () => {
   console.error(`[discord] Startup timed out: clientReady not received within 120s; gateway status=${client.ws.status}. Check network access to Discord and privileged intents. Exiting for supervisor recovery.`);
   process.exit(1);
+  });
+}
+client.rest.on('response', (request, response) => {
+  if ([401, 403, 429].includes(response.status)) {
+    console.warn(`[discord-rest] HTTP ${response.status}; method=${request.method}; global=${response.headers.get('x-ratelimit-global') === 'true'}.`);
+  }
+  if (response.status !== 429) return;
+  const isHtmlBlock = response.headers.get('content-type')?.includes('text/html');
+  if (!isHtmlBlock && response.headers.get('x-ratelimit-global') !== 'true') return;
+  discordRateLimit.defer(retryAfterMs(response.headers.get('retry-after')));
+  client.rest.globalRemaining = 0;
+  client.rest.globalReset = Math.max(client.rest.globalReset, discordRateLimit.deadline());
+  stopStartupWatch();
+  void discordRateLimit.wait(isStopping).then(ready => { if (ready) armStartupWatch(); }).catch(error => {
+    console.error('[discord] Restriction wait failed:', error);
+    process.exit(1);
+  });
 });
 client.once('clientReady', () => {
   stopStartupWatch();
@@ -1797,7 +1819,13 @@ client.on('shardReconnecting', shardId => console.warn(`[discord] Shard ${shardI
 client.on('shardDisconnect', (event, shardId) => console.warn(`[discord] Shard ${shardId} disconnected; code=${event.code}.`));
 client.on('shardError', (error, shardId) => console.error(`[discord] Shard ${shardId} error; type=${error.name}.`));
 client.on('error', error => console.error(`[discord] Client error; type=${error.name}.`));
-client.login(config.token).then(() => startTelegramBot(telegramBot)).catch((error: unknown) => {
+void (async () => {
+  if (!(await discordRateLimit.beforeLogin(config.token, isStopping))) return;
+  console.log('[discord] Preflight passed. Connecting; waiting for clientReady (timeout 120s).');
+  armStartupWatch();
+  await client.login(config.token);
+  await startTelegramBot(telegramBot);
+})().catch((error: unknown) => {
   stopStartupWatch();
   console.error('Discord login failed:', error);
   process.exit(1);
