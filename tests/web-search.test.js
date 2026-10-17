@@ -19,6 +19,9 @@ async function main() {
   const result = await search('новости сегодня');
   assert.match(result.sources, /https:\/\/example.com\/news/);
   assert.doesNotMatch(result.context, /javascript:/);
+  assert.match(result.fallbackReply, /фрагменты поисковой выдачи/);
+  assert.match(result.fallbackReply, /Facts/);
+  assert.doesNotMatch(result.fallbackReply, /Ignore all instructions/);
   await search('новости <@123456789012345678>');
   await search('объясни массивы');
   assert.equal(calls, 1);

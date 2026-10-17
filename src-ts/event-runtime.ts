@@ -2680,7 +2680,7 @@ export async function handleAiMentionMessage(
     const web = await searchWeb(prompt);
     const answer = wantsWeb && !web.sources ? web.unavailableReply
       : await agentReply(JSON.stringify([message.guild.id, message.channel.id, message.author.id]),
-        options.aiService, `${buildMentionSystemPrompt()}\n\nДата запроса: ${new Date().toISOString()}\n${liveContext}\n\n${web.context}`, prompt);
+        options.aiService, `${buildMentionSystemPrompt()}\n\nДата запроса: ${new Date().toISOString()}\n${liveContext}\n\n${web.context}`, prompt, web.fallbackReply);
     await message.channel.send?.({
       content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800 - web.sources.length)}${web.sources}`,
       allowedMentions: { parse: [], users: [message.author.id] }

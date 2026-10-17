@@ -11,7 +11,7 @@ export function needsServerContext(prompt: string): boolean {
 // Conversation history is scoped to one member and channel, never used as authority for actions.
 export function createAgentReplies(now: () => number = Date.now) {
   const sessions = new Map<string, { expires: number; turns: string[] }>();
-  return async (key: string, service: TextService, system: string, prompt: string): Promise<string> => {
+  return async (key: string, service: TextService, system: string, prompt: string, fallbackReply = ''): Promise<string> => {
     for (const [id, session] of sessions) if (session.expires <= now()) sessions.delete(id);
     const turns = sessions.get(key)?.turns || [];
     let answer: string;
@@ -25,6 +25,7 @@ export function createAgentReplies(now: () => number = Date.now) {
         '[conversation]'
       ].join('\n'), turns.length ? JSON.stringify({ history: turns, request: prompt }) : prompt);
     } catch (error) {
+      if (fallbackReply) return fallbackReply;
       const message = error instanceof Error ? error.message : '';
       if (/429|cooldown/iu.test(message)) return 'ИИ достиг лимита запросов. Попробуй немного позже.';
       if (/401|403|402|not configured/u.test(message)) return 'ИИ недоступен из-за настройки ключа, доступа или баланса провайдера. Администратору нужно проверить /health и настройки OpenRouter.';
@@ -32,7 +33,7 @@ export function createAgentReplies(now: () => number = Date.now) {
       if (/empty/iu.test(message)) return 'Модель вернула пустой ответ. Попробуй позже или попроси администратора сменить модель.';
       return 'Сервис ИИ временно недоступен. Попробуй чуть позже.';
     }
-    if (!answer.trim()) return 'Сейчас модель не ответила. Повтори запрос чуть позже.';
+    if (!answer.trim()) return fallbackReply || 'Сейчас модель не ответила. Повтори запрос чуть позже.';
     sessions.delete(key);
     sessions.set(key, { expires: now() + 15 * 60_000,
       turns: [...turns, `User: ${prompt.slice(0, 1500)}`, `Assistant: ${answer.slice(0, 1800)}`].slice(-6) });

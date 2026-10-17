@@ -26,6 +26,12 @@ async function main() {
   assert.match(await reply('error', failed('OpenRouter HTTP 429'), '', ''), /лимита/);
   assert.match(await reply('error', failed('OpenRouter HTTP 401'), '', ''), /ключа/);
   assert.match(await reply('error', failed('OpenRouter empty content'), '', ''), /пустой/);
+  const excerptFallback = 'Фрагменты выдачи: [1] Example source';
+  assert.equal(await reply('search-failure', failed('OpenRouter timeout'), '', 'News', excerptFallback), excerptFallback);
+  assert.equal(await reply('search-empty', { aiText: async () => '' }, '', 'News', excerptFallback), excerptFallback);
+  const afterFailure = [];
+  await reply('search-failure', { aiText: async (_system, prompt) => { afterFailure.push(prompt); return 'OK'; } }, '', 'Next request');
+  assert.equal(afterFailure[0], 'Next request', 'fallback excerpts must not become assistant facts in conversation history');
   const brokenProvider = createAIService({ enabled: true, chatCompletion: {
     enabled: true, model: 'test', chat: async () => { throw Error('OpenRouter HTTP 401'); }
   } });

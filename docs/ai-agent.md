@@ -61,6 +61,12 @@ the bot returns the search failure or setup notice directly instead of asking th
 language model to guess fresh facts. /health includes key presence, last actual
 attempt and result; [web-search] logs contain no queries, keys or server profiles.
 
+If search succeeds but the language model times out, fails or returns no text,
+the reply shows bounded excerpts from the already retrieved results plus sources.
+The excerpts are explicitly labelled as unverified search snippets, not an AI
+summary or independently verified facts. No additional model or search request is
+made, and this fallback is not stored as assistant facts in conversation history.
+
 Example: @KLAIZ BOT поищи в интернете последние новости Discord
 
 # One recovery check after a network migration
