@@ -34,17 +34,25 @@ async function main() {
   assert.equal(await telegram.notifyUpdateAnnouncement(input), true);
   assert.equal(messages.length, 2);
   custom = true;
+  fail = false;
   const before = renders;
   assert.equal(await telegram.notifyUpdateAnnouncement(input), true);
-  assert.equal(renders, before);
-  assert.equal(files.at(-1), 'https://example.com/custom.png');
+  assert.equal(renders, before + 1);
+  assert.ok(Buffer.isBuffer(files.at(-1).source), 'new artwork wins over legacy Telegram image');
+  const photoCount = files.length;
+  fail = true;
+  await telegram.notifyUpdateAnnouncement(input);
+  assert.equal(files.length, photoCount, 'render failure must not resend the legacy banner');
   const discordPayloads = [];
   let announced = false;
   let canAttach = true;
   let failRender = false;
   const helper = createNotificationRuntimeHelpers({ productVersionSemver: '1.5.0', deployCommitMessage: 'Release 1.5.0: Vice City', deployBuildId: 'abc', productVersionLabel: 'KLAIZ',
     database: { getGuild: () => ({ maintenance: {} }), updateGuildMaintenance: () => { announced = true; } },
-    resolveGuildSettings: () => ({ channels: { updates: 'updates' }, visuals: {} }),
+    resolveGuildSettings: () => ({ channels: { updates: 'updates' }, visuals: {
+      familyBanner: 'https://example.com/old-family.png',
+      cards: { updates: { discord: { imageUrl: 'https://example.com/old-update.png', title: 'Custom title', color: '#12abcd' } } }
+    } }),
     fetchTextChannel: async () => ({ permissionsFor: () => ({ has: () => canAttach }), send: async payload => { discordPayloads.push(payload); } }),
     embeds: { buildUpdateAnnouncementEmbed }, EmbedBuilderCtor: EmbedBuilder,
     getUpdateChangeGroups: () => ({ added: ['New style'], updated: [], fixed: [] }), getCurrentReleaseChangeGroups: () => ({}),
@@ -55,14 +63,16 @@ async function main() {
   assert.equal(announced, true);
   assert.ok(Buffer.isBuffer(discordPayloads[0].files[0].attachment));
   assert.equal(discordPayloads[0].embeds[0].toJSON().image.url, 'attachment://klaiz-update.png');
+  assert.equal(discordPayloads[0].embeds[0].toJSON().title, 'Custom title');
   canAttach = false;
   await helper.announceBuildUpdate({ ...discordGuild, id: 'no-attachment-permission' });
   assert.equal(discordPayloads.at(-1).files, undefined);
+  assert.equal(discordPayloads.at(-1).embeds[0].toJSON().image, undefined);
   assert.equal(discordPayloads.at(-1).embeds[0].toJSON().image, undefined);
   failRender = true;
   await helper.announceBuildUpdate({ ...discordGuild, id: 'renderer-failure' });
   assert.equal(discordPayloads.at(-1).files, undefined);
   assert.match(JSON.stringify(discordPayloads.at(-1).embeds[0].toJSON()), /New style/);
-  console.log('PASS Vice City artwork escaping, dynamic version, Discord attachment, Telegram upload, custom override and text fallback');
+  console.log('PASS Vice City artwork priority, dynamic version, Discord attachment, Telegram upload and text fallback');
 }
 module.exports = { main };

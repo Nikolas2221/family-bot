@@ -15,11 +15,13 @@ are no new packages or external image-hosting requirements. No network resources
 are loaded while rendering. The shared renderer serializes browser work, closes
 the browser after each render, and caches up to eight variants per process.
 
-Per-platform /cardstyle image overrides take precedence: when an update image URL
-is explicitly set, the generated card is not used for that platform. Discord also
-honors UPDATE_CARD_BANNER_URL. UPDATE_CARD_TITLE and UPDATE_CARD_COLOR continue to
-override Discord defaults. Custom title/footer/color are rendered into the artwork.
-If an old custom image is configured, reset that update-card image to use Vice City.
+Generated Vice City artwork takes precedence over old update-card image URLs,
+UPDATE_CARD_BANNER_URL and the generic family banner. Stored URLs are not deleted;
+they are simply ignored for update announcements with the renderer configured.
+If rendering fails or Discord lacks Attach Files, updates fall back to text, not
+the old banner. Other card categories retain their custom images unchanged.
+UPDATE_CARD_TITLE and UPDATE_CARD_COLOR continue to override Discord defaults.
+Custom title/footer/color are rendered into the artwork.
 
 Discord requires Attach Files for artwork. Without it, the normal text embed is
 sent. Network delivery errors are not proof that a message was not delivered;

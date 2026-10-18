@@ -433,9 +433,10 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       let discordFailure = '';
       const hasDiscordTarget = channelIds.length > 0;
       const appearance = settings.visuals.cards?.updates?.discord;
+      const updateAppearance = options.renderUpdateArtwork ? { ...appearance, imageUrl: undefined } : appearance;
       const customImage = appearance?.imageUrl || process.env.UPDATE_CARD_BANNER_URL;
       let artwork: Buffer | undefined;
-      if (hasDiscordTarget && !customImage && options.renderUpdateArtwork) {
+      if (hasDiscordTarget && options.renderUpdateArtwork) {
         artwork = await options.renderUpdateArtwork({
           semver: productVersionSemver, buildId: deployBuildId, changeLines,
           title: appearance?.title || process.env.UPDATE_CARD_TITLE,
@@ -463,8 +464,8 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
               title: process.env.UPDATE_CARD_TITLE || 'KLAIZ | Vice City Edition',
               color: process.env.UPDATE_CARD_COLOR || '#ff71bc',
               imageUrl: channelArtwork ? 'attachment://klaiz-update.png'
-                : customImage || resolveGuildSettings(guild.id).visuals?.familyBanner || ''
-            }), appearance)
+                : options.renderUpdateArtwork ? '' : customImage || resolveGuildSettings(guild.id).visuals?.familyBanner || ''
+            }), updateAppearance)
           ],
           ...(channelArtwork ? { files: [{ attachment: channelArtwork, name: 'klaiz-update.png' }] } : {})
         }).then(() => true).catch(error => {

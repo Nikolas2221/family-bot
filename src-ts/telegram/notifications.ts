@@ -265,13 +265,13 @@ export function createTelegramNotificationService(options: {
     return (await sendWithResult(chatId, text, sendOptions)).ok;
   }
 
-  async function sendStyled(chatId: string, body: string, guildId: string | undefined, category: string, sendOptions: Record<string, unknown> = {}): Promise<boolean> {
+  async function sendStyled(chatId: string, body: string, guildId: string | undefined, category: string, sendOptions: Record<string, unknown> = {}, ignoreImage = false): Promise<boolean> {
     const style = guildId ? options.getCardStyle?.(guildId, category) || {} : {};
     const escape = (value: string) => sendOptions.parse_mode === 'HTML'
       ? value.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;') : value;
     const text = (style.title ? `${escape(style.title)}\n${body.split('\n').slice(1).join('\n')}` : body)
       + (style.footer ? `\n\n${escape(style.footer)}` : '');
-    if (style.imageUrl && sender?.sendPhoto && enabled) {
+    if (!ignoreImage && style.imageUrl && sender?.sendPhoto && enabled) {
       try {
         if (text.length <= 1024) {
           await sender.sendPhoto(chatId, style.imageUrl, { ...sendOptions, caption: text });
@@ -412,7 +412,7 @@ export function createTelegramNotificationService(options: {
       if (!allowsGuild(input.guildId)) return Promise.resolve(false);
       const body = buildUpdateAnnouncementHtml(input);
       const style = input.guildId ? options.getCardStyle?.(input.guildId, 'updates') || {} : {};
-      if (!style.imageUrl && options.renderUpdateArtwork && sender?.sendPhoto && enabled && announcementsChatId) {
+      if (options.renderUpdateArtwork && sender?.sendPhoto && enabled && announcementsChatId) {
         try {
           const artwork = await options.renderUpdateArtwork({
             semver: input.semver, buildId: input.buildId, changeLines: input.changeLines,
@@ -425,7 +425,7 @@ export function createTelegramNotificationService(options: {
       }
       return sendStyled(announcementsChatId, body, input.guildId, 'updates', {
         parse_mode: 'HTML'
-      });
+      }, Boolean(options.renderUpdateArtwork));
     },
     sendAnnouncement(input) {
       if (!allowsGuild(input.guildId)) return Promise.resolve({ ok: false, messageId: '', error: 'guild is not allowed by TELEGRAM_ALLOWED_GUILD_IDS' });
