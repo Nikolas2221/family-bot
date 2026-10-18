@@ -8,6 +8,7 @@ import { registerFatalHandlers } from './services/fatal-errors';
 import { Client, DefaultRestOptions, EmbedBuilder, GatewayIntentBits, Partials, PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
 import { protectDiscordRequests } from './services/discord-request-safety';
 import { webSearchHealthLines } from './services/web-search';
+import { createUpdateArtworkRenderer } from './services/update-artwork';
 import { createAIService } from './ai';
 import { watchDiscordStartup } from './services/discord-startup';
 import { createDiscordRateLimitGuard, retryAfterMs } from './services/discord-rate-limit';
@@ -185,7 +186,9 @@ const mediaShareService = createMediaShareService({
   canManageMedia: canDebugConfig
 });
 const telegramBot = createTelegramBot(config.telegramBotToken && config.telegramAdminChatId ? config.telegramBotToken : '');
+const renderUpdateArtwork = createUpdateArtworkRenderer();
 const telegramNotifications = createTelegramNotificationService({
+  renderUpdateArtwork,
   adminChatId: config.telegramAdminChatId,
   announcementsChatId: config.telegramAnnouncementsChatId,
   allowedGuildIds: config.telegramAllowedGuildIds,
@@ -411,6 +414,7 @@ const {
   sendSecurityLog,
   sendWelcomeInvite
 } = createNotificationRuntimeHelpers({
+  renderUpdateArtwork,
   copy,
   embeds,
   database,

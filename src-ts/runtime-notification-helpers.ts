@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
-import { EmbedBuilder, type Guild, type GuildMember, type User } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits, type Guild, type GuildMember, type User } from 'discord.js';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import { applyCardStyle } from './card-style';
 import { getReleaseNotes } from './release-notes';
 import { generateNotificationIntro } from './services/agent-replies';
+import type { UpdateArtworkRenderer } from './services/update-artwork';
 import type { CardAppearance, CopyCatalog, EmbedsApi, ReleaseNoteGroups } from './types';
 
 const updateAnnouncementLocks = new Set<string>();
@@ -21,6 +22,7 @@ function buildUpdateAnnouncementId(semver: string, commitMessage: string, change
 }
 
 interface TextChannelLike {
+  permissionsFor?(target: string): { has(permission: bigint): boolean } | null;
   send(payload: Record<string, unknown>): Promise<unknown>;
 }
 
@@ -81,6 +83,7 @@ interface AiServiceLike {
 }
 
 interface NotificationHelpersOptions {
+  renderUpdateArtwork?: UpdateArtworkRenderer;
   copy: CopyCatalog;
   embeds: EmbedsApi;
   database: DatabaseLike;
@@ -429,6 +432,16 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
       let discordSent = false;
       let discordFailure = '';
       const hasDiscordTarget = channelIds.length > 0;
+      const appearance = settings.visuals.cards?.updates?.discord;
+      const customImage = appearance?.imageUrl || process.env.UPDATE_CARD_BANNER_URL;
+      let artwork: Buffer | undefined;
+      if (hasDiscordTarget && !customImage && options.renderUpdateArtwork) {
+        artwork = await options.renderUpdateArtwork({
+          semver: productVersionSemver, buildId: deployBuildId, changeLines,
+          title: appearance?.title || process.env.UPDATE_CARD_TITLE,
+          footer: appearance?.footer, color: appearance?.color || process.env.UPDATE_CARD_COLOR
+        }).catch(error => { console.warn('[update-card] Artwork unavailable; keeping text card:', error instanceof Error ? error.message : 'render failed'); return undefined; });
+      }
 
       for (const channelId of channelIds) {
         const channel = await fetchTextChannel(guild, channelId);
@@ -436,6 +449,8 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
           discordFailure = `channel ${channelId} not found or is not text-based`;
           continue;
         }
+        const channelArtwork = artwork && (!channel.permissionsFor
+          || channel.permissionsFor(guild.client.user.id)?.has(PermissionFlagsBits.AttachFiles)) ? artwork : undefined;
 
         discordSent = await channel.send({
           embeds: [
@@ -445,11 +460,13 @@ export function createNotificationRuntimeHelpers(options: NotificationHelpersOpt
               buildId: deployBuildId,
               commitMessage: deployCommitMessage,
               changeLines,
-              title: process.env.UPDATE_CARD_TITLE || 'KLAIZ BOT | Обновление системы',
-              color: process.env.UPDATE_CARD_COLOR || '#10b981',
-              imageUrl: process.env.UPDATE_CARD_BANNER_URL || resolveGuildSettings(guild.id).visuals?.familyBanner || ''
-            }), resolveGuildSettings(guild.id).visuals.cards?.updates?.discord)
-          ]
+              title: process.env.UPDATE_CARD_TITLE || 'KLAIZ | Vice City Edition',
+              color: process.env.UPDATE_CARD_COLOR || '#ff71bc',
+              imageUrl: channelArtwork ? 'attachment://klaiz-update.png'
+                : customImage || resolveGuildSettings(guild.id).visuals?.familyBanner || ''
+            }), appearance)
+          ],
+          ...(channelArtwork ? { files: [{ attachment: channelArtwork, name: 'klaiz-update.png' }] } : {})
         }).then(() => true).catch(error => {
           discordFailure = error instanceof Error ? error.message : String(error);
           return false;

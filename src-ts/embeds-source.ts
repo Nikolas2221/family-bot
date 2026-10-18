@@ -1090,7 +1090,7 @@ export function buildUpdateAnnouncementEmbed({ versionLabel, semver, buildId, co
     section('Версия', text(semver), true),
     section('Сборка', trimValue(buildId), true)
   );
-  if (/^https?:\/\//iu.test(String(imageUrl))) embed.setImage(String(imageUrl));
+  if (/^https?:\/\//iu.test(String(imageUrl)) || imageUrl === 'attachment://klaiz-update.png') embed.setImage(String(imageUrl));
 
   if (groups.added.length) embed.addFields(section('Добавлено', updateGroupLines(groups.added)));
   if (groups.updated.length) embed.addFields(section('Обновлено', updateGroupLines(groups.updated)));

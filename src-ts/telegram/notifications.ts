@@ -1,9 +1,10 @@
 import { Telegraf } from 'telegraf';
 import type { ApplicationRecord, CardAppearance } from '../types';
 import { splitTelegramText } from './text';
+import type { UpdateArtworkRenderer } from '../services/update-artwork';
 
 export interface TelegramSenderLike {
-  sendPhoto?(chatId: string, photo: string, options?: Record<string, unknown>): Promise<unknown>;
+  sendPhoto?(chatId: string, photo: string | { source: Buffer; filename?: string }, options?: Record<string, unknown>): Promise<unknown>;
   sendMessage(chatId: string, text: string, options?: Record<string, unknown>): Promise<unknown>;
 }
 
@@ -213,6 +214,7 @@ function buildUpdateAnnouncementHtml(input: {
 }
 
 export function createTelegramNotificationService(options: {
+  renderUpdateArtwork?: UpdateArtworkRenderer;
   token?: string;
   adminChatId?: string;
   announcementsChatId?: string;
@@ -406,9 +408,22 @@ export function createTelegramNotificationService(options: {
         `Discord: ${url || 'ссылка недоступна'}`
       ].join('\n'), { reply_markup: { inline_keyboard: buttons } });
     },
-    notifyUpdateAnnouncement(input) {
+    async notifyUpdateAnnouncement(input) {
       if (!allowsGuild(input.guildId)) return Promise.resolve(false);
-      return sendStyled(announcementsChatId, buildUpdateAnnouncementHtml(input), input.guildId, 'updates', {
+      const body = buildUpdateAnnouncementHtml(input);
+      const style = input.guildId ? options.getCardStyle?.(input.guildId, 'updates') || {} : {};
+      if (!style.imageUrl && options.renderUpdateArtwork && sender?.sendPhoto && enabled && announcementsChatId) {
+        try {
+          const artwork = await options.renderUpdateArtwork({
+            semver: input.semver, buildId: input.buildId, changeLines: input.changeLines,
+            title: style.title, footer: style.footer, color: style.color
+          });
+          await sender.sendPhoto(announcementsChatId, { source: artwork, filename: 'klaiz-update.png' }, {
+            caption: `KLAIZ · Vice City Edition\nОбновление ${input.semver}`
+          });
+        } catch { logger.warn('Telegram update artwork failed; keeping release text.'); }
+      }
+      return sendStyled(announcementsChatId, body, input.guildId, 'updates', {
         parse_mode: 'HTML'
       });
     },
