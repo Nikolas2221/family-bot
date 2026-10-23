@@ -9,6 +9,7 @@ async function main() {
   await require('./web-search.test').main();
   await require('./agent-replies.test').main();
   await require('./conversation-dialogue.test').main();
+  await require('./admin-reliability.test').main();
   await require('./state-validation.test').main();
   await require('./natural-timeout.test').main();
   await require('./error-handling.test').main();

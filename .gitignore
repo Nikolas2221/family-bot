@@ -18,3 +18,5 @@ assets/vice-city/preview-*.png
 # Claude Code worktrees and per-machine settings
 .claude/
 .aider*
+
+*.admin-changes.json*

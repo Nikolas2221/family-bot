@@ -46,6 +46,23 @@ async function main() {
   const count = pauses.length;
   for (let i = 0; i < 41; i++) await shared('https://discord.com/api/shared/' + i, {});
   assert.equal(pauses.length, count);
+  assert.match(request.healthLines().join('\n'), /в очереди 0/);
+  assert.match(auth.healthLines().join('\n'), /токен отклонён/);
+  let signalStarted, complete;
+  const started = new Promise(resolve => { signalStarted = resolve; });
+  const slow = protectDiscordRequests(async () => {
+    signalStarted(); await new Promise(resolve => { complete = resolve; }); return new Response('{}');
+  }, options);
+  const operation = slow('https://discord.com/api/slow', {});
+  await started;
+  assert.match(slow.healthLines().join('\n'), /выполняется 1\/4; в очереди 0/);
+  complete(); await operation;
+  assert.match(slow.healthLines().join('\n'), /выполняется 0\/4/);
+  const globalLimit = protectDiscordRequests(async () => new Response('{}', { status: 429,
+    headers: { 'x-ratelimit-global': 'true', 'retry-after': '3' } }), options);
+  await globalLimit('https://discord.com/api/global', {});
+  assert.equal(pauses.at(-1), 3000);
+  assert.match(globalLimit.healthLines().join('\n'), /пауза после ограничения/);
   console.log('PASS Discord REST pacing, abort, permission circuits, invalid-request breaker, token rejection and shared limits');
 }
 module.exports = { main };

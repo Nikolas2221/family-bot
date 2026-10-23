@@ -129,7 +129,7 @@ async function testAutomodAndServerReportCommandsAreRegistered() {
   assert.deepEqual(ticket.options.map(option => option.name), ['setup', 'info', 'close', 'claim', 'add', 'remove', 'list']);
   assert.deepEqual(reportForm.options.map(option => option.name), ['setup', 'refresh', 'status']);
   assert.deepEqual(mediaShare.options.map(option => option.name), ['setup', 'refresh', 'status']);
-  assert.deepEqual(serverBackup.options.map(option => option.name), ['create', 'list', 'restore']);
+  assert.deepEqual(serverBackup.options.map(option => option.name), ['create', 'list', 'verify', 'restore']);
   assert.deepEqual(aiAnnounce.options.map(option => option.name), ['type', 'запрос']);
   assert.deepEqual(security.options.map(option => option.name), ['lockdown', 'unlock', 'check']);
   assert.equal(law.options[0].name, 'question');

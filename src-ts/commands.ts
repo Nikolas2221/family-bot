@@ -6,6 +6,7 @@ import { buildVoiceRoomsCommandData } from './modules/voiceRooms';
 
 const ADMIN_VISIBLE_COMMANDS = new Set([
   'health',
+  'settings',
   'cardstyle',
   'setup',
   'adminpanel',
@@ -75,6 +76,21 @@ export function buildCommands(): CommandJson[] {
       .addSubcommand(sub => sub.setName('reset').setDescription('Сбросить оформление')
         .addStringOption(opt => opt.setName('card').setDescription('Карточка').setRequired(true).addChoices(...['updates', 'applications', 'family', 'welcome', 'reports', 'moderation'].map(value => ({ name: value, value }))))
         .addStringOption(opt => opt.setName('platform').setDescription('Платформа').setRequired(true).addChoices({ name: 'Discord', value: 'discord' }, { name: 'Telegram', value: 'telegram' }, { name: 'Обе', value: 'both' }))),
+    new SlashCommandBuilder().setName('settings').setDescription('Каналы, роли, модули, проверка и откат настроек')
+      .addSubcommand(sub => sub.setName('show').setDescription('Показать настройки сервера'))
+      .addSubcommand(sub => sub.setName('check').setDescription('Проверить доступ и права бота'))
+      .addSubcommand(sub => sub.setName('history').setDescription('Журнал настроек и ручных изменений ранга'))
+      .addSubcommand(sub => sub.setName('undo').setDescription('Отменить изменение из журнала')
+        .addStringOption(opt => opt.setName('id').setDescription('ID из /settings history').setRequired(true)))
+      .addSubcommand(sub => sub.setName('channel').setDescription('Назначить канал')
+        .addStringOption(opt => opt.setName('key').setDescription('Назначение').setRequired(true).addChoices(...['panel','applications','welcome','rules','logs','disciplineLogs','automod','updates','reports'].map(value => ({ name: value, value }))))
+        .addChannelOption(opt => opt.setName('value').setDescription('Текстовый канал').addChannelTypes(ChannelType.GuildText).setRequired(true)))
+      .addSubcommand(sub => sub.setName('role').setDescription('Назначить семейную роль')
+        .addStringOption(opt => opt.setName('key').setDescription('Ранг').setRequired(true).addChoices(...['leader','deputy','rank15','rank14','rank13','rank12','rank11','rank10','rank9','rank8','rank7','rank6','elder','member','newbie','mute','autorole','verification'].map(value => ({ name: value, value }))))
+        .addRoleOption(opt => opt.setName('value').setDescription('Роль').setRequired(true)))
+      .addSubcommand(sub => sub.setName('module').setDescription('Включить или отключить модуль')
+        .addStringOption(opt => opt.setName('key').setDescription('Модуль').setRequired(true).addChoices(...['family','applications','moderation','security','analytics','ai','welcome','automod','subscriptions','customCommands','music'].map(value => ({ name: value, value }))))
+        .addBooleanOption(opt => opt.setName('enabled').setDescription('Включён').setRequired(true))),
     new SlashCommandBuilder().setName('health').setDescription('Состояние сервисов бота и очереди доставки'),
     new SlashCommandBuilder().setName('family').setDescription(copy.commands.familyDescription),
     new SlashCommandBuilder().setName('apply').setDescription(copy.commands.applyDescription),
@@ -146,6 +162,8 @@ export function buildCommands(): CommandJson[] {
       .setDescription('Создать или восстановить backup структуры Discord-сервера')
       .addSubcommand(subcommand => subcommand.setName('create').setDescription('Создать backup сервера в GitHub'))
       .addSubcommand(subcommand => subcommand.setName('list').setDescription('Показать последние backup сервера'))
+      .addSubcommand(sub => sub.setName('verify').setDescription('Проверить восстановление в изолированную модель без изменения сервера')
+        .addStringOption(opt => opt.setName('backup_id').setDescription('ID backup').setRequired(true)))
       .addSubcommand(subcommand =>
         subcommand
           .setName('restore')

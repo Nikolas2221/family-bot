@@ -1,3 +1,4 @@
+import { AdminChanges } from './services/admin-changes';
 ﻿import 'dotenv/config';
 
 import path from 'node:path';
@@ -130,16 +131,17 @@ const CURRENT_BUILD_SIGNATURE = buildCurrentBuildSignature(DEPLOY_BUILD_ID);
 const discordRateLimit = createDiscordRateLimitGuard(`${DATA_FILE}.discord-rate-limit.json`, {
   networkChangeId: process.env.DISCORD_NETWORK_CHANGE_ID
 });
+const discordSafeRequest = protectDiscordRequests(DefaultRestOptions.makeRequest, {
+      blocked: () => discordRateLimit.blocked(),
+      pause: ms => discordRateLimit.defer(ms),
+      stopping: isStopping
+    });
 const client = new Client({
   rest: {
     globalRequestsPerSecond: 8,
     offset: 250,
     invalidRequestWarningInterval: 10,
-    makeRequest: protectDiscordRequests(DefaultRestOptions.makeRequest, {
-      blocked: () => discordRateLimit.blocked(),
-      pause: ms => discordRateLimit.defer(ms),
-      stopping: isStopping
-    })
+    makeRequest: discordSafeRequest
   },
   intents: [
     GatewayIntentBits.Guilds,
@@ -839,6 +841,7 @@ function getHelpCatalog(interaction: any) {
   ];
 
   const adminFree = [
+    { name: 'settings', description: 'Каналы, роли, модули, проверка прав и откат изменений' },
     { name: 'applypanel', description: copy.commands.applyPanelDescription },
     { name: 'setrole', description: copy.commands.setRoleDescription },
     { name: 'setpanelroles', description: 'Задать роли, которые показываются в панели состава' },
@@ -1545,6 +1548,7 @@ function isActivityExempt(guildId: string, userId: string): boolean {
   });
 }
 
+const adminChanges = new AdminChanges(`${DATA_FILE}.admin-changes.json`);
 const actionJournal = new ActionJournal(`${DATA_FILE}.actions.json`);
 configureActionJournal(actionJournal);
 for (const job of actionJournal.list().filter(job => job.status === 'interrupted')) {
@@ -1643,6 +1647,7 @@ registerFatalHandlers(() => {
 });
 
 registerInteractionRuntime({
+  adminChanges,
   client,
   handleCommand: (interaction: any) => {
     const guildId = interaction.guild?.id || interaction.guildId || GUILD_ID;
@@ -1651,6 +1656,7 @@ registerInteractionRuntime({
     const rankService = getRankService(guildId);
 
     return handleCommandRuntime(interaction, {
+    adminChanges,
     APPLICATION_COOLDOWN_MS,
     AUTO_RANKS,
     aiService,
@@ -1729,9 +1735,11 @@ registerInteractionRuntime({
       `Telegram: ${telegramHealth(telegramBot)}`,
       ...(aiService.healthLines?.() || []),
       ...webSearchHealthLines(),
+      ...discordSafeRequest.healthLines(),
+      ...adminChanges.healthLines(),
       ...storage.healthLines(),
       `База настроек: ${database.healthStatus().writable && !database.healthStatus().hasWriteError ? 'доступна' : 'ошибка записи'}`,
-      `Журнал действий: ${actionJournal.healthStatus() ? 'доступен' : 'недоступен'}`,
+      ...actionJournal.healthLines(),
       ...serverBackupService.healthLines(),
       ...familyCabinetService.statusLines().filter((line: string) => !line.startsWith('Файл') && !line.startsWith('Scraper'))
     ],

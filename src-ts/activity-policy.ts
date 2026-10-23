@@ -22,3 +22,15 @@ export function isMemberInactive(data: ActivityHistory, joinedTimestamp: number 
   thresholdMs: number, now = Date.now()): boolean {
   return assessInactivity(data, joinedTimestamp, thresholdMs, now) === 'inactive';
 }
+
+export function explainInactivity(data: ActivityHistory, joinedTimestamp: number | null | undefined,
+  thresholdMs: number, now = Date.now()): string {
+  const day = 86400000;
+  const last = lastActivityAt(data);
+  const observed = Math.max(Number(data.observedSince) || last, Number(joinedTimestamp) || 0);
+  const days = (time: number) => time > 0 ? Math.max(0, Math.floor((now - time) / day)) + ' дн.' : 'нет данных';
+  const state = assessInactivity(data, joinedTimestamp, thresholdMs, now);
+  return (state === 'inactive' ? 'неактивен' : state === 'active' ? 'активен' : 'недостаточно наблюдений')
+    + '; наблюдение ' + days(observed) + '; последнее сообщение ' + days(Number(data.lastMessageAt) || 0)
+    + '; голос ' + days(Number(data.lastVoiceAt) || 0) + '; любая активность ' + days(last);
+}

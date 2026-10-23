@@ -1,9 +1,11 @@
+import { AdminChangeError, describeAdminChange, type AdminChanges } from './services/admin-changes';
+import { explainDiscordError } from './services/discord-errors';
 ﻿import { createGuildStorageContext } from './guild-runtime';
 import { canSendDiscordAnnouncement, formatAnnouncementResultMessage } from './services/announcements';
 import { applyCardStyle, CARD_CATEGORIES } from './card-style';
 import { buildDiscordOnlineMembersText } from './services/online-members';
 import { setActiveLockdown } from './services/security-lockdown';
-import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './role-safety';
+import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync, getUnsafeAssignableRoleReason } from './role-safety';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { buildFamilyCabinetActionsEmbed } from './modules/familyCabinet';
 import type { MarketplaceCategory } from './modules/majesticApi';
@@ -168,6 +170,7 @@ async function buildSecurityCheckLines(guild: any): Promise<string[]> {
 }
 
 interface CommandRuntimeOptions {
+  adminChanges?: AdminChanges;
   APPLICATION_COOLDOWN_MS: number;
   AUTO_RANKS: AutoRanksConfig;
   copy: CopyCatalog;
@@ -362,6 +365,23 @@ function buildAiSystemPrompt(kind: 'daily' | 'staff' | 'announce'): string {
 }
 
 export async function handleCommandRuntime(interaction: any, options: CommandRuntimeOptions): Promise<boolean> {
+  const tracked = new Set(['setrole', 'setchannel', 'setmode', 'setmodule', 'setpanelroles', 'setfamilytitle', 'setart', 'cardstyle']);
+  const mutating = interaction.commandName !== 'cardstyle' || ['set', 'reset'].includes(interaction.options.getSubcommand());
+  if (options.adminChanges && tracked.has(interaction.commandName) && mutating && options.canDebugConfig(interaction)) {
+    const guildId = interaction.guild.id;
+    if (interaction.member.fetch) {
+      const fresh = await interaction.member.fetch(true);
+      if (!fresh.permissions.has(PermissionFlagsBits.Administrator)) throw new AdminChangeError('Право Administrator отозвано.');
+    }
+    return options.adminChanges.run({ guildId, actorId: interaction.user.id, kind: 'settings', targetId: guildId,
+      before: structuredClone(options.database.getGuild(guildId).settings) },
+      () => handleCommandRuntimeInner(interaction, options),
+      () => { options.database.flush(); return options.database.getGuild(guildId).settings; });
+  }
+  return handleCommandRuntimeInner(interaction, options);
+}
+
+async function handleCommandRuntimeInner(interaction: any, options: CommandRuntimeOptions): Promise<boolean> {
   const guildId = interaction.guild?.id;
   if (!guildId || !interaction.isChatInputCommand?.()) {
     return false;
@@ -634,12 +654,96 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
     await interaction.reply(ephemeral({ content: `Оформление **${category}** (${platform}) ${sub === 'reset' ? 'сброшено' : 'сохранено'}. Оно применяется к новым карточкам и последующим обновлениям существующих.` })); return true;
   }
 
+  if (interaction.commandName === 'settings') {
+    if (!canDebugConfig(interaction)) { await interaction.reply(ephemeral({ content: copy.common.noAccess })); return true; }
+    const sub = interaction.options.getSubcommand();
+    if (['channel', 'role', 'module'].includes(sub)) {
+      const key = interaction.options.getString('key', true);
+      const commandName = { channel: 'setchannel', role: 'setrole', module: 'setmodule' }[sub as 'channel' | 'role' | 'module'];
+      const original = interaction.options;
+      const opts = Object.create(original);
+      opts.getString = (name: string, required?: boolean) => name === copy.commands.stateOptionName && sub === 'module' ? (original.getBoolean('enabled', true) ? 'on' : 'off') : [copy.commands.channelTargetOptionName, copy.commands.roleTargetOptionName, copy.commands.moduleOptionName].includes(name) ? key : original.getString(name, required);
+      opts.getChannel = () => original.getChannel('value', true);
+      opts.getRole = () => original.getRole('value', true);
+      opts.getBoolean = () => original.getBoolean('enabled', true);
+      const mapped = new Proxy(interaction, { get(target, key) {
+        if (key === 'commandName') return commandName;
+        if (key === 'options') return opts;
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+      return handleCommandRuntime(mapped, options);
+    }
+    const record = database.getGuild(guildId);
+    if (sub === 'history') {
+      const lines = options.adminChanges?.list(guildId).map(entry => entry.id + ' · ' + entry.kind + ' · ' + entry.status + ' · <@' + entry.actorId + '> · ' + new Date(entry.createdAt).toISOString() + '\n' + describeAdminChange(entry).slice(0, 250) + (entry.revertedBy ? '\nОткатил: <@' + entry.revertedBy + '>' : '')) || [];
+      await interaction.reply(ephemeral({ content: lines.length ? lines.join('\n').slice(0, 1900) : 'Журнал изменений пуст.' })); return true;
+    }
+    if (sub === 'undo') {
+      if (!options.adminChanges) { await interaction.reply(ephemeral({ content: 'Журнал изменений не подключён.' })); return true; }
+      await interaction.deferReply({ flags: 64 });
+      try {
+        const actor = await interaction.member.fetch(true);
+        if (!actor.permissions.has(PermissionFlagsBits.Administrator)) throw new AdminChangeError('Право Administrator отозвано.');
+        await options.adminChanges.undo(guildId, interaction.options.getString('id', true), actor.id,
+          async entry => {
+            if (entry.kind === 'settings') return database.getGuild(guildId).settings;
+            const member = await interaction.guild.members.fetch({ user: entry.targetId, force: true });
+            return [...member.roles.cache.keys()].sort();
+          }, async entry => {
+            if (entry.kind === 'settings') {
+              const previous = entry.before as import('./types').GuildSettings;
+              const problems = await validateSettingsTargets(interaction.guild, previous, actor);
+              if (problems.length) throw new AdminChangeError(problems.join(' '));
+              database.setGuildSettings(guildId, previous); database.flush();
+            } else {
+              const member = await interaction.guild.members.fetch({ user: entry.targetId, force: true });
+              if (member.id === interaction.guild.ownerId || member.id === actor.id || (actor.id !== interaction.guild.ownerId && actor.roles.highest.position <= member.roles.highest.position)) throw new AdminChangeError('Нельзя изменить роли этой цели: проверьте иерархию.');
+              const before = entry.before as string[], after = entry.after as string[];
+              const add = before.filter(id => !after.includes(id)), remove = after.filter(id => !before.includes(id));
+              for (const id of [...add, ...remove]) {
+                const role = await interaction.guild.roles.fetch(id);
+                const reason = await getUnsafeAssignableRoleReasonAsync(role, { guild: interaction.guild, actor });
+                if (reason) throw new AdminChangeError(formatUnsafeRoleMessage(reason));
+              }
+              if (add.length) await member.roles.add(add, 'Откат ' + entry.id + ' администратором ' + actor.id);
+              if (remove.length) await member.roles.remove(remove, 'Откат ' + entry.id + ' администратором ' + actor.id);
+            }
+          });
+        await interaction.editReply({ content: 'Изменение отменено. Результат записан в /settings history.' });
+        await doPanelUpdate(guildId, true);
+      } catch (error) {
+        const known = error instanceof AdminChangeError;
+        await interaction.editReply({ content: known ? (error as Error).message.slice(0, 1600) : explainDiscordError(error) });
+      }
+      return true;
+    }
+    const settings = resolveGuildSettings(guildId);
+    const problems = await validateSettingsTargets(interaction.guild, record.settings, interaction.member);
+    const lines = [ 'Настройки сервера: ' + settings.familyTitle,
+      'Каналы: ' + Object.entries(settings.channels).filter(([,id]) => id).map(([key,id]) => key + ' → <#' + id + '>').join(', '),
+      'Роли: ' + Object.entries(record.settings.roles).filter(([,id]) => id).map(([key,id]) => key + ' → <@&' + id + '>').join(', '),
+      'Модули: ' + Object.entries(settings.modules).map(([key,enabled]) => key + '=' + (enabled ? 'вкл' : 'выкл')).join(', '),
+      problems.length ? 'Требует внимания: ' + problems.join(' ') : 'Доступность настроенных каналов и ролей проверена.',
+      'Изменить: /settings channel, role, module. История: /settings history. Откат: /settings undo id.' ];
+    await interaction.reply(ephemeral({ content: lines.join('\n').slice(0, 1900), allowedMentions: { parse: [] } }));
+    return true;
+  }
+
   if (interaction.commandName === 'health') {
     if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
       await interaction.reply(ephemeral({ content: copy.common.noAccess }));
       return true;
     }
-    await interaction.reply(ephemeral({ content: (options.healthLines?.() || ['Диагностика не подключена.']).join('\n').slice(0, 1900) }));
+    const lines = options.healthLines?.() || ['Диагностика не подключена.'];
+    const pages: string[] = [''];
+    for (const line of lines) {
+      const value = String(line).slice(0, 1800);
+      if (pages[pages.length - 1]!.length + value.length + 1 > 1900) pages.push('');
+      pages[pages.length - 1] += value + '\n';
+    }
+    await interaction.reply(ephemeral({ content: pages[0], allowedMentions: { parse: [] } }));
+    for (const content of pages.slice(1)) await interaction.followUp(ephemeral({ content, allowedMentions: { parse: [] } }));
     return true;
   }
 
@@ -729,6 +833,14 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       return true;
     }
 
+    if (subcommand === 'verify') {
+      await interaction.deferReply({ flags: 64 });
+      const result = await serverBackupService.verifyBackup(interaction.guild.id, interaction.options.getString('backup_id', true).trim());
+      await interaction.editReply({ content: result.ok
+        ? 'Проверка восстановления пройдена в изолированной модели. Ролей: ' + result.rolesCreated + ', каналов: ' + result.channelsCreated + '. Рабочий сервер не изменялся. Это не проверка прав Discord.'
+        : 'Backup не прошёл проверку: ' + result.error });
+      return true;
+    }
     if (subcommand === 'restore') {
       const backupId = interaction.options.getString('backup_id', true).trim();
       const confirm = interaction.options.getString('confirm', true).trim();
@@ -744,7 +856,7 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       await interaction.editReply({
         content: result.ok
           ? `✅ Restore завершён: роли создано ${result.rolesCreated || 0}, каналов создано ${result.channelsCreated || 0}.`
-          : `❌ Restore не выполнен: ${result.error || 'ошибка'}`
+          : `❌ Восстановление не завершено: ${result.error || 'ошибка'}`
       });
       return true;
     }
@@ -904,6 +1016,8 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
 
     const key = interaction.options.getString(copy.commands.channelTargetOptionName, true);
     const channel = interaction.options.getChannel(copy.commands.channelValueOptionName, true);
+    const channelProblem = validateConfiguredChannel(channel, interaction.guild);
+    if (channelProblem) { await interaction.reply(ephemeral({ content: channelProblem })); return true; }
     database.updateGuildSettings(guildId, { channels: { [key]: channel.id } });
     const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
     if (key === 'panel') {
@@ -1356,13 +1470,15 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       }
 
       const reason = interaction.options.getString(copy.commands.reasonOptionName) || 'Mute via bot';
-      const ok = await member.roles.add(muteRole, reason).then(() => true).catch(() => false);
-      await replyAndAutoDelete(interaction, { content: ok ? copy.moderation.muteDone(user.id, muteRole.id) : copy.moderation.actionFailed('mute') });
+      let failure: unknown;
+      const ok = await member.roles.add(muteRole, reason).then(() => true).catch((error: unknown) => { failure = error; return false; });
+      await replyAndAutoDelete(interaction, { content: ok ? copy.moderation.muteDone(user.id, muteRole.id) : explainDiscordError(failure) });
       return true;
     }
 
-    const ok = await member.roles.remove(settings.muteRoleId, 'Unmute via bot').then(() => true).catch(() => false);
-    await replyAndAutoDelete(interaction, { content: ok ? copy.moderation.unmuteDone(user.id) : copy.moderation.actionFailed('unmute') });
+    let failure: unknown;
+    const ok = await member.roles.remove(settings.muteRoleId, 'Unmute via bot').then(() => true).catch((error: unknown) => { failure = error; return false; });
+    await replyAndAutoDelete(interaction, { content: ok ? copy.moderation.unmuteDone(user.id) : explainDiscordError(failure) });
     return true;
   }
 
@@ -1459,8 +1575,9 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
       return true;
     }
 
-    const ok = await channel.setRateLimitPerUser(seconds, `Slowmode by ${interaction.user.id}`).then(() => true).catch(() => false);
-    await replyAndAutoDelete(interaction, { content: ok ? copy.moderation.slowmodeDone(channel.id, seconds) : copy.moderation.actionFailed('slowmode') });
+    let failure: unknown;
+    const ok = await channel.setRateLimitPerUser(seconds, `Slowmode by ${interaction.user.id}`).then(() => true).catch((error: unknown) => { failure = error; return false; });
+    await replyAndAutoDelete(interaction, { content: ok ? copy.moderation.slowmodeDone(channel.id, seconds) : explainDiscordError(failure) });
     return true;
   }
 
@@ -2026,4 +2143,26 @@ export async function handleCommandRuntime(interaction: any, options: CommandRun
   }
 
   return false;
+}
+
+function validateConfiguredChannel(channel: any, guild: any): string {
+  if (!channel || (channel.guild?.id || channel.guildId) !== guild.id || channel.type !== ChannelType.GuildText) return 'Выберите текстовый канал этого сервера.';
+  const permissions = channel.permissionsFor?.(guild.members.me);
+  if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions?.has(PermissionFlagsBits.SendMessages) || !permissions?.has(PermissionFlagsBits.EmbedLinks)) return 'Канал не сохранён: боту нужны View Channel, Send Messages и Embed Links.';
+  return '';
+}
+async function validateSettingsTargets(guild: any, settings: import('./types').GuildSettings, actor: any): Promise<string[]> {
+  const problems: string[] = [];
+  for (const [key, id] of Object.entries(settings.channels)) {
+    if (!id) continue;
+    const problem = validateConfiguredChannel(guild.channels.cache.get(id), guild);
+    if (problem) problems.push(key + ': ' + problem);
+  }
+  for (const [key, id] of Object.entries(settings.roles)) {
+    if (!id) continue;
+    const role = guild.roles.cache.get(id);
+    const reason = getUnsafeAssignableRoleReason(role, { guild, actor, botMember: guild.members.me });
+    if (reason) problems.push(key + ': ' + reason);
+  }
+  return problems;
 }

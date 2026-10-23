@@ -1,3 +1,5 @@
+import { AdminChangeError, type AdminChanges } from './services/admin-changes';
+import { explainDiscordError } from './services/discord-errors';
 import { PermissionFlagsBits } from 'discord.js';
 import type { Client, Interaction, ChatInputCommandInteraction, ButtonInteraction, Guild, GuildMember, Role, EmbedBuilder, InteractionReplyOptions, TextChannel } from 'discord.js';
 import type { CopyCatalog, EmbedsApi, DatabaseApi, AIService, GuildRecord, GuildStorageContext, ApplicationsService, RankService, RankActionResult, RoleMenu, CustomCommandEntry, ReactionRoleEntry, ReportScheduleSlot } from './types';
@@ -7,6 +9,7 @@ import { formatUnsafeRoleMessage, getUnsafeAssignableRoleReasonAsync } from './r
 import { getPlayerData, callAiAdvisor } from './services/aiAdvisor';
 
 interface InteractionRuntimeOptions {
+  adminChanges?: AdminChanges;
   client: Pick<Client, 'removeAllListeners' | 'on'>;
   handleCommand(interaction: ChatInputCommandInteraction<'cached'>): Promise<boolean>;
   applicationCooldownMs: number;
@@ -797,20 +800,28 @@ async function handleFamilyAndAdminButtons(interaction: Interaction<'cached'>, o
 
     let result: RankActionResult;
     try {
-      if (action === 'rank_promote') {
-        result = await rankService.promote(member);
-      } else if (action === 'rank_demote') {
-        result = await rankService.demote(member);
-      } else {
-        if (!options.isPremiumGuild(guildId)) {
-          await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly }));
-          return true;
+      if (options.adminChanges) {
+        const actor = await interaction.member.fetch(true);
+        const target = await member.fetch(true);
+        if (!options.canManageRanks(actor) || target.id === interaction.guild.ownerId || target.id === actor.id
+          || (actor.id !== interaction.guild.ownerId && actor.roles.highest.position <= target.roles.highest.position)) {
+          throw new AdminChangeError('Ранг не изменён: проверьте действующие права и иерархию ролей цели.');
         }
-        result = await rankService.applyAutoRank(member);
       }
+      const apply = async (): Promise<RankActionResult> => {
+        if (action === 'rank_promote') return rankService.promote(member);
+        if (action === 'rank_demote') return rankService.demote(member);
+        return rankService.applyAutoRank(member);
+      };
+      if (action !== 'rank_promote' && action !== 'rank_demote' && !options.isPremiumGuild(guildId)) {
+        await interaction.reply(options.ephemeral({ content: options.copy.admin.premiumOnly })); return true;
+      }
+      result = options.adminChanges ? await options.adminChanges.run({ guildId, actorId: interaction.user.id,
+        kind: 'rank', targetId: member.id, before: [...member.roles.cache.keys()].sort() }, apply,
+        async () => [...(await member.fetch(true)).roles.cache.keys()].sort()) : await apply();
     } catch (error) {
       console.error('Ошибка изменения ранга:', error);
-      await interaction.reply(options.ephemeral({ content: options.copy.ranks.permissionFailed }));
+      await interaction.reply(options.ephemeral({ content: error instanceof AdminChangeError ? error.message : explainDiscordError(error) }));
       return true;
     }
 
@@ -1301,7 +1312,7 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
       }
     } catch (error) {
       console.error('Interaction runtime error:', error);
-      await finishInteractionError(interaction, options.copy.common.unknownError).catch(replyError => {
+      await finishInteractionError(interaction, error instanceof AdminChangeError ? error.message : explainDiscordError(error)).catch(replyError => {
         console.error('Failed to deliver interaction error:', replyError);
       });
     }

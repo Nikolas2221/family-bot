@@ -1,3 +1,4 @@
+import { explainDiscordError } from './discord-errors';
 import { ChannelType, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
 import { trackWork } from './shutdown';
 
@@ -110,11 +111,33 @@ function githubApiBase(config: BackupConfig): string {
   return `https://api.github.com/repos/${config.githubOwner}/${config.githubRepo}/contents`;
 }
 
+export function validateBackupSnapshot(backup: any, guildId: string): string {
+  if (!backup || backup.version !== 1 || backup.guild?.id !== guildId || !Array.isArray(backup.roles) || !Array.isArray(backup.channels)) return 'Неверный формат backup или другой сервер.';
+  if (backup.roles.length > 250 || backup.channels.length > 500) return 'Backup слишком большой для восстановления.';
+  const ids = new Set<string>([guildId]);
+  for (const item of [...backup.roles, ...backup.channels]) {
+    if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 100) return 'Повторяющийся ID или некорректное имя в backup.';
+    ids.add(item.id);
+  }
+  const bits = (value: unknown) => typeof value === 'string' && /^\d{1,30}$/u.test(value);
+  for (const role of backup.roles) if (!bits(role.permissions)) return 'Некорректные права роли в backup.';
+  const categories = new Set(backup.channels.filter((channel: any) => channel.type === ChannelType.GuildCategory).map((channel: any) => channel.id));
+  for (const channel of backup.channels) {
+    if (!canCreateChannelType(channel.type) || (channel.parentId && !categories.has(channel.parentId))
+      || channel.parentId === channel.id || (channel.type === ChannelType.GuildCategory && channel.parentId)) return 'Неподдерживаемый тип или некорректная категория канала.';
+    if (!Array.isArray(channel.permissionOverwrites) || channel.permissionOverwrites.length > 100
+      || channel.permissionOverwrites.some((overwrite: any) => !overwrite || typeof overwrite.id !== 'string' || ![0, 1].includes(overwrite.type) || !bits(overwrite.allow) || !bits(overwrite.deny))) return 'Некорректные разрешения канала.';
+  }
+  return '';
+}
+
 export function createServerBackupService({ client, config }: { client: any; config: BackupConfig }) {
   let autoTimer: NodeJS.Timeout | null = null;
   let authenticationFailed = false;
   let lastError = '';
   let lastSuccessAt = '';
+  let lastVerifiedAt = '';
+  const restores = new Set<string>();
   const inProgressGuilds = new Set<string>();
 
   function isConfigured() {
@@ -122,6 +145,7 @@ export function createServerBackupService({ client, config }: { client: any; con
   }
 
   function buildBackupPath(guildId: string, backupId: string): string {
+    if (!/^[a-zA-Z0-9_-]+$/u.test(guildId) || !/^[a-zA-Z0-9_.-]+$/u.test(backupId) || backupId.includes('..')) throw new Error('Некорректный ID backup.');
     const basePath = String(config.githubBasePath || 'backups/server').replace(/^\/+|\/+$/g, '');
     return `${basePath}/${guildId}/${backupId}.json`;
   }
@@ -158,6 +182,7 @@ export function createServerBackupService({ client, config }: { client: any; con
   async function putGithubFile(filePath: string, content: string, message: string): Promise<{ url?: string }> {
     const endpoint = `${githubApiBase(config)}/${filePath}`;
     const existing = await fetch(`${endpoint}?ref=${encodeURIComponent(config.githubBranch)}`, {
+      signal: AbortSignal.timeout(15000),
       headers: {
         authorization: `Bearer ${config.githubToken}`,
         accept: 'application/vnd.github+json',
@@ -206,8 +231,8 @@ export function createServerBackupService({ client, config }: { client: any; con
 
     inProgressGuilds.add(guildId);
     try {
-      await guild.roles.fetch().catch(() => null);
-      await guild.channels.fetch().catch(() => null);
+      await guild.roles.fetch();
+      await guild.channels.fetch();
       const backupId = `${isoId()}-${safeName(reason)}`;
       const snapshot = createSnapshot(guild);
       const filePath = buildBackupPath(guild.id, backupId);
@@ -269,7 +294,42 @@ export function createServerBackupService({ client, config }: { client: any; con
   }
 
   async function restoreBackup(guild: any, backupId: string): Promise<BackupResult & { rolesCreated?: number; channelsCreated?: number }> {
-    const backup = await fetchBackup(guild.id, backupId);
+    if (restores.has(guild.id)) return { ok: false, error: 'Восстановление уже выполняется.' };
+    restores.add(guild.id);
+    try {
+      const backup = await fetchBackup(guild.id, backupId);
+      if (!backup) return { ok: false, error: 'Backup не найден.' };
+      const problem = validateBackupSnapshot(backup, guild.id);
+      if (problem) return { ok: false, error: problem };
+      await guild.roles.fetch();
+      await guild.channels.fetch();
+      return await restoreSnapshot(guild, backup, backupId);
+    } catch (error) { return { ok: false, error: 'Восстановление прервано. ' + (error instanceof Error && error.message === 'Ambiguous existing channels' ? 'Найдено несколько одинаковых каналов.' : explainDiscordError(error)) + ' Проверьте уже созданные роли и каналы перед повтором.' }; }
+    finally { restores.delete(guild.id); }
+  }
+
+  async function verifyBackup(guildId: string, backupId: string): Promise<BackupResult & { rolesCreated?: number; channelsCreated?: number }> {
+    try {
+      const backup = await fetchBackup(guildId, backupId);
+      if (!backup) return { ok: false, error: 'Backup не найден или GitHub недоступен.' };
+      const problem = validateBackupSnapshot(backup, guildId);
+      if (problem) return { ok: false, error: problem };
+      const roles = new Map<string, any>(), channels = new Map<string, any>();
+      // The real restoration algorithm writes exclusively into these isolated collections.
+      const sandbox = { id: guildId, roles: { cache: roles, create: async (data: any) => {
+        const role = { ...data, id: 'test-role-' + roles.size }; roles.set(role.id, role); return role;
+      } }, channels: { cache: channels, create: async (data: any) => {
+        if (data.parent && !channels.has(data.parent)) throw Error('Missing restored parent');
+        const channel = { ...data, parentId: data.parent || null, id: 'test-channel-' + channels.size };
+        channels.set(channel.id, channel); return channel;
+      } } };
+      const result = await restoreSnapshot(sandbox, backup, backupId);
+      if (result.ok) lastVerifiedAt = new Date().toISOString();
+      return result;
+    } catch { return { ok: false, error: 'Проверка backup не выполнена: повреждён JSON или недоступен GitHub.' }; }
+  }
+
+  async function restoreSnapshot(guild: any, backup: any, backupId: string): Promise<BackupResult & { rolesCreated?: number; channelsCreated?: number }> {
     if (!backup) return { ok: false, error: `Backup ${backupId} not found.` };
     if (backup.guild?.id && String(backup.guild.id) !== String(guild.id)) {
       return { ok: false, error: `Backup ${backupId} belongs to another guild.` };
@@ -288,7 +348,7 @@ export function createServerBackupService({ client, config }: { client: any; con
     const roles = [...backupRoles].sort((left: any, right: any) => left.position - right.position);
     let rolesCreated = 0;
     for (const roleData of roles) {
-      const existing = existingRolesByName.get(roleData.name) as any;
+      const existing = guild.roles.cache.get(roleData.id) || existingRolesByName.get(roleData.name) as any;
       if (existing) {
         roleMap.set(roleData.id, existing.id);
         continue;
@@ -311,13 +371,18 @@ export function createServerBackupService({ client, config }: { client: any; con
     let channelsCreated = 0;
 
     async function createChannel(channelData: any) {
+      const parentId = channelData.parentId ? channelMap.get(channelData.parentId) : null;
+      const matching = [...guild.channels.cache.values()].filter((channel: any) => channel.name === channelData.name && channel.type === channelData.type && (channel.parentId || null) === parentId);
+      if (matching.length > 1) throw Error('Ambiguous existing channels');
+      const existing = guild.channels.cache.get(channelData.id) || matching[0];
+      if (existing) { channelMap.set(channelData.id, existing.id); return; }
       const overwrites = (channelData.permissionOverwrites || [])
         .map((overwrite: any) => {
           const mappedId = roleMap.get(overwrite.id) || channelMap.get(overwrite.id) || overwrite.id;
           return {
             id: mappedId,
             type: overwrite.type,
-            allow: BigInt(overwrite.allow || '0'),
+            allow: sanitizeRestoredRolePermissions(overwrite.allow),
             deny: BigInt(overwrite.deny || '0')
           };
         });
@@ -377,6 +442,7 @@ export function createServerBackupService({ client, config }: { client: any; con
     healthLines: () => [
       `GitHub backup: ${authenticationFailed ? 'остановлен: токен отклонён' : isConfigured() ? 'настроен' : 'не настроен'}`,
       `Последний успешный backup: ${lastSuccessAt || 'в этом запуске ещё не было'}`,
+      `Проверка восстановления: ${lastVerifiedAt || 'в этом запуске ещё не выполнялась'}`,
       ...(lastError ? [`Ошибка backup: ${lastError}`] : [])
     ],
     config,
@@ -385,6 +451,7 @@ export function createServerBackupService({ client, config }: { client: any; con
     createBackup,
     listBackups,
     restoreBackup,
+    verifyBackup,
     startAutoBackups,
     stopAutoBackups
   };

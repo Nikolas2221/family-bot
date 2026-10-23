@@ -9,7 +9,7 @@ const agentReply = createAgentReplies();
 const searchWeb = createWebSearch(() => process.env.TAVILY_API_KEY);
 let actionJournal: ActionJournal | undefined;
 export function configureActionJournal(journal: ActionJournal | undefined): void { actionJournal = journal; }
-import { assessInactivity } from './activity-policy';
+import { assessInactivity, explainInactivity } from './activity-policy';
 import { getActiveLockdown } from './services/security-lockdown';
 import { getUnsafeAssignableRoleReasonAsync } from './role-safety';
 import {
@@ -931,10 +931,17 @@ function requestedInactiveDays(value: string): number {
   return 7;
 }
 
+const activityMemberLoads = new WeakMap<GuildLike, Promise<MemberLike[]>>();
 async function loadActivityMembers(guild: GuildLike): Promise<MemberLike[]> {
-  const fetched = await guild.members.fetch();
-  if (!fetched?.values) throw new Error('Не удалось получить полный список участников Discord. Проверь Server Members Intent.');
-  return collectionValues<MemberLike>(fetched);
+  const existing = activityMemberLoads.get(guild);
+  if (existing) return existing;
+  const load = (async () => {
+    const fetched = await guild.members.fetch();
+    if (!fetched?.values) throw new Error('Не удалось получить полный список участников Discord. Проверь Server Members Intent.');
+    return collectionValues<MemberLike>(fetched);
+  })();
+  activityMemberLoads.set(guild, load);
+  try { return await load; } finally { activityMemberLoads.delete(guild); }
 }
 
 export async function handleInactiveMembersRequest(
@@ -967,16 +974,24 @@ export async function handleInactiveMembersRequest(
   const thresholdMs = days * 24 * 60 * 60 * 1000;
   const guildStorage = options.getGuildStorage(message.guild.id);
   let insufficientData = 0;
+  let inVoice = 0, exempt = 0, active = 0;
   const inactive = (await loadActivityMembers(message.guild))
     .filter(member => member.id !== message.author.id && !member.user?.bot && options.hasFamilyRole(member))
-    .filter(member => !member.voice?.channelId && !options.isActivityExempt?.(message.guild!.id, member.id))
+    .filter(member => {
+      if (member.voice?.channelId) { inVoice++; return false; }
+      if (options.isActivityExempt?.(message.guild!.id, member.id)) { exempt++; return false; }
+      return true;
+    })
     .map(member => ({ member, data: guildStorage.ensureMemberRecord(member.id) }))
     .filter(({ member, data }) => {
       const assessment = assessInactivity(data, member.joinedTimestamp, thresholdMs);
       if (assessment === 'insufficient') insufficientData++;
+      if (assessment === 'active') active++;
       return assessment === 'inactive' && (!confirmed || confirmed.ids.includes(member.id));
     })
     .sort((left, right) => (Number(left.data.lastSeenAt) || 0) - (Number(right.data.lastSeenAt) || 0));
+  const exclusions = `Исключены: в голосе ${inVoice}; отпуск/освобождение ${exempt}; активные ${active}; недостаточно наблюдений ${insufficientData}.`;
+  const explanations = inactive.slice(0, 3).map(({ member, data }) => `${member.id}: ${explainInactivity(data, member.joinedTimestamp, thresholdMs)}`).join('\n');
 
   if (!inactive.length) {
     if (confirmed?.jobId) actionJournal?.finish(confirmed.jobId, 'completed');
@@ -985,7 +1000,7 @@ export async function handleInactiveMembersRequest(
       actorId: message.author.id, targetId: message.channel.id, summary: 'No eligible recipients remain after confirmation'
     }, options);
     await message.channel.send?.({
-      content: `Неактивных семейных участников за последние ${days} дн. по доступным данным не найдено.${insufficientData ? ` Для ${insufficientData} участник(ов) недостаточен срок наблюдения или пребывания на сервере; их активность пока не оценена.` : ''}`,
+      content: `Неактивных семейных участников за последние ${days} дн. по доступным данным не найдено. ${exclusions}${insufficientData ? ` Для ${insufficientData} участник(ов) недостаточен срок наблюдения или пребывания на сервере; их активность пока не оценена.` : ''}`,
       allowedMentions: { parse: [] }
     }).catch(() => null);
     return true;
@@ -1025,7 +1040,7 @@ export async function handleInactiveMembersRequest(
       action, risk: 'medium', status: 'planned', actorId: message.author.id, targetId: message.channel.id,
       summary: `${ids.length} recipients; ${days} days`
     }, options);
-    await message.channel.send?.({ content: `Подготовлено: ${messageMembers ? 'личные предупреждения' : 'упоминания'}. Получателей: ${ids.length}. Риск: medium.\nТекст: ${aiSummary}\n\nПодтверди в этом канале: «подтверждаю ${code}» с упоминанием бота. Срок: 2 минуты. До подтверждения ничего не отправлено.`.slice(0, 1900), allowedMentions: { parse: [] } });
+    await message.channel.send?.({ content: `Подготовлено: ${messageMembers ? 'личные предупреждения' : 'упоминания'}. Получателей: ${ids.length}. Риск: medium.\n${exclusions}\n${explanations.slice(0, 420)}\nТекст: ${aiSummary.slice(0, 850)}\n\nПодтверди в этом канале: «подтверждаю ${code}» с упоминанием бота. Срок: 2 минуты. До подтверждения ничего не отправлено.`.slice(0, 1900), allowedMentions: { parse: [] } });
     return true;
   }
   let delivered = 0;
@@ -1116,19 +1131,19 @@ export async function handleInactiveMembersRequest(
         Number(data.lastVoiceAt) || 0
       ) || Number(data.observedSince) || 0;
       const inactiveDays = Math.max(1, Math.floor((Date.now() - lastActivity) / (24 * 60 * 60 * 1000)));
-      return `${index + 1}. <@${member.id}> — нет активности ${inactiveDays} дн.`;
+      return `${index + 1}. <@${member.id}> — нет активности ${inactiveDays} дн.; ${explainInactivity(data, member.joinedTimestamp, thresholdMs)}`;
     });
     if (inactive.length > lines.length) lines.push(`…и ещё ${inactive.length - lines.length} участник(ов).`);
     const embed = new EmbedBuilder()
       .setColor(0xf59e0b)
       .setTitle('💤 Неактивные участники')
       .setDescription(`${aiSummary}\n\nСемейные участники без активности более **${days} дн.**: **${inactive.length}**${insufficientData ? `\nНедостаточный срок наблюдения или пребывания на сервере: **${insufficientData}**. Эти участники не оценены.` : ''}`)
-      .addFields({ name: 'Список', value: lines.slice(0, 10).join('\n') })
+      .addFields({ name: 'Список', value: lines.slice(0, 5).join('\n').slice(0, 1024) }, { name: 'Исключения', value: exclusions })
       .setFooter({ text: 'KLAIZ • Живые данные бота' })
       .setTimestamp();
     await message.channel.send?.({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
-    for (let offset = 10; offset < lines.length; offset += 10) {
-      await message.channel.send?.({ content: lines.slice(offset, offset + 10).join('\n'), allowedMentions: { parse: [] } });
+    for (let offset = 5; offset < lines.length; offset += 5) {
+      await message.channel.send?.({ content: lines.slice(offset, offset + 5).join('\n'), allowedMentions: { parse: [] } });
     }
   }
 

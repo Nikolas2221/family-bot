@@ -8,7 +8,7 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (message: string) => void;
-}): RESTOptions['makeRequest'] {
+}): RESTOptions['makeRequest'] & { healthLines(): string[] } {
   const now = options.now || Date.now;
   const sleep = options.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const log = options.log || console.warn;
@@ -20,7 +20,10 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
   let nextAt = 0;
   let tail: Promise<void> = Promise.resolve();
 
-  return async (url, init) => {
+  let completed = 0;
+  let lastStatus = 0;
+  const queued = new Map<symbol, number>();
+  const request: RESTOptions['makeRequest'] = async (url, init) => {
     const key = createHash('sha256').update(`${init.method || 'GET'}:${new URL(url).pathname}`).digest('hex');
     const check = () => {
       if (init.signal?.aborted) throw new Error('Discord request cancelled before transmission.');
@@ -31,6 +34,8 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
     if (pending >= 64) throw new Error('Discord REST safety queue full. Try again later.');
     pending++;
     const queuedAt = now();
+    const queueId = Symbol();
+    queued.set(queueId, queuedAt);
     const gate = tail.then(async () => {
       check();
       if (now() - queuedAt >= 8000) throw new Error('Discord REST safety queue timeout.');
@@ -51,6 +56,12 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
       check();
       const response = await makeRequest(url, init);
       const time = now();
+      completed++;
+      lastStatus = response.status;
+      if (response.status === 429 && response.headers.get('x-ratelimit-global') === 'true') {
+        const retry = Number(response.headers.get('retry-after'));
+        options.pause(Number.isFinite(retry) && retry > 0 ? retry * 1000 : 60000);
+      }
       for (const [id, expiry] of circuits) if (expiry <= time) circuits.delete(id);
       const headers = init.headers;
       const authorization = Array.isArray(headers)
@@ -80,7 +91,12 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
       return response;
     } finally {
       pending--;
+      queued.delete(queueId);
       if (admitted) active--;
     }
   };
+  return Object.assign(request, { healthLines: () => [
+    'Discord REST: выполняется ' + active + '/4; в очереди ' + (pending - active) + '/64; старейший запрос ' + (queued.size ? Math.max(0, Math.ceil((now() - Math.min(...queued.values())) / 1000)) : 0) + ' с',
+    'Discord REST: ' + (unauthorized ? 'остановлен: токен отклонён' : options.stopping() ? 'остановка' : options.blocked() ? 'пауза после ограничения' : 'работает') + '; закрытых ресурсов ' + [...circuits.values()].filter(expiry => expiry > now()).length + '; ответов ' + completed + '; последний HTTP ' + (lastStatus || '—')
+  ] });
 }

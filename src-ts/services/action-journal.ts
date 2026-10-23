@@ -90,6 +90,13 @@ export class ActionJournal {
       && Date.now() - (job.recipientTimes?.[userId] ?? job.updatedAt) < 86400000
       && ['sending', 'delivered'].includes(job.recipients[userId] || ''));
   }
+  healthLines(): string[] {
+    const jobs = Object.values(this.jobs);
+    const uncertain = jobs.reduce((total, job) => total + Object.values(job.recipients).filter(status => status === 'sending').length, 0);
+    return ['Журнал доставок: ' + (this.healthStatus() ? 'доступен' : 'ошибка записи') + '; выполняется ' + jobs.filter(job => job.status === 'running').length
+      + '; прервано ' + jobs.filter(job => job.status === 'interrupted').length + '; результат отправки неизвестен ' + uncertain
+      + (Date.now() < this.recoveryBlockUntil ? '; защитная пауза после восстановления до ' + new Date(this.recoveryBlockUntil).toISOString() : '')];
+  }
   list(): ActionJob[] { return Object.values(this.jobs); }
   confirmations(): Map<string, PendingBrainAction> {
     const journal = this;

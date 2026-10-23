@@ -1291,7 +1291,7 @@ export function buildAdminPanelEmbed({ guildName, record }: AnyRecord): EmbedBui
   return card({
     title: text(copy.admin?.panelTitle, 'Панель администратора'),
     color: isPremium ? THEME.gold : THEME.brand,
-    description: `Сервер: **${text(guildName)}**`,
+    description: `Сервер: **${text(guildName)}**\nНастройки: /settings show · Проверка: /settings check\nЖурнал и откат: /settings history · /settings undo`,
     footer: `${BRAND_FOOTER} • Administration`
   }).addFields(
     section('Статус', [`Тариф: ${planLabel}`, `Setup: ${record?.setupCompleted ? text(copy.admin?.panelSetupDone, 'завершён') : text(copy.admin?.panelSetupPending, 'ожидает')}`, `Режим: ${mode}`].join('\n'), true),
