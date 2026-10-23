@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { ActionJournal } from './services/action-journal';
 import { isStopping, trackWork, trackListener } from './services/shutdown';
 import { deliverOnce } from './services/delivery-result';
-import { createAgentReplies, needsServerContext } from './services/agent-replies';
+import { createAgentReplies, needsServerContext, isConversationFollowUp } from './services/agent-replies';
 import { createWebSearch, needsWebSearch } from './services/web-search';
 const agentReply = createAgentReplies();
 const searchWeb = createWebSearch(() => process.env.TAVILY_API_KEY);
@@ -2650,11 +2650,26 @@ export async function handleAiMentionMessage(
     return true;
   }
 
-  if (await handleNaturalAdminCommand(message, prompt, options, pendingActions)) {
+  const sessionKey = JSON.stringify([message.guild.id, message.channel.id, message.author.id]);
+  const followUp = isConversationFollowUp(prompt) && agentReply.hasHistory(sessionKey);
+  if (/^(?:да[, ]+)?(?:сделай|делай|выполняй|подтверждаю|подтверждаю выполнение)[.!\s]*$/iu.test(prompt.trim())) {
+    const candidates = [...pendingActions.values()].filter(pending => pending.guildId === message.guild!.id
+      && pending.actorId === message.author.id && pending.channelId === message.channel.id && pending.expiresAt > Date.now());
+    if (candidates.length === 1) {
+      await executePendingBrainAction(message, 'подтверждаю ' + candidates[0].code, pendingActions, options);
+    } else {
+      await message.channel.send?.({ content: candidates.length
+        ? 'Есть несколько ожидающих действий. Укажи код: «подтверждаю КОД».'
+        : 'Нет ожидающего подтверждения. Какое именно действие нужно выполнить?', allowedMentions: { parse: [] } });
+    }
     return true;
   }
 
-  if (looksLikeInactiveMembersRequest(prompt) || looksLikeLiveActivityQuestion(prompt)) {
+  if (!followUp && await handleNaturalAdminCommand(message, prompt, options, pendingActions)) {
+    return true;
+  }
+
+  if (!followUp && (looksLikeInactiveMembersRequest(prompt) || looksLikeLiveActivityQuestion(prompt))) {
     const inactiveRequest = looksLikeInactiveMembersRequest(prompt);
     if (inactiveRequest && !isAdminMember(message.member)) {
       await message.channel.send?.({ content: 'Запросы списка и предупреждений неактивным доступны только администратору.', allowedMentions: { parse: [] } });
@@ -2678,15 +2693,15 @@ export async function handleAiMentionMessage(
     }
   }
 
-  if (await handleRulesQuestion(message, prompt, options)) {
+  if (!followUp && await handleRulesQuestion(message, prompt, options)) {
     return true;
   }
 
-  if (await handleServerBrainQuestion(message, prompt, options)) {
+  if (!followUp && await handleServerBrainQuestion(message, prompt, options)) {
     return true;
   }
 
-  if (isCapabilityQuestion(prompt)) {
+  if (!followUp && isCapabilityQuestion(prompt)) {
     const capabilities = await buildAiToolSummary(options.aiService,
       'Объясни свои возможности по переданному списку, применительно к вопросу пользователя. Не обещай неподдерживаемых действий. Отвечай естественно и кратко.',
       `${prompt}\n\n${buildMentionCapabilitiesText()}`, buildMentionCapabilitiesText());
@@ -2720,15 +2735,15 @@ export async function handleAiMentionMessage(
 
   try {
     const wantsWeb = needsWebSearch(prompt);
-    const liveContext = !wantsWeb && needsServerContext(prompt)
+    const liveContext = !followUp && !wantsWeb && needsServerContext(prompt)
       ? await buildAggregateServerContext(message, options)
       : 'Общий вопрос: внутренняя статистика сервера и профили участников не загружались.';
     const web = await searchWeb(prompt);
     const conversationContext = wantsWeb && !web.sources ? ''
       : await buildConversationContext(message, options.client.user!.id);
     const answer = wantsWeb && !web.sources ? web.unavailableReply
-      : await agentReply(JSON.stringify([message.guild.id, message.channel.id, message.author.id]),
-        options.aiService, `${buildMentionSystemPrompt()}\n\n${conversationContext}\n\nДата запроса: ${new Date().toISOString()}\n${liveContext}\n\n${web.context}`, prompt, web.fallbackReply);
+      : await agentReply(sessionKey,
+        options.aiService, `${buildMentionSystemPrompt()}\n\n${conversationContext}\n\nДата запроса: ${new Date().toISOString()}\n${liveContext}\n\n${web.context}`, prompt, web.fallbackReply, conversationContext);
     await message.channel.send?.({
       content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800 - web.sources.length)}${web.sources}`,
       allowedMentions: { parse: [], users: [message.author.id] }

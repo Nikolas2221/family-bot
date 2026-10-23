@@ -120,7 +120,8 @@ async function main() {
       aiText: async (system, prompt) => {
         aiSystems.push(system);
         aiPrompts.push(prompt);
-        return `AI reply: ${prompt}`;
+        const request = system.includes('[conversation]') ? JSON.parse(prompt).request : prompt;
+        return `AI reply: ${request}`;
       }
     },
     database: {
