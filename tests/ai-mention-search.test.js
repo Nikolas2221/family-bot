@@ -87,8 +87,22 @@ async function main() {
     assert.doesNotMatch(await buildConversationContext(message, 'bot'), /referencedMessage/);
     assert.equal(referenceLoads, 1, 'cross-channel references are not fetched');
     message.reference.channelId = message.channel.id;
-    message.channel.messages.fetch = async () => { throw Error('Missing access'); };
-    assert.match(await buildConversationContext(message, 'bot'), /referenceUnavailable/);
+    await buildConversationContext(message, 'bot');
+    assert.equal(referenceLoads, 1, 'the same incoming message reuses its lookup');
+    const cachedMessage = { ...message, channel: { ...message.channel } };
+    cachedMessage.channel.messages = {
+      cache: new Map([['quoted-message', { id: 'quoted-message', channel: message.channel,
+        guild: message.guild, author: { id: 'human' }, content: 'Cached context' }]]),
+      fetch: async () => { throw Error('Cached replies must not fetch'); }
+    };
+    assert.match(await buildConversationContext(cachedMessage, 'bot'), /Cached context/);
+    let failedLoads = 0;
+    const missingMessage = { ...message, channel: { ...message.channel, messages: {
+      fetch: async () => { failedLoads++; throw Error('Missing access'); }
+    } } };
+    const contexts = await Promise.all([buildConversationContext(missingMessage, 'bot'), buildConversationContext(missingMessage, 'bot')]);
+    assert.ok(contexts.every(context => context.includes('referenceUnavailable')));
+    assert.equal(failedLoads, 1, 'concurrent failed lookups are not retried');
   } finally {
     if (key === undefined) delete process.env.TAVILY_API_KEY;
     else process.env.TAVILY_API_KEY = key;

@@ -261,7 +261,10 @@ async function main() {
     channel: {
       id: 'channel-1',
       messages: {
-        fetch: async id => (id === 'bot-reply' ? { author: { id: 'bot-1', bot: true } } : null)
+        fetch: async id => (id === 'bot-reply' ? {
+          id, channel: { id: 'channel-1' }, guild: baseMessage.guild,
+          author: { id: 'bot-1', bot: true }
+        } : null)
       },
       send: async payload => {
         aiReplies.push(payload.content);

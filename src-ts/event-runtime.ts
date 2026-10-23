@@ -111,6 +111,7 @@ interface ChannelLike {
   fetchWebhooks?(): Promise<any>;
   permissionsFor?(target: unknown): { has(permission: unknown): boolean } | null;
   messages?: {
+    cache?: { get(id: string): MessageLike | undefined };
     fetch(options: string): Promise<any>;
     fetch(options?: import('discord.js').FetchMessagesOptions): Promise<any>;
   };
@@ -159,6 +160,27 @@ interface MessageLike {
   fetch?(): Promise<MessageLike>;
 }
 
+// Share reply lookups across moderation and conversation context, including failures.
+const referencedMessages = new WeakMap<MessageLike, Promise<MessageLike | null>>();
+function resolveReferencedMessage(message: MessageLike): Promise<MessageLike | null> {
+  const reference = message.reference;
+  if (!reference?.messageId || (reference.channelId && reference.channelId !== message.channel.id)
+    || (reference.guildId && reference.guildId !== message.guild?.id)) return Promise.resolve(null);
+  const existing = referencedMessages.get(message);
+  if (existing) return existing;
+  const lookup = (async () => {
+    try {
+      const cached = message.channel.messages?.cache?.get(reference.messageId!);
+      const quoted = cached && !cached.partial ? cached : await message.channel.messages?.fetch(reference.messageId!);
+      return quoted && !quoted.partial && quoted.id === reference.messageId
+        && quoted.channel?.id === message.channel.id && quoted.guild?.id === message.guild?.id
+        && quoted.author?.id ? quoted : null;
+    } catch { return null; }
+  })();
+  referencedMessages.set(message, lookup);
+  return lookup;
+}
+
 export async function buildConversationContext(message: MessageLike, botId: string): Promise<string> {
   const context: Record<string, unknown> = {
     assistant: { id: botId, name: 'KLAIZ BOT' },
@@ -169,7 +191,7 @@ export async function buildConversationContext(message: MessageLike, botId: stri
   if (reference?.messageId && (!reference.channelId || reference.channelId === message.channel.id)
     && (!reference.guildId || reference.guildId === message.guild?.id)) {
     try {
-      const quoted = await message.channel.messages?.fetch(reference.messageId);
+      const quoted = await resolveReferencedMessage(message);
       if (quoted && quoted.id === reference.messageId && quoted.channel?.id === message.channel.id
         && quoted.guild?.id === message.guild?.id && quoted.author?.id) {
         context.referencedMessage = {
@@ -1386,10 +1408,8 @@ function looksLikeBotInsult(value: string): boolean {
 }
 
 async function isReplyToBot(message: MessageLike, botId: string): Promise<boolean> {
-  const messageId = String(message.reference?.messageId || '').trim();
-  if (!messageId || !message.channel.messages?.fetch) return false;
-  const referenced = await message.channel.messages.fetch(messageId).catch(() => null);
-  return String(referenced?.author?.id || '') === botId;
+  const referenced = await resolveReferencedMessage(message);
+  return Boolean(referenced && referenced.author.id === botId);
 }
 
 async function enforceBotInsultGuard(
