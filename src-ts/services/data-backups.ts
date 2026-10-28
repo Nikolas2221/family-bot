@@ -62,6 +62,6 @@ export function validateStateVersion(file: string): void {
   if (version !== undefined && version !== 1) throw Error('Неподдерживаемая версия рабочих данных. Запуск остановлен до восстановления совместимой версии.');
 }
 
-export function runtimeBackupSources(storage: string, database: string): BackupSource[] {
-  return [...coreBackupSources(storage, database), ...['actions', 'admin-changes', 'discord-rate-limit', 'ai-usage'].map(name => ({ name, file: storage + '.' + name + '.json', optional: true }))];
+export function runtimeBackupSources(storage: string, database: string, voiceRoomsFile?: string): BackupSource[] {
+  return [...coreBackupSources(storage, database), ...['actions', 'admin-changes', 'discord-rate-limit', 'ai-usage'].map(name => ({ name, file: storage + '.' + name + '.json', optional: true })), ...(voiceRoomsFile ? [{ name: 'voice-rooms', file: voiceRoomsFile, optional: true }] : [])];
 }

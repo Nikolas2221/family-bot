@@ -1,5 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { writeSnapshot } from '../../services/file-persistence';
+import { readValidated, refuseEmptyRecovery } from '../../services/state-validation';
 
 export type VoiceRoomStatus = 'active' | 'deleted';
 
@@ -33,27 +33,20 @@ export class VoiceRoomsStore {
   }
 
   private load(): void {
-    try {
-      if (!fs.existsSync(this.dataFile)) {
-        this.data = emptyData();
-        return;
-      }
-
-      const parsed = JSON.parse(fs.readFileSync(this.dataFile, 'utf8')) as Partial<VoiceRoomsData>;
-      this.data = {
-        rooms: Array.isArray(parsed.rooms) ? parsed.rooms : [],
-        cooldowns: parsed.cooldowns && typeof parsed.cooldowns === 'object' ? parsed.cooldowns : {}
-      };
-    } catch (error) {
-      console.warn('[voiceRooms] failed to read store, starting with empty data:', error);
-      this.data = emptyData();
-    }
+    const validate = (value: unknown): value is VoiceRoomsData => {
+      if (!value || typeof value !== 'object') return false;
+      const data = value as VoiceRoomsData;
+      return Array.isArray(data.rooms) && data.rooms.every(room => room && ['channelId', 'guildId', 'ownerId', 'ownerTag'].every(key => typeof room[key as keyof VoiceRoomRecord] === 'string')
+        && Number.isFinite(room.createdAt) && ['active', 'deleted'].includes(room.status) && typeof room.locked === 'boolean' && typeof room.hidden === 'boolean')
+        && !!data.cooldowns && typeof data.cooldowns === 'object' && !Array.isArray(data.cooldowns) && Object.values(data.cooldowns).every(time => Number.isFinite(time) && time >= 0);
+    };
+    const primary = readValidated<VoiceRoomsData>(this.dataFile, validate);
+    const backup = primary ? null : readValidated<VoiceRoomsData>(this.dataFile + '.bak', validate);
+    if (!primary && !backup) refuseEmptyRecovery(this.dataFile);
+    this.data = primary || backup || emptyData();
   }
 
-  flush(): void {
-    fs.mkdirSync(path.dirname(this.dataFile), { recursive: true });
-    fs.writeFileSync(this.dataFile, JSON.stringify(this.data, null, 2));
-  }
+  flush(): void { writeSnapshot(this.dataFile, JSON.stringify(this.data)); }
 
   createRoom(record: VoiceRoomRecord): void {
     this.data.rooms = this.data.rooms.filter(room => room.channelId !== record.channelId);

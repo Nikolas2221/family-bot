@@ -23,3 +23,5 @@ assets/vice-city/preview-*.png
 
 data-backups/
 *.ai-usage.json*
+
+.npm-cache/

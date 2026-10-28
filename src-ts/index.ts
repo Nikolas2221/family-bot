@@ -1,3 +1,4 @@
+import { createMusicService } from './modules/music/service';
 import fs from 'node:fs';
 import { createDataBackups, runtimeBackupSources, validateStateVersion } from './services/data-backups';
 import { createAiBudget } from './services/ai-budget';
@@ -161,7 +162,7 @@ const client = new Client({
 
 validateStateVersion(DATABASE_FILE);
 if (fs.existsSync(DATA_FILE) && fs.existsSync(DATABASE_FILE)) {
-  try { createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), runtimeBackupSources(DATA_FILE, DATABASE_FILE)).create(); }
+  try { createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), runtimeBackupSources(DATA_FILE, DATABASE_FILE, config.voiceRooms.dataFile)).create(); }
   catch { console.error('Предстартовый backup не создан; загрузка данных продолжится только через штатную проверку и восстановление.'); }
 }
 const storage = createStorage({ dataFile: DATA_FILE });
@@ -227,9 +228,11 @@ const serverBackupService = createServerBackupService({
   client,
   config: config.serverBackup
 });
+const musicService = createMusicService(client, guildId => resolveGuildSettings(guildId).modules.music);
 const voiceRoomsService = createVoiceRoomsService({
   client,
-  config: config.voiceRooms
+  config: config.voiceRooms,
+  beforeDelete: (guildId, channelId) => musicService.stopChannel(guildId, channelId)
 });
 const majesticApiService = createMajesticApiService(config.majesticApi);
 const familyCabinetService = createFamilyCabinetService(client, config.familyCabinet);
@@ -806,6 +809,8 @@ function getCommandModule(commandName: any) {
     case 'security':
       return 'security';
     case 'leaderboard':
+    case 'music':
+      return 'music';
     case 'voiceactivity':
     case 'activityreport':
     case 'serverreport':
@@ -842,6 +847,7 @@ function getHelpCatalog(interaction: any) {
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
   const regularFree = [
+    { name: 'music', description: 'Поиск песни по названию и музыка в голосовом канале' },
     { name: 'family', description: copy.commands.familyDescription },
     { name: 'apply', description: copy.commands.applyDescription },
     { name: 'applications', description: copy.commands.applicationsDescription },
@@ -1565,7 +1571,7 @@ function isActivityExempt(guildId: string, userId: string): boolean {
 const adminChanges = new AdminChanges(`${DATA_FILE}.admin-changes.json`);
 const actionJournal = new ActionJournal(`${DATA_FILE}.actions.json`);
 configureActionJournal(actionJournal);
-const dataBackups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), runtimeBackupSources(DATA_FILE, DATABASE_FILE), positive('DATA_BACKUP_RETAIN', 14));
+const dataBackups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), runtimeBackupSources(DATA_FILE, DATABASE_FILE, config.voiceRooms.dataFile), positive('DATA_BACKUP_RETAIN', 14));
 const maintenanceFailures = new Set<string>();
 aiBudget.onWarning(async () => {
   for (const guild of client.guilds.cache.values()) {
@@ -1650,6 +1656,7 @@ async function shutdown(signal: string): Promise<void> {
     () => ticketService.stop(),
     () => serverBackupService.stopAutoBackups(),
     () => familyCabinetService.stop(),
+    () => musicService.stop(),
     () => voiceRoomsService.stop()
   ].map(stop => Promise.resolve().then(stop)));
   let failed = results.some(result => result.status === 'rejected');
@@ -1680,7 +1687,9 @@ registerFatalHandlers(() => {
   });
 });
 
+musicService.registerEvents();
 registerInteractionRuntime({
+  musicService,
   adminChanges,
   client,
   handleCommand: (interaction: any) => {
@@ -1690,6 +1699,7 @@ registerInteractionRuntime({
     const rankService = getRankService(guildId);
 
     return handleCommandRuntime(interaction, {
+    musicService,
     adminChanges,
     APPLICATION_COOLDOWN_MS,
     AUTO_RANKS,
@@ -1778,6 +1788,7 @@ registerInteractionRuntime({
       `База настроек: ${database.healthStatus().writable && !database.healthStatus().hasWriteError ? 'доступна' : 'ошибка записи'}`,
       ...actionJournal.healthLines(),
       ...serverBackupService.healthLines(),
+      ...musicService.healthLines(),
       ...familyCabinetService.statusLines().filter((line: string) => !line.startsWith('Файл') && !line.startsWith('Scraper'))
     ],
     previewTelegramCard: (guildId: string, category: string) => telegramNotifications.previewCard(guildId, category)

@@ -19,3 +19,5 @@ npm-debug.log*
 *.admin-changes.json*
 *.ai-usage.json*
 data-backups
+
+.npm-cache

@@ -23,6 +23,10 @@ function userTag(user: any): string {
   return user?.tag || user?.username || user?.id || 'unknown';
 }
 
+export function hasHumanListeners(channel: { members: { values(): IterableIterator<{ user?: { bot?: boolean } }> } }): boolean {
+  return [...channel.members.values()].some(member => !member.user?.bot);
+}
+
 export class VoiceRoomsService {
   private triggerChannelByGuild = new Map<string, string>();
   private cleanupTimers = new Map<string, NodeJS.Timeout>();
@@ -30,7 +34,8 @@ export class VoiceRoomsService {
   constructor(
     private client: any,
     private config: VoiceRoomsConfig,
-    private store: VoiceRoomsStore
+    private store: VoiceRoomsStore,
+    private beforeDelete: (guildId: string, channelId: string) => void = () => {}
   ) {}
 
   isEnabled(): boolean {
@@ -115,9 +120,10 @@ export class VoiceRoomsService {
     let removed = 0;
     for (const room of this.store.getActiveRoomsForGuild(guild.id)) {
       const channel = guild.channels.cache.get(room.channelId);
-      if (!channel || channel.type !== ChannelType.GuildVoice || channel.members.size === 0) {
+      if (!channel || channel.type !== ChannelType.GuildVoice || !hasHumanListeners(channel)) {
         if (channel?.delete) {
-          await channel.delete('Voice Rooms startup cleanup').catch(() => null);
+          this.beforeDelete(guild.id, room.channelId);
+          try { await channel.delete('Voice Rooms startup cleanup'); } catch { continue; }
         }
         await this.deleteControlPanel(room);
         this.store.deleteRoom(room.channelId);
@@ -153,7 +159,7 @@ export class VoiceRoomsService {
       const room = this.store.getRoomByChannelId(leftChannelId);
       if (room?.status === 'active') {
         const channel = oldState.guild.channels.cache.get(leftChannelId);
-        if (!channel || channel.type !== ChannelType.GuildVoice || channel.members.size === 0) {
+        if (!channel || channel.type !== ChannelType.GuildVoice || !hasHumanListeners(channel)) {
           this.scheduleEmptyRoomCleanup(oldState.guild, leftChannelId);
         }
       }
@@ -265,7 +271,7 @@ export class VoiceRoomsService {
       const room = this.store.getRoomByChannelId(channelId);
       const channel = guild.channels.cache.get(channelId);
       if (!room || room.status !== 'active') return;
-      if (channel?.type === ChannelType.GuildVoice && channel.members.size > 0) return;
+      if (channel?.type === ChannelType.GuildVoice && hasHumanListeners(channel)) return;
       await this.deleteRoom(guild, channelId, 'комната пустая');
     }).catch(error => console.error('Voice room cleanup failed:', error)); }, this.config.emptyRoomGraceMs);
     this.cleanupTimers.set(channelId, timer);
@@ -305,13 +311,14 @@ export class VoiceRoomsService {
   async deleteRoom(guild: any, channelId: string, reason: string, actorTag = ''): Promise<void> {
     const room = this.store.getRoomByChannelId(channelId);
     const channel = guild.channels.cache.get(channelId);
-    if (room) await this.deleteControlPanel(room);
+    this.beforeDelete(guild.id, channelId);
     if (channel?.type === ChannelType.GuildVoice) {
       for (const member of channel.members.values()) {
         await member.voice.disconnect(reason).catch(() => null);
       }
-      await channel.delete(reason).catch(() => null);
+      await channel.delete(reason);
     }
+    if (room) await this.deleteControlPanel(room);
     this.store.deleteRoom(channelId);
     await this.sendLog(guild, 'Voice Room удалена', [
       room ? `Владелец: <@${room.ownerId}>` : '',
@@ -565,6 +572,6 @@ export class VoiceRoomsService {
   }
 }
 
-export function createVoiceRoomsService(input: { client: any; config: VoiceRoomsConfig }): VoiceRoomsService {
-  return new VoiceRoomsService(input.client, input.config, new VoiceRoomsStore(input.config.dataFile));
+export function createVoiceRoomsService(input: { client: any; config: VoiceRoomsConfig; beforeDelete?: (guildId: string, channelId: string) => void }): VoiceRoomsService {
+  return new VoiceRoomsService(input.client, input.config, new VoiceRoomsStore(input.config.dataFile), input.beforeDelete);
 }

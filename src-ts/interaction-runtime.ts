@@ -61,6 +61,7 @@ interface InteractionRuntimeOptions {
   afkLeaveService: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
   reportRequestService: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
   mediaShareService: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
+  musicService?: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
   voiceRoomsService?: { handleInteraction(interaction: Interaction<'cached'>): Promise<boolean> };
 }
 
@@ -1280,6 +1281,7 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
       if (await options.mediaShareService.handleInteraction(interaction)) {
         return;
       }
+      if (await options.musicService?.handleInteraction(interaction)) return;
       if (await options.voiceRoomsService?.handleInteraction(interaction)) {
         return;
       }

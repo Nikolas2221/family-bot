@@ -10,7 +10,7 @@ const option = name => args[args.indexOf(name) + 1];
 try {
   const storageFile = path.resolve(process.env.STORAGE_FILE || 'dist-ts/storage.json');
   const databaseFile = path.resolve(process.env.DATABASE_FILE || 'dist-ts/database.json');
-  const backups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(storageFile), 'data-backups'), runtimeBackupSources(storageFile, databaseFile));
+  const backups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(storageFile), 'data-backups'), runtimeBackupSources(storageFile, databaseFile, process.env.VOICE_ROOMS_DATA_FILE || 'data/voice-rooms.json'));
   if (args[0] === 'verify') {
     backups.verify(path.resolve(args[1])); console.log('Backup: контрольные суммы и структура проверены.');
   } else if (args[0] === 'restore-test') {

@@ -12,6 +12,7 @@ async function main() {
   await require('./admin-reliability.test').main();
   await require('./operations.test').main();
   await require('./audit-regressions.test').main();
+  await require('./music.test').main();
   await require('./state-validation.test').main();
   await require('./natural-timeout.test').main();
   await require('./error-handling.test').main();

@@ -8,6 +8,9 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
+    ffmpeg \
+    python3 \
+    python3-venv \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -40,6 +43,9 @@ RUN apt-get update \
     libxtst6 \
     wget \
   && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/music && /opt/music/bin/pip install --no-cache-dir 'yt-dlp[default]'
+ENV YTDLP_PATH=/opt/music/bin/yt-dlp
 
 COPY package*.json ./
 RUN npm ci --include=dev

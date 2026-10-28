@@ -172,6 +172,7 @@ async function buildSecurityCheckLines(guild: any): Promise<string[]> {
 }
 
 interface CommandRuntimeOptions {
+  musicService?: { stopGuild(guildId: string): void };
   adminChanges?: AdminChanges;
   APPLICATION_COOLDOWN_MS: number;
   AUTO_RANKS: AutoRanksConfig;
@@ -715,6 +716,7 @@ async function handleCommandRuntimeInner(interaction: any, options: CommandRunti
               if (problems.length) throw new AdminChangeError(problems.join(' '));
               if (!isDeepStrictEqual(database.getGuild(guildId).settings, entry.after)) throw new AdminChangeError('Состояние изменилось во время проверки. Откат отменён.');
               database.setGuildSettings(guildId, previous); database.flush();
+              if (!previous.modules.music) options.musicService?.stopGuild(guildId);
             } else {
               const member = await interaction.guild.members.fetch({ user: entry.targetId, force: true });
               if (member.id === interaction.guild.ownerId || member.id === actor.id || (actor.id !== interaction.guild.ownerId && actor.roles.highest.position <= member.roles.highest.position)) throw new AdminChangeError('Нельзя изменить роли этой цели: проверьте иерархию.');
@@ -1069,6 +1071,7 @@ async function handleCommandRuntimeInner(interaction: any, options: CommandRunti
     const mode = interaction.options.getString(copy.commands.modeOptionName, true);
     const modules = defaultModulesForMode(mode);
     database.updateGuildSettings(guildId, { mode, modules });
+    if (!modules.music) options.musicService?.stopGuild(guildId);
     const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
     await doPanelUpdate(guildId, true);
     await interaction.reply(adminPanelReply(interaction, options, record, `Режим сервера переключён на **${mode}**.`));
@@ -1084,6 +1087,7 @@ async function handleCommandRuntimeInner(interaction: any, options: CommandRunti
     const key = interaction.options.getString(copy.commands.moduleOptionName, true);
     const state = interaction.options.getString(copy.commands.stateOptionName, true) === 'on';
     database.updateGuildSettings(guildId, { modules: { [key]: state } });
+    if (key === 'music' && !state) options.musicService?.stopGuild(guildId);
     const record = database.markSetupComplete(guildId, buildGuildSettingsSnapshot(interaction.guild));
     await doPanelUpdate(guildId, true);
     await interaction.reply(adminPanelReply(interaction, options, record, `Модуль **${key}** теперь **${state ? 'включён' : 'выключен'}**.`));

@@ -1,3 +1,4 @@
+import { buildMusicCommand } from './modules/music/service';
 ﻿import crypto from 'node:crypto';
 import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import copy from './copy';
@@ -60,6 +61,7 @@ function commandJsonWithDefaults(command: { toJSON(): unknown }): CommandJson {
 
 export function buildCommands(): CommandJson[] {
   return [
+    buildMusicCommand(),
     new SlashCommandBuilder().setName('cardstyle').setDescription('Оформление карточек Discord и Telegram')
       .addSubcommand(sub => sub.setName('set').setDescription('Изменить оформление')
         .addStringOption(opt => opt.setName('card').setDescription('Карточка').setRequired(true).addChoices(...['updates', 'applications', 'family', 'welcome', 'reports', 'moderation'].map(value => ({ name: value, value }))))
