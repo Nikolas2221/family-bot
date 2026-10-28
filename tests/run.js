@@ -1,4 +1,5 @@
 async function main() {
+  await require('./lockfile.test').main();
   await require('./update-artwork.test').main();
   await require('./notification-ai-text.test').main();
   await require('./answer-quality.test').main();

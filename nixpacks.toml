@@ -36,6 +36,7 @@ dependsOn = ["install"]
 cmds = ["python3 -m venv /opt/music", "/opt/music/bin/pip install --no-cache-dir 'yt-dlp[default]'"]
 
 [variables]
+NIXPACKS_NODE_VERSION = "22"
 YTDLP_PATH = "/opt/music/bin/yt-dlp"
 
 [phases.build]
