@@ -1,3 +1,4 @@
+import { musicFailure } from './errors';
 import type { Track, ResolvedTrack } from './sources';
 export interface MusicBackend {
   play(guildId: string, channelId: string, track: ResolvedTrack, signal: AbortSignal): Promise<void>;
@@ -9,6 +10,8 @@ interface Session { channelId: string; queue: Track[]; current?: Track; abort?: 
 export class MusicManager {
   private sessions = new Map<string, Session>();
   private searches = 0;
+  private failures = new Map<string, { time: number; message: string }>();
+  lastError(guildId: string): string { const failure = this.failures.get(guildId); return failure && Date.now() - failure.time < 3600000 ? failure.message : ''; }
   constructor(private backend: MusicBackend, private resolve: (track: Track, signal: AbortSignal) => Promise<ResolvedTrack>, private maxTrackMs = 900000, private maxSessions = 3) {}
   snapshot(guildId: string): { channelId: string; current?: Track; queue: Track[] } | undefined {
     const session = this.sessions.get(guildId);
@@ -43,8 +46,15 @@ export class MusicManager {
           // A failed text notification must not stop the audio queue.
           void Promise.resolve().then(() => session.notify('🎵 Найдено: ' + resolved.title)).catch(() => undefined);
           await this.backend.play(guildId, session.channelId, resolved, controller.signal);
-        } catch {
-          if (!controller.signal.aborted && this.sessions.get(guildId) === session) void Promise.resolve().then(() => session.notify('Трек недоступен или не удалось подключить звук. Пропускаю. Проверьте /music status.')).catch(() => undefined);
+          this.failures.delete(guildId);
+        } catch (error) {
+          const failure = musicFailure(error);
+          if (!controller.signal.aborted && this.sessions.get(guildId) === session) {
+            this.failures.set(guildId, { time: Date.now(), message: failure.message });
+            while (this.failures.size > 500) this.failures.delete(this.failures.keys().next().value!);
+            console.warn('[music] guild=' + guildId + ' stage=' + failure.stage + ' diagnostic=' + failure.diagnostic);
+          }
+          if (!controller.signal.aborted && this.sessions.get(guildId) === session) void Promise.resolve().then(() => session.notify(failure.message + ' Трек пропущен.')).catch(() => undefined);
         } finally { clearTimeout(timer); controller.abort(); session.current = undefined; session.abort = undefined; }
       }
     } finally {

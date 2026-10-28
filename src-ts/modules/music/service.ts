@@ -66,6 +66,7 @@ export function createMusicService(client: Client, enabled: (guildId: string) =>
         const ready = await dependencies();
         await reply('Музыка: ' + (enabled(interaction.guildId) ? 'включена' : 'выключена — /settings module key:music enabled:true')
           + '\nFFmpeg: ' + (ready.ffmpeg ? 'доступен' : 'не установлен') + '\nПоиск yt-dlp: ' + (ready.search ? 'доступен' : 'не установлен')
+          + (manager.lastError(interaction.guildId) ? '\nПоследняя ошибка: ' + manager.lastError(interaction.guildId) : '')
           + '\nПоиск: /music play query:Исполнитель — песня. Очередь: 25; на участника: 5; трек: до 15 минут/100 МБ.'); return true;
       }
       if (!enabled(interaction.guildId)) { await reply('Музыка выключена. Администратор может включить её через /settings module key:music enabled:true.'); return true; }
