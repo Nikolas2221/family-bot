@@ -123,12 +123,12 @@ async function main() {
       setImmediate(()=>{child.stdout.write(JSON.stringify({ entries: [{ title:'Кино — Группа крови', url:'https://example.com/audio.webm',duration:240 }] }));child.emit('close',0);});
       return child;
     };
-    const found = await resolveTrack(track('Кино — Группа крови'), new AbortController().signal);
+    const found = await resolveTrack(track('https://www.youtube.com/watch?v=test'), new AbortController().signal);
     assert.equal(found.title,'Кино — Группа крови');
-    assert.ok(command.args.includes('ytsearch1:Кино — Группа крови'));
+    assert.equal(command.args.at(-1),'https://www.youtube.com/watch?v=test');
     assert.equal(command.options.shell,undefined);
     const cancelled = new AbortController(); cancelled.abort();
-    await assert.rejects(resolveTrack(track('test'),cancelled.signal), /отменён/);
+    await assert.rejects(resolveTrack(track('https://www.youtube.com/watch?v=test'),cancelled.signal), /отменён/);
     const Opus = require('opusscript'); const encoder = new Opus(48000,2,Opus.Application.AUDIO);
     assert.ok(encoder.encode(Buffer.alloc(960*2*2),960).length>0); encoder.delete();
     const client = new EventEmitter(); client.guilds = { cache: new Map() };

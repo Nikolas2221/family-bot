@@ -1,4 +1,4 @@
-export type MusicFailureCode = 'voice' | 'source' | 'source_forbidden' | 'source_http' | 'ffmpeg' | 'codec' | 'audio_timeout' | 'audio_stream' | 'search' | 'search_timeout' | 'search_busy' | 'track_limit' | 'yt_auth' | 'yt_rate_limit' | 'yt_format' | 'yt_runtime' | 'yt_unavailable' | 'yt_network';
+export type MusicFailureCode = 'voice' | 'source' | 'source_forbidden' | 'source_http' | 'ffmpeg' | 'codec' | 'audio_timeout' | 'audio_stream' | 'search' | 'search_timeout' | 'search_busy' | 'track_limit' | 'yt_auth' | 'yt_rate_limit' | 'yt_format' | 'yt_runtime' | 'yt_unavailable' | 'yt_network' | 'audius_api' | 'audius_timeout' | 'audius_rate_limit' | 'audius_not_found';
 const reasons: Record<MusicFailureCode, string> = {
   voice: 'Не удалось подготовить голосовое соединение. Проверьте Connect/Speak и доступ хостинга к голосовому UDP Discord.',
   source: 'Не удалось загрузить аудиопоток источника.',
@@ -17,7 +17,11 @@ const reasons: Record<MusicFailureCode, string> = {
   yt_format: 'yt-dlp не нашёл доступный аудиоформат. Проверьте обновление yt-dlp и компонент EJS на хостинге.',
   yt_runtime: 'yt-dlp не смог выполнить JavaScript-проверку YouTube. Проверьте Node.js и компонент EJS на хостинге.',
   yt_unavailable: 'Видео недоступно, закрыто или ограничено по региону/возрасту. Выберите другой трек.',
-  yt_network: 'yt-dlp не смог связаться с источником: ошибка сети или таймаут. Попробуйте позже.'
+  yt_network: 'yt-dlp не смог связаться с источником: ошибка сети или таймаут. Попробуйте позже.',
+  audius_api: 'Поиск Audius временно недоступен. Попробуйте позже или отправьте аудиофайл.',
+  audius_timeout: 'Audius не ответил за 20 секунд. Попробуйте позже.',
+  audius_rate_limit: 'Audius ограничил запросы (HTTP 429). Попробуйте позже.',
+  audius_not_found: 'В Audius не найден доступный полный трек до 15 минут. Уточните исполнителя и название или отправьте аудиофайл.'
 };
 export class MusicPlaybackError extends Error {
   constructor(public readonly stage: MusicFailureCode, public readonly diagnostic = '') { super(reasons[stage]); this.name = 'MusicPlaybackError'; }

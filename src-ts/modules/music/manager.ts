@@ -44,7 +44,7 @@ export class MusicManager {
           if (controller.signal.aborted || this.sessions.get(guildId) !== session) continue;
           session.current.title = resolved.title;
           // A failed text notification must not stop the audio queue.
-          void Promise.resolve().then(() => session.notify('🎵 Найдено: ' + resolved.title)).catch(() => undefined);
+          void Promise.resolve().then(() => session.notify('🎵 Найдено' + (resolved.source === 'audius' ? ' в Audius' : '') + ': ' + resolved.title)).catch(() => undefined);
           await this.backend.play(guildId, session.channelId, resolved, controller.signal);
           this.failures.delete(guildId);
         } catch (error) {

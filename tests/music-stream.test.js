@@ -39,7 +39,8 @@ async function main(){
    if(mode==='invalid-result') setImmediate(()=>{child.stdout.write('{broken');child.emit('close',0);});
    return child;
   };
-  const resolved=await resolveTrack({query:'Song',title:'Song',userId:'u'},new AbortController().signal);
+  const youtubeQuery='https://www.youtube.com/watch?v=test';
+  const resolved=await resolveTrack({query:youtubeQuery,title:'Song',userId:'u'},new AbortController().signal);
   assert.equal(resolved.webpageUrl,'https://www.youtube.com/watch?v=test');
   assert.equal(resolved.headers['user-agent'],'Correct agent');
   assert.equal(resolved.headers.Cookie,undefined);
@@ -47,14 +48,14 @@ async function main(){
   mode='extractor-error';
   for(const [stderr,stage] of extractorCases){
    extractorError=stderr;
-   await assert.rejects(resolveTrack({query:'Song',title:'Song',userId:'u'},new AbortController().signal),error=>error.stage===stage&&error.diagnostic==='metadata_exit_1');
+   await assert.rejects(resolveTrack({query:youtubeQuery,title:'Song',userId:'u'},new AbortController().signal),error=>error.stage===stage&&error.diagnostic==='metadata_exit_1');
   }
   mode='invalid-result';
-  await assert.rejects(resolveTrack({query:'Song',title:'Song',userId:'u'},new AbortController().signal),error=>error.stage==='search'&&error.diagnostic==='metadata_invalid_result');
+  await assert.rejects(resolveTrack({query:youtubeQuery,title:'Song',userId:'u'},new AbortController().signal),error=>error.stage==='search'&&error.diagnostic==='metadata_invalid_result');
   mode='extractor-error';extractorError='Sign in to confirm you are not a bot https://private.example/?token=secret';
   const searchNotices=[];let playbackCalls=0;
   const searchManager=new MusicManager({play:async()=>{playbackCalls++;},stop(){},pause(){return false;},resume(){return false;}},resolveTrack);
-  searchManager.enqueue('search','v',{query:'Song',title:'Song',userId:'u'},async text=>searchNotices.push(text));
+  searchManager.enqueue('search','v',{query:youtubeQuery,title:'Song',userId:'u'},async text=>searchNotices.push(text));
   await tick();await tick();await tick();
   assert.equal(playbackCalls,0,'failed extraction must not join voice');
   assert.match(searchManager.lastError('search'),/YouTube требует/);

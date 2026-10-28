@@ -5,8 +5,9 @@ import { get } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 import type { IncomingMessage } from 'node:http';
+import { searchAudius } from './audius';
 export interface Track { query: string; title: string; url?: string; userId: string }
-export interface ResolvedTrack { title: string; url: string; headers?: Record<string, string>; webpageUrl?: string }
+export interface ResolvedTrack { title: string; url: string; headers?: Record<string, string>; webpageUrl?: string; source?: 'audius' }
 const blocked = new BlockList();
 for (const [address, prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.168.0.0',16],['192.0.0.0',24],['192.0.2.0',24],['198.18.0.0',15],['198.51.100.0',24],['203.0.113.0',24],['224.0.0.0',4],['240.0.0.0',4]] as const) blocked.addSubnet(address, prefix, 'ipv4');
 export function publicAddress(address: string): boolean {
@@ -22,11 +23,12 @@ export function mediaUrl(value: string): URL {
 }
 export async function resolveTrack(track: Track, signal: AbortSignal): Promise<ResolvedTrack> {
   const query = track.query.trim();
+  if (!/^https?:\/\//iu.test(query)) return searchAudius(query, signal);
   if (/^https?:\/\//iu.test(query)) {
     const url = mediaUrl(query);
     if (!['youtube.com','www.youtube.com','music.youtube.com','youtu.be'].includes(url.hostname)) return { title: track.title, url: url.href };
   }
-  const target = /^https:\/\//iu.test(query) ? query : 'ytsearch1:' + query;
+  const target = query;
   return new Promise((resolve, reject) => {
     const child = spawn(process.env.YTDLP_PATH || 'yt-dlp', ['--ignore-config', '--force-ipv4', '--no-playlist', '--no-warnings', '--no-progress', '--skip-download', '--dump-single-json', '--format', 'bestaudio/best', '--js-runtimes', 'node', '--', target], { windowsHide: true, stdio: ['ignore','pipe','pipe'] });
     let output = '', stderrTail = '', finished = false;

@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { ChannelType, PermissionFlagsBits, SlashCommandBuilder, type Client, type GuildMember, type Interaction } from 'discord.js';
 import { MusicManager } from './manager';
 import { DiscordMusicBackend } from './backend';
-import { resolveTrack } from './sources';
+import { resolveTrack, youtubePage } from './sources';
 import { trackListener } from '../../services/shutdown';
 export function buildMusicCommand() {
   return new SlashCommandBuilder().setName('music').setDescription('Музыка: поиск по названию, файлы и очередь')
@@ -65,7 +65,8 @@ export function createMusicService(client: Client, enabled: (guildId: string) =>
         await interaction.deferReply({ flags: 64 });
         const ready = await dependencies();
         await reply('Музыка: ' + (enabled(interaction.guildId) ? 'включена' : 'выключена — /settings module key:music enabled:true')
-          + '\nFFmpeg: ' + (ready.ffmpeg ? 'доступен' : 'не установлен') + '\nПоиск yt-dlp: ' + (ready.search ? 'доступен' : 'не установлен')
+          + '\nFFmpeg: ' + (ready.ffmpeg ? 'доступен' : 'не установлен') + '\nПоиск по названию: Audius (доступность API проверяется при поиске)'
+          + '\nYouTube-ссылки, yt-dlp: ' + (ready.search ? 'доступен' : 'не установлен')
           + (manager.lastError(interaction.guildId) ? '\nПоследняя ошибка: ' + manager.lastError(interaction.guildId) : '')
           + '\nПоиск: /music play query:Исполнитель — песня. Очередь: 25; на участника: 5; трек: до 15 минут/100 МБ.'); return true;
       }
@@ -93,12 +94,13 @@ export function createMusicService(client: Client, enabled: (guildId: string) =>
       if (file && (file.size > 100 * 1024 * 1024 || !/\.(mp3|ogg|opus|wav|flac|m4a|aac|webm)$/iu.test(file.name))) { await reply('Нужен аудиофайл поддерживаемого формата до 100 МБ.'); return true; }
       await interaction.deferReply({ flags: 64 });
       const ready = await dependencies();
-      if (!ready.ffmpeg || (!file && !/^https:\/\//iu.test(query || '') && !ready.search)) { await reply('Музыка не готова. Проверьте FFmpeg и yt-dlp через /music status.'); return true; }
+      const needsYtDlp = !file && Boolean(youtubePage(query));
+      if (!ready.ffmpeg || (needsYtDlp && !ready.search)) { await reply('Музыка не готова. Нужен FFmpeg; для YouTube-ссылок также нужен yt-dlp. Проверьте /music status.'); return true; }
       try {
         const target = interaction.channel;
         const position = manager.enqueue(interaction.guildId, channel.id, { query: file?.url || query!, title: file?.name || query!, userId: interaction.user.id },
           text => target && 'send' in target ? target.send({ content: text.slice(0, 1800), allowedMentions: { parse: [] } }) : Promise.resolve());
-        await reply('Добавлено в очередь: ' + (file?.name || query) + '. Позиция: ' + position + '. Для названия выполняется поиск первого результата.');
+        await reply('Добавлено в очередь: ' + (file?.name || query) + '. Позиция: ' + position + (!file && !/^https?:\/\//iu.test(query || '') ? '. Поиск в Audius: первый доступный трек.' : '.'));
       } catch (error) { await reply(error instanceof Error ? error.message : 'Не удалось добавить трек.'); }
       return true;
     }
