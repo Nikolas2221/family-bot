@@ -6,7 +6,7 @@ const dns=require('node:dns/promises');
 const https=require('node:https');
 const {openTrackMedia,openMedia,resolveTrack,audioHeaders,youtubePage}=require('../dist-ts/modules/music/sources');
 const {MusicManager}=require('../dist-ts/modules/music/manager');
-const {MusicPlaybackError}=require('../dist-ts/modules/music/errors');
+const {MusicPlaybackError,ytDlpFailure}=require('../dist-ts/modules/music/errors');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function main(){
  const originalSpawn=cp.spawn, originalLookup=dns.lookup, originalGet=https.get;
@@ -14,13 +14,29 @@ async function main(){
   assert.equal(youtubePage('https://www.youtube.com/watch?v=test'),'https://www.youtube.com/watch?v=test');
   assert.equal(youtubePage('https://youtube.com.evil.test/watch'),undefined);
   assert.deepEqual(audioHeaders({'User-Agent':'Player UA',Cookie:'private',Authorization:'private','Accept':'audio/*'}),{'user-agent':'Player UA',accept:'audio/*'});
-  let args,kills=0,mode='metadata';
+  const extractorCases=[
+   ['Sign in to confirm you’re not a bot. Use --cookies-from-browser','yt_auth'],
+   ['HTTP Error 429: Too Many Requests','yt_rate_limit'],
+   ['Requested format is not available','yt_format'],
+   ['No supported JavaScript runtime could be found','yt_runtime'],
+   ['Video unavailable. This video is private','yt_unavailable'],
+   ['Unable to download webpage: connection timed out','yt_network'],
+   ['HTTP Error 403: Forbidden','source_forbidden'],
+   ['Unrecognized extractor failure','search']
+  ];
+  for(const [stderr,stage] of extractorCases){
+   const error=ytDlpFailure(stderr+' https://private.example/?token=secret','metadata_exit_1');
+   assert.equal(error.stage,stage);assert.doesNotMatch(error.message+error.diagnostic,/private\.example|token=secret/);
+  }
+  let args,kills=0,mode='metadata',extractorError='';
   cp.spawn=(_exe,arguments_)=>{
    args=arguments_;
    const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.kill=()=>{kills++;};
    if(mode==='metadata') setImmediate(()=>{child.stdout.write(JSON.stringify({entries:[{title:'Song',url:'https://cdn.example/audio',webpage_url:'https://www.youtube.com/watch?v=test',http_headers:{'User-Agent':'Correct agent',Cookie:'private'}}]}));child.emit('close',0);});
    if(mode==='audio') setImmediate(()=>{child.stdout.end(Buffer.from([1,2,3,4]));child.emit('close',0);});
    if(mode==='abort-after-start') setImmediate(()=>child.stdout.write(Buffer.from([1])));
+   if(mode==='extractor-error') setImmediate(()=>{child.stderr.write(extractorError);child.emit('close',1);});
+   if(mode==='invalid-result') setImmediate(()=>{child.stdout.write('{broken');child.emit('close',0);});
    return child;
   };
   const resolved=await resolveTrack({query:'Song',title:'Song',userId:'u'},new AbortController().signal);
@@ -28,11 +44,29 @@ async function main(){
   assert.equal(resolved.headers['user-agent'],'Correct agent');
   assert.equal(resolved.headers.Cookie,undefined);
   assert.ok(args.includes('--force-ipv4'));
+  mode='extractor-error';
+  for(const [stderr,stage] of extractorCases){
+   extractorError=stderr;
+   await assert.rejects(resolveTrack({query:'Song',title:'Song',userId:'u'},new AbortController().signal),error=>error.stage===stage&&error.diagnostic==='metadata_exit_1');
+  }
+  mode='invalid-result';
+  await assert.rejects(resolveTrack({query:'Song',title:'Song',userId:'u'},new AbortController().signal),error=>error.stage==='search'&&error.diagnostic==='metadata_invalid_result');
+  mode='extractor-error';extractorError='Sign in to confirm you are not a bot https://private.example/?token=secret';
+  const searchNotices=[];let playbackCalls=0;
+  const searchManager=new MusicManager({play:async()=>{playbackCalls++;},stop(){},pause(){return false;},resume(){return false;}},resolveTrack);
+  searchManager.enqueue('search','v',{query:'Song',title:'Song',userId:'u'},async text=>searchNotices.push(text));
+  await tick();await tick();await tick();
+  assert.equal(playbackCalls,0,'failed extraction must not join voice');
+  assert.match(searchManager.lastError('search'),/YouTube требует/);
+  assert.ok(searchNotices.some(text=>text.includes('YouTube требует')));
+  assert.doesNotMatch(searchNotices.join(' '),/private\.example|token=secret|Проверьте \/music status/);
   mode='audio';
   const stream=await openTrackMedia(resolved,new AbortController().signal);
   const parts=[];for await(const chunk of stream)parts.push(chunk);
   assert.deepEqual(Buffer.concat(parts),Buffer.from([1,2,3,4]));
   assert.ok(args.includes('--output'));assert.equal(args.at(-1),resolved.webpageUrl,'download uses the selected video, not another search or a naked signed URL');
+  mode='extractor-error';extractorError='Sign in to confirm you are not a bot';
+  await assert.rejects(openTrackMedia(resolved,new AbortController().signal),error=>error.stage==='yt_auth'&&error.diagnostic==='yt_dlp_exit_1');
   mode='abort-before-start';const cancelled=new AbortController();cancelled.abort();
   await assert.rejects(openTrackMedia(resolved,cancelled.signal),MusicPlaybackError);
   mode='abort-after-start';const controller=new AbortController();

@@ -1,4 +1,4 @@
-import { musicFailure } from './errors';
+import { MusicPlaybackError, musicFailure } from './errors';
 import type { Track, ResolvedTrack } from './sources';
 export interface MusicBackend {
   play(guildId: string, channelId: string, track: ResolvedTrack, signal: AbortSignal): Promise<void>;
@@ -37,7 +37,7 @@ export class MusicManager {
         const controller = new AbortController(); session.abort = controller;
         const timer = setTimeout(() => controller.abort(), this.maxTrackMs);
         try {
-          if (this.searches >= 3) throw Error('Поиск музыки занят. Попробуйте позже.');
+          if (this.searches >= 3) throw new MusicPlaybackError('search_busy', 'search_capacity');
           this.searches++;
           let resolved: ResolvedTrack;
           try { resolved = await this.resolve(session.current, controller.signal); } finally { this.searches--; }

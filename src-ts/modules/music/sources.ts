@@ -1,5 +1,5 @@
 import { PassThrough, type Readable } from 'node:stream';
-import { MusicPlaybackError } from './errors';
+import { MusicPlaybackError, ytDlpFailure } from './errors';
 import { spawn } from 'node:child_process';
 import { get } from 'node:https';
 import { lookup } from 'node:dns/promises';
@@ -29,27 +29,29 @@ export async function resolveTrack(track: Track, signal: AbortSignal): Promise<R
   const target = /^https:\/\//iu.test(query) ? query : 'ytsearch1:' + query;
   return new Promise((resolve, reject) => {
     const child = spawn(process.env.YTDLP_PATH || 'yt-dlp', ['--ignore-config', '--force-ipv4', '--no-playlist', '--no-warnings', '--no-progress', '--skip-download', '--dump-single-json', '--format', 'bestaudio/best', '--js-runtimes', 'node', '--', target], { windowsHide: true, stdio: ['ignore','pipe','pipe'] });
-    let output = '', finished = false;
+    let output = '', stderrTail = '', finished = false;
     const finish = (error?: Error, value?: ResolvedTrack) => {
       if (finished) return; finished = true; clearTimeout(timer); signal.removeEventListener('abort', abort);
       child.kill(); if (error) reject(error); else resolve(value!);
     };
     const abort = () => finish(Error('Поиск отменён.'));
-    const timer = setTimeout(() => finish(Error('Поиск музыки превысил 20 секунд.')), 20000);
+    const timer = setTimeout(() => finish(new MusicPlaybackError('search_timeout', 'metadata_timeout')), 20000);
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
-    child.stdout.on('data', data => { output += data.toString(); if (output.length > 2_000_000) finish(Error('Слишком большой результат поиска.')); });
-    child.stderr.resume();
-    child.on('error', () => finish(Error('Поиск недоступен: установите yt-dlp и проверьте YTDLP_PATH.')));
+    child.stdout.on('data', data => { if (finished) return; output += data.toString(); if (output.length > 2_000_000) finish(new MusicPlaybackError('search', 'metadata_size_limit')); });
+    child.stderr.on('data', data => { stderrTail = (stderrTail + String(data)).slice(-8192); });
+    child.stdout.on('error', () => finish(new MusicPlaybackError('search', 'metadata_stream_failed')));
+    child.on('error', () => finish(new MusicPlaybackError('search', 'yt_dlp_spawn_failed')));
     child.on('close', code => {
       if (finished) return;
       try {
-        if (code !== 0) throw Error();
+        if (code !== 0) return finish(ytDlpFailure(stderrTail, 'metadata_exit_' + code));
         const data = JSON.parse(output) as { entries?: Array<{ title?: string; url?: string; duration?: number; is_live?: boolean; http_headers?: Record<string, unknown>; webpage_url?: string }>; title?: string; url?: string; duration?: number; is_live?: boolean; http_headers?: Record<string, unknown>; webpage_url?: string };
         const item = data.entries?.[0] || data;
-        if (!item.url || item.is_live || (item.duration && item.duration > 900)) return finish(Error('Для поиска доступны треки до 15 минут, без прямых эфиров.'));
+        if (item.is_live || (item.duration && item.duration > 900)) return finish(new MusicPlaybackError('track_limit', 'metadata_track_limit'));
+        if (!item.url) return finish(ytDlpFailure(stderrTail, 'metadata_missing_audio'));
         finish(undefined, { title: String(item.title || track.title).slice(0, 160), url: mediaUrl(item.url).href, headers: audioHeaders(item.http_headers || data.http_headers), webpageUrl: youtubePage(item.webpage_url || data.webpage_url) });
-      } catch { finish(Error('Песня не найдена или источник недоступен. Попробуйте уточнить исполнителя.')); }
+      } catch { finish(ytDlpFailure(stderrTail, 'metadata_invalid_result')); }
     });
   });
 }
@@ -117,7 +119,7 @@ export async function openTrackMedia(track: ResolvedTrack, signal: AbortSignal):
     let timer: ReturnType<typeof setTimeout>;
     const fail = (diagnostic: string) => {
       if (finished) return; finished = true; clearTimeout(timer); signal.removeEventListener('abort', abort);
-      const error = new MusicPlaybackError(/(?:HTTP Error|HTTP error|status)[^\r\n]{0,30}403/iu.test(stderrTail) ? 'source_forbidden' : 'source', diagnostic);
+      const error = ytDlpFailure(stderrTail, diagnostic, 'source');
       child.stdout.unpipe(output); child.kill(); output.destroy(error); reject(error);
     };
     const abort = () => fail('download_cancelled');
