@@ -1,6 +1,6 @@
 {
   "name": "family-bot-ai-majestic",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "engines": {
     "node": ">=22"
   },
@@ -19,7 +19,9 @@
     "cabinet:session:export": "node scripts/cabinet-session.js export",
     "cabinet:session:import": "node scripts/cabinet-session.js import",
     "cabinet:session:cookies": "node scripts/cabinet-session.js cookies",
-    "cabinet:session:brave": "node scripts/cabinet-cdp-session.js"
+    "cabinet:session:brave": "node scripts/cabinet-cdp-session.js",
+    "data:maintenance": "node scripts/data-maintenance.js",
+    "ai:eval": "node scripts/evaluate-dialogues.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",

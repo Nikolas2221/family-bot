@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import { createDataBackups, coreBackupSources, validateStateVersion } from './services/data-backups';
+import { createAiBudget } from './services/ai-budget';
+import { pruneClosedRecords } from './services/privacy';
 import { AdminChanges } from './services/admin-changes';
 ﻿import 'dotenv/config';
 
@@ -155,8 +159,16 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+validateStateVersion(DATABASE_FILE);
+if (fs.existsSync(DATA_FILE) && fs.existsSync(DATABASE_FILE)) {
+  try { createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), coreBackupSources(DATA_FILE, DATABASE_FILE)).create(); }
+  catch { console.error('Предстартовый backup не создан; загрузка данных продолжится только через штатную проверку и восстановление.'); }
+}
 const storage = createStorage({ dataFile: DATA_FILE });
 const database = createDatabase({ dataFile: DATABASE_FILE });
+const positive = (name: string, fallback: number) => { const value = Number(process.env[name]); return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback; };
+const aiBudget = createAiBudget(DATA_FILE + '.ai-usage.json', { dailyTokens: positive('AI_DAILY_TOKENS', 200000), userRequests: positive('AI_USER_DAILY_REQUESTS', 50), channelRequests: positive('AI_CHANNEL_DAILY_REQUESTS', 200) });
+const budgetedFetch = aiBudget.guardedFetch(fetch);
 const aiApiKey = config.openRouterApiKey || config.deepSeekApiKey;
 const aiBaseUrl = config.openRouterBaseUrl || config.deepSeekBaseUrl;
 const aiModel = config.openRouterModel || config.deepSeekModel;
@@ -164,7 +176,8 @@ const aiChatCompletion = createOpenRouterChatCompletion({
   apiKey: AI_ENABLED ? aiApiKey : '',
   baseUrl: aiBaseUrl,
   model: aiModel,
-  timeoutMs: config.aiTimeoutMs
+  timeoutMs: config.aiTimeoutMs,
+  fetchImpl: budgetedFetch
 });
 const aiService = createAIService({ enabled: AI_ENABLED, chatCompletion: aiChatCompletion });
 const deepSeekService = createDeepSeekService({
@@ -841,6 +854,7 @@ function getHelpCatalog(interaction: any) {
   ];
 
   const adminFree = [
+    { name: 'workqueue', description: 'Очередь зависших обращений и однократные напоминания' },
     { name: 'settings', description: 'Каналы, роли, модули, проверка прав и откат изменений' },
     { name: 'applypanel', description: copy.commands.applyPanelDescription },
     { name: 'setrole', description: copy.commands.setRoleDescription },
@@ -1551,6 +1565,28 @@ function isActivityExempt(guildId: string, userId: string): boolean {
 const adminChanges = new AdminChanges(`${DATA_FILE}.admin-changes.json`);
 const actionJournal = new ActionJournal(`${DATA_FILE}.actions.json`);
 configureActionJournal(actionJournal);
+const dataBackups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), [
+  ...coreBackupSources(DATA_FILE, DATABASE_FILE),
+  ...['actions', 'admin-changes', 'discord-rate-limit', 'ai-usage'].map(name => ({ name, file: DATA_FILE + '.' + name + '.json', optional: true }))
+], positive('DATA_BACKUP_RETAIN', 14));
+const maintenanceFailures = new Set<string>();
+aiBudget.onWarning(async () => {
+  for (const guild of client.guilds.cache.values()) {
+    const channel = guild.channels.cache.get(resolveGuildSettings(guild.id).channels.logs);
+    if (channel?.isTextBased() && 'send' in channel) await channel.send({ content: 'Использовано не менее 80% дневного бюджета ИИ. Проверьте /health. При достижении лимита новые запросы будут остановлены.', allowedMentions: { parse: [] } });
+  }
+});
+function runDataMaintenance(): void {
+  try {
+    const store = storage.getStore();
+    store.applications = pruneClosedRecords(store.applications, positive('CLOSED_RECORD_RETENTION_DAYS', 180));
+    store.supportTickets = pruneClosedRecords(store.supportTickets, positive('CLOSED_RECORD_RETENTION_DAYS', 180));
+    storage.flush(); database.flush(); dataBackups.create(); maintenanceFailures.delete('data-backup');
+  } catch { maintenanceFailures.add('data-backup'); console.error('Проверка/копирование рабочих данных не выполнено; см. /health.'); }
+}
+runDataMaintenance();
+const dataMaintenanceTimer = setInterval(runDataMaintenance, 6 * 3600000);
+dataMaintenanceTimer.unref();
 for (const job of actionJournal.list().filter(job => job.status === 'interrupted')) {
   console.warn(`Interrupted action ${job.id}: guild=${job.guildId}, delivered=${Object.values(job.recipients).filter(status => status === 'delivered').length}, uncertain=${Object.values(job.recipients).filter(status => status === 'sending').length}`);
 }
@@ -1611,6 +1647,7 @@ async function shutdown(signal: string): Promise<void> {
   hardDeadline.unref();
   const drained = drainWork();
   clearInterval(applicationRecoveryTimer);
+  clearInterval(dataMaintenanceTimer);
   const results = await Promise.allSettled([
     () => stopTelegramBot(telegramBot, signal),
     () => ticketService.stop(),
@@ -1737,6 +1774,9 @@ registerInteractionRuntime({
       ...webSearchHealthLines(),
       ...discordSafeRequest.healthLines(),
       ...adminChanges.healthLines(),
+      ...dataBackups.healthLines(),
+      ...aiBudget.healthLines(),
+      `Обслуживание данных: ${maintenanceFailures.size ? 'требует внимания' : 'работает'}`,
       ...storage.healthLines(),
       `База настроек: ${database.healthStatus().writable && !database.healthStatus().hasWriteError ? 'доступна' : 'ошибка записи'}`,
       ...actionJournal.healthLines(),

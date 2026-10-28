@@ -20,3 +20,6 @@ assets/vice-city/preview-*.png
 .aider*
 
 *.admin-changes.json*
+
+data-backups/
+*.ai-usage.json*

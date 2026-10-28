@@ -1,8 +1,9 @@
+import { withRequestContext, contextFromEvent } from './request-context';
 let stopping = false;
 const active = new Set<Promise<unknown>>();
 export function isStopping(): boolean { return stopping; }
 export function trackListener<T extends unknown[]>(listener: (...args: T) => unknown): (...args: T) => Promise<unknown> {
-  return (...args) => trackWork(async () => { await listener(...args); });
+  return (...args) => withRequestContext(contextFromEvent(args[0]), () => trackWork(async () => { await listener(...args); }));
 }
 export async function trackWork<T>(work: () => Promise<T>): Promise<T | undefined> {
   if (stopping) return undefined;

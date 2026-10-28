@@ -1,3 +1,4 @@
+import { pendingWork, workQueueText, remindWork } from './services/work-queue';
 import { AdminChangeError, describeAdminChange, type AdminChanges } from './services/admin-changes';
 import { explainDiscordError } from './services/discord-errors';
 ﻿import { createGuildStorageContext } from './guild-runtime';
@@ -652,6 +653,22 @@ async function handleCommandRuntimeInner(interaction: any, options: CommandRunti
     database.updateGuildSettings(guildId, { visuals: { cards } });
     database.flush?.();
     await interaction.reply(ephemeral({ content: `Оформление **${category}** (${platform}) ${sub === 'reset' ? 'сброшено' : 'сохранено'}. Оно применяется к новым карточкам и последующим обновлениям существующих.` })); return true;
+  }
+
+  if (interaction.commandName === 'workqueue') {
+    if (!canDebugConfig(interaction)) { await interaction.reply(ephemeral({ content: copy.common.noAccess })); return true; }
+    const store = storage.getStore();
+    const items = pendingWork(store.applications, store.supportTickets, guildId);
+    if (interaction.options.getSubcommand() === 'remind') {
+      const channel = interaction.guild.channels.cache.get(resolveGuildSettings(guildId).channels.logs);
+      if (!channel?.send) { await interaction.reply(ephemeral({ content: 'Выберите доступный канал логов в /settings channel.' })); return true; }
+      await interaction.deferReply({ flags: 64 });
+      const count = await remindWork(items, key => guildStorage.getCooldown(key), keys => {
+        for (const key of keys) guildStorage.setCooldown(key, Date.now()); storage.flush();
+      }, text => channel.send({ content: text.slice(0, 1900), allowedMentions: { parse: [] } }));
+      await interaction.editReply({ content: 'Напоминаний подготовлено: ' + count + '. Уже отмеченные обращения повторно не отправляются.' });
+    } else await interaction.reply(ephemeral({ content: workQueueText(items).slice(0, 1900), allowedMentions: { parse: [] } }));
+    return true;
   }
 
   if (interaction.commandName === 'settings') {

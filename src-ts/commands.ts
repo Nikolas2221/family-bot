@@ -6,6 +6,7 @@ import { buildVoiceRoomsCommandData } from './modules/voiceRooms';
 
 const ADMIN_VISIBLE_COMMANDS = new Set([
   'health',
+  'workqueue',
   'settings',
   'cardstyle',
   'setup',
@@ -76,6 +77,9 @@ export function buildCommands(): CommandJson[] {
       .addSubcommand(sub => sub.setName('reset').setDescription('Сбросить оформление')
         .addStringOption(opt => opt.setName('card').setDescription('Карточка').setRequired(true).addChoices(...['updates', 'applications', 'family', 'welcome', 'reports', 'moderation'].map(value => ({ name: value, value }))))
         .addStringOption(opt => opt.setName('platform').setDescription('Платформа').setRequired(true).addChoices({ name: 'Discord', value: 'discord' }, { name: 'Telegram', value: 'telegram' }, { name: 'Обе', value: 'both' }))),
+    new SlashCommandBuilder().setName('workqueue').setDescription('Зависшие заявки и тикеты, ответственные и следующий шаг')
+      .addSubcommand(sub => sub.setName('show').setDescription('Показать обращения без решения более суток'))
+      .addSubcommand(sub => sub.setName('remind').setDescription('Напомнить в канале логов, один раз на обращение')),
     new SlashCommandBuilder().setName('settings').setDescription('Каналы, роли, модули, проверка и откат настроек')
       .addSubcommand(sub => sub.setName('show').setDescription('Показать настройки сервера'))
       .addSubcommand(sub => sub.setName('check').setDescription('Проверить доступ и права бота'))

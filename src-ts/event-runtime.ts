@@ -1,3 +1,4 @@
+import { redactDiagnostic } from './services/privacy';
 import { AuditLogEvent, ChannelType, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { randomBytes } from 'node:crypto';
 import type { ActionJournal } from './services/action-journal';
@@ -2380,7 +2381,7 @@ export async function executePendingBrainAction(
       await handleInactiveMembersRequest(confirmedMessage, pending.prompt || '', options, pendingActions,
         { ids: pending.recipientIds || [], text: pending.text || '', jobId });
     } catch (error) {
-      console.error('Bulk action failed:', error);
+      console.error('Bulk action failed:', redactDiagnostic(error));
       try { actionJournal?.finish(jobId, 'failed'); } catch (writeError) { console.error('Action journal write failed:', writeError); }
       try { recordBrainAction(message.guild.id, options.resolveGuildSettings(message.guild.id).aiBrain, {
         action: pending.action, risk: pending.risk, status: 'failed', actorId: message.author.id,
@@ -2762,9 +2763,9 @@ export async function handleAiMentionMessage(
     await message.channel.send?.({
       content: `<@${message.author.id}> ${String(answer || 'Не смог придумать ответ. Попробуй переформулировать.').slice(0, 1800 - web.sources.length)}${web.sources}`,
       allowedMentions: { parse: [], users: [message.author.id] }
-    }).catch(error => console.warn('[ai-mention] Cannot send answer:', error));
+    }).catch(error => console.warn('[ai-mention] Cannot send answer:', redactDiagnostic(error)));
   } catch (error: any) {
-    console.warn('[ai-mention] Request failed:', error);
+    console.warn('[ai-mention] Request failed:', redactDiagnostic(error));
     await message.channel.send?.({
       content: `<@${message.author.id}>, AI сейчас не ответил: ${String(error?.message || 'неизвестная ошибка').slice(0, 300)}`,
       allowedMentions: { parse: [], users: [message.author.id] }
@@ -2961,7 +2962,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }
 
     if (await handleAfkMessage(message).catch(error => {
-      console.warn('AFK leave message handler failed:', error);
+      console.warn('AFK leave message handler failed:', redactDiagnostic(error));
       return false;
     })) {
       guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
@@ -2969,7 +2970,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
     }
 
     await handleDiscordTicketMessage(message).catch(error => {
-      console.warn('Telegram ticket message bridge failed:', error);
+      console.warn('Telegram ticket message bridge failed:', redactDiagnostic(error));
     });
 
     guildStorage.recordAnalyticsMessage(message.member.id, message.channel.id);
@@ -3056,7 +3057,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
 
     if (handleVoiceRoomsVoiceStateUpdate) {
       await handleVoiceRoomsVoiceStateUpdate(oldState, newState).catch(error => {
-        console.warn('Voice Rooms handler failed:', error);
+        console.warn('Voice Rooms handler failed:', redactDiagnostic(error));
       });
     }
 
@@ -3148,7 +3149,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       sendSecurityLog,
       notifyTelegramSecurityAlert
     }).catch(error => {
-      console.error('Ошибка применения lockdown к новому каналу:', error);
+      console.error('Ошибка применения lockdown к новому каналу:', redactDiagnostic(error));
     });
   }));
 
@@ -3174,7 +3175,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
         await sendSecurityLog(channel.guild, copySecurity.channelRestored(channel.name)).catch(() => null);
       }
     } catch (error) {
-      console.error('Ошибка защиты каналов:', error);
+      console.error('Ошибка защиты каналов:', redactDiagnostic(error));
     }
   }));
 
@@ -3187,7 +3188,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       sendSecurityLog,
       notifyTelegramSecurityAlert
     }).catch(error => {
-      console.error('Ошибка защиты ролей:', error);
+      console.error('Ошибка защиты ролей:', redactDiagnostic(error));
     });
   }));
 
@@ -3200,7 +3201,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       sendSecurityLog,
       notifyTelegramSecurityAlert
     }).catch(error => {
-      console.error('Ошибка защиты ролей:', error);
+      console.error('Ошибка защиты ролей:', redactDiagnostic(error));
     });
   }));
 
@@ -3216,7 +3217,7 @@ export function registerEventRuntime(options: EventRuntimeOptions): void {
       sendSecurityLog,
       notifyTelegramSecurityAlert
     }).catch(error => {
-      console.error('Ошибка защиты webhook:', error);
+      console.error('Ошибка защиты webhook:', redactDiagnostic(error));
     });
   }));
 }

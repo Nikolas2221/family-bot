@@ -1,3 +1,4 @@
+import { requestContext } from './request-context';
 import { createHash } from 'node:crypto';
 import type { RESTOptions } from 'discord.js';
 
@@ -18,7 +19,8 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
   let pending = 0;
   let active = 0;
   let nextAt = 0;
-  let tail: Promise<void> = Promise.resolve();
+  let sequence = 0;
+  const waiting = new Map<symbol, { order: number; priority: number; at: number }>();
 
   let completed = 0;
   let lastStatus = 0;
@@ -31,30 +33,33 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
       if ((circuits.get(key) || 0) > now()) throw new Error('Discord resource temporarily suspended after 403/404.');
     };
     check();
-    if (pending >= 64) throw new Error('Discord REST safety queue full. Try again later.');
+    const priority = /\/interactions\//u.test(new URL(url).pathname) ? 0 : requestContext().priority;
+    if (pending >= 64 || (priority > 0 && pending >= 56)) throw new Error('Discord REST safety queue full. Try again later.');
     pending++;
     const queuedAt = now();
     const queueId = Symbol();
     queued.set(queueId, queuedAt);
-    const gate = tail.then(async () => {
+    waiting.set(queueId, { order: sequence++, priority, at: queuedAt });
+    const first = () => [...waiting.entries()].sort(([, a], [, b]) =>
+      (Math.max(0, a.priority - Math.floor((now() - a.at) / 2000)) - Math.max(0, b.priority - Math.floor((now() - b.at) / 2000))) || a.order - b.order)[0]?.[0] === queueId;
+    let admitted = false;
+    const gate = (async () => {
       check();
       if (now() - queuedAt >= 8000) throw new Error('Discord REST safety queue timeout.');
-      while (active >= 4 || nextAt > now()) {
+      while (active >= 4 || nextAt > now() || !first()) {
         if (now() - queuedAt >= 8000) throw new Error('Discord REST safety queue timeout.');
         await sleep(Math.min(50, Math.max(1, nextAt - now())));
         check();
       }
       check();
+      waiting.delete(queueId);
       active++;
       nextAt = now() + 150;
-    });
-    tail = gate.catch(() => undefined);
-    let admitted = false;
-    try {
-      await gate;
       admitted = true;
-      check();
-      const response = await makeRequest(url, init);
+      return makeRequest(url, init);
+    })();
+    try {
+      const response = await gate;
       const time = now();
       completed++;
       lastStatus = response.status;
@@ -92,6 +97,7 @@ export function protectDiscordRequests(makeRequest: RESTOptions['makeRequest'], 
     } finally {
       pending--;
       queued.delete(queueId);
+      waiting.delete(queueId);
       if (admitted) active--;
     }
   };

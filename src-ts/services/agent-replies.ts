@@ -18,7 +18,7 @@ export function isConversationFollowUp(prompt: string): boolean {
 interface ConversationTurn { role: 'user' | 'assistant'; content: string; context?: string }
 
 // Conversation history is scoped to one member and channel, never used as authority for actions.
-export function createAgentReplies(now: () => number = Date.now) {
+export function createAgentReplies(now: () => number = Date.now, retentionMs = Math.max(1, Number(process.env.AI_HISTORY_MINUTES) || 15) * 60000) {
   const sessions = new Map<string, { expires: number; turns: ConversationTurn[] }>();
   const reply = async (key: string, service: TextService, system: string, prompt: string, fallbackReply = '', context = ''): Promise<string> => {
     for (const [id, session] of sessions) if (session.expires <= now()) sessions.delete(id);
@@ -41,6 +41,8 @@ export function createAgentReplies(now: () => number = Date.now) {
     } catch (error) {
       if (fallbackReply) return fallbackReply;
       const message = error instanceof Error ? error.message : '';
+      if (/budget limit/iu.test(message)) return 'Достигнут дневной лимит ИИ. Администратор может проверить бюджет в /health.';
+      if (/budget unavailable/iu.test(message)) return 'Журнал бюджета ИИ недоступен. Администратору нужно проверить /health.';
       if (/429|cooldown/iu.test(message)) return 'ИИ достиг лимита запросов. Попробуй немного позже.';
       if (/401|403|402|not configured/u.test(message)) return 'ИИ недоступен из-за настройки ключа, доступа или баланса провайдера. Администратору нужно проверить /health и настройки OpenRouter.';
       if (/timeout|abort/iu.test(message)) return 'Модель не успела ответить. Попробуй чуть позже.';
@@ -49,7 +51,7 @@ export function createAgentReplies(now: () => number = Date.now) {
     }
     if (!answer.trim()) return fallbackReply || 'Сейчас модель не ответила. Повтори запрос чуть позже.';
     sessions.delete(key);
-    sessions.set(key, { expires: now() + 15 * 60_000,
+    sessions.set(key, { expires: now() + retentionMs,
       turns: [...turns, { role: 'user' as const, content: prompt.slice(0, 1500), ...(context ? { context: context.slice(0, 2500) } : {}) }, { role: 'assistant' as const, content: answer.slice(0, 1800) }].slice(-6) });
     while (sessions.size > 500) sessions.delete(sessions.keys().next().value!);
     return answer;

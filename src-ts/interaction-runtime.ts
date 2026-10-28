@@ -1,3 +1,4 @@
+import { redactDiagnostic } from './services/privacy';
 import { AdminChangeError, type AdminChanges } from './services/admin-changes';
 import { explainDiscordError } from './services/discord-errors';
 import { PermissionFlagsBits } from 'discord.js';
@@ -820,7 +821,7 @@ async function handleFamilyAndAdminButtons(interaction: Interaction<'cached'>, o
         kind: 'rank', targetId: member.id, before: [...member.roles.cache.keys()].sort() }, apply,
         async () => [...(await member.fetch(true)).roles.cache.keys()].sort()) : await apply();
     } catch (error) {
-      console.error('Ошибка изменения ранга:', error);
+      console.error('Ошибка изменения ранга:', redactDiagnostic(error));
       await interaction.reply(options.ephemeral({ content: error instanceof AdminChangeError ? error.message : explainDiscordError(error) }));
       return true;
     }
@@ -988,7 +989,7 @@ async function handleFamilyAndAdminModals(interaction: Interaction<'cached'>, op
         guildStorage.addCommend({ userId, moderatorId: interaction.user.id, reason });
       }
     } catch (error) {
-      console.error('Profile moderation save failed:', error);
+      console.error('Profile moderation save failed:', redactDiagnostic(error));
       await interaction.reply(options.ephemeral({
         content: 'Не удалось сохранить действие профиля. Проверь логи бота.'
       }));
@@ -1003,7 +1004,7 @@ async function handleFamilyAndAdminModals(interaction: Interaction<'cached'>, op
       options.buildProfilePayload(member, true, successContent)
     ));
     await options.doPanelUpdate(guildId, false).catch((error: unknown) => {
-      console.warn('Profile moderation panel update failed:', error);
+      console.warn('Profile moderation panel update failed:', redactDiagnostic(error));
     });
     return true;
   }
@@ -1143,7 +1144,7 @@ async function handleButtonsAndModals(interaction: Interaction<'cached'>, option
         ? `Guest verification by ${interaction.user.id}`
         : `Family verification by ${interaction.user.id}`
       ).then(() => true).catch((error: unknown) => {
-        console.warn('Welcome verification role assign failed:', error);
+        console.warn('Welcome verification role assign failed:', redactDiagnostic(error));
         return false;
       });
 
@@ -1247,7 +1248,7 @@ async function handleAiAdvisorCommand(interaction: ChatInputCommandInteraction<'
 
     await interaction.editReply({ embeds: [embed] });
   } catch (error) {
-    console.error('AI Advisor error:', error);
+    console.error('AI Advisor error:', redactDiagnostic(error));
     await interaction.editReply({ content: `❌ Ошибка: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}` });
   }
 }
@@ -1260,7 +1261,7 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
     if (!rawInteraction.guild || (typeof rawInteraction.inCachedGuild === 'function' && !rawInteraction.inCachedGuild())) {
       await finishInteractionError(rawInteraction, rawInteraction.guildId
         ? 'Данные сервера временно недоступны. Повтори запрос после восстановления соединения.'
-        : 'Эта команда доступна только на сервере.').catch(error => console.error('Interaction availability reply failed:', error));
+        : 'Эта команда доступна только на сервере.').catch(error => console.error('Interaction availability reply failed:', redactDiagnostic(error)));
       return;
     }
     const interaction = rawInteraction as Interaction<'cached'>;
@@ -1311,7 +1312,7 @@ export function registerInteractionRuntime(options: InteractionRuntimeOptions): 
         return;
       }
     } catch (error) {
-      console.error('Interaction runtime error:', error);
+      console.error('Interaction runtime error:', redactDiagnostic(error));
       await finishInteractionError(interaction, error instanceof AdminChangeError ? error.message : explainDiscordError(error)).catch(replyError => {
         console.error('Failed to deliver interaction error:', replyError);
       });
