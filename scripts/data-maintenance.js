@@ -2,7 +2,7 @@
 require('dotenv').config({ quiet: true });
 const fs = require('node:fs');
 const path = require('node:path');
-const { createDataBackups, coreBackupSources, validateStateVersion } = require('../dist-ts/services/data-backups');
+const { createDataBackups, runtimeBackupSources, validateStateVersion } = require('../dist-ts/services/data-backups');
 const { forgetClosedPersonalData } = require('../dist-ts/services/privacy');
 const { writeSnapshot } = require('../dist-ts/services/file-persistence');
 const args = process.argv.slice(2);
@@ -10,10 +10,7 @@ const option = name => args[args.indexOf(name) + 1];
 try {
   const storageFile = path.resolve(process.env.STORAGE_FILE || 'dist-ts/storage.json');
   const databaseFile = path.resolve(process.env.DATABASE_FILE || 'dist-ts/database.json');
-  const backups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(storageFile), 'data-backups'), [
-    ...coreBackupSources(storageFile, databaseFile),
-    ...['actions', 'admin-changes', 'discord-rate-limit', 'ai-usage'].map(name => ({ name, file: storageFile + '.' + name + '.json', optional: true }))
-  ]);
+  const backups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(storageFile), 'data-backups'), runtimeBackupSources(storageFile, databaseFile));
   if (args[0] === 'verify') {
     backups.verify(path.resolve(args[1])); console.log('Backup: контрольные суммы и структура проверены.');
   } else if (args[0] === 'restore-test') {

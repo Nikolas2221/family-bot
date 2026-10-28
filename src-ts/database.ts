@@ -1,3 +1,4 @@
+import { validateStateVersion } from './services/data-backups';
 import { writeSnapshot, createWriteProbe } from './services/file-persistence';
 import { readValidated, validDatabase, refuseEmptyRecovery } from './services/state-validation';
 
@@ -313,6 +314,8 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
   }
 
   function loadDatabase(): DatabaseState {
+    validateStateVersion(dataFile);
+    validateStateVersion(`${dataFile}.bak`);
     const primary = readJsonFile(dataFile);
     const backup = readJsonFile(`${dataFile}.bak`);
     const parsed = hasMeaningfulDatabaseData(primary)
@@ -345,7 +348,7 @@ function createDatabase(options: { dataFile: string; saveDelayMs?: number }): Da
   function save(): void {
     if (saveTimer) return;
     saveTimer = setTimeout(() => {
-      flush();
+      try { flush(); } catch { console.error('Database write failed; inspect /health and persistent storage.'); }
     }, saveDelayMs);
   }
 

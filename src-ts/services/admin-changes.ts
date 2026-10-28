@@ -48,7 +48,7 @@ export class AdminChanges {
     // Retain at most 1000 records, including unresolved interrupted operations.
     if (this.entries.length > 1000) {
       const removable = this.entries.findIndex(entry => ['completed', 'failed', 'reverted'].includes(entry.status));
-      if (removable < 0) throw new Error('Журнал заполнен незавершёнными действиями. Проверьте /settings history.');
+      if (removable < 0) throw new AdminChangeError('Журнал заполнен незавершёнными действиями. Проверьте /settings history.');
       this.entries.splice(removable, 1);
     }
     writeSnapshot(this.file, JSON.stringify(this.entries));
@@ -61,7 +61,7 @@ export class AdminChanges {
     apply: () => T | Promise<T>, readAfter: () => unknown): Promise<T> {
     if (this.unavailable) throw new AdminChangeError('Журнал изменений недоступен. Действие не выполнено.');
     const lock = input.guildId + ':' + input.kind + ':' + input.targetId;
-    if (this.locks.has(lock)) throw new Error('Изменение этой цели уже выполняется. Повторите после завершения.');
+    if (this.locks.has(lock)) throw new AdminChangeError('Изменение этой цели уже выполняется. Повторите после завершения.');
     this.locks.add(lock);
     const entry: AdminChange = { ...structuredClone(input), id: randomBytes(6).toString('hex'), after: null, status: 'running', createdAt: Date.now() };
     try {
@@ -83,12 +83,12 @@ export class AdminChanges {
     restore: (change: AdminChange) => Promise<void>): Promise<void> {
     if (this.unavailable) throw new AdminChangeError('Журнал изменений недоступен. Откат не выполнен.');
     const entry = this.entries.find(change => change.id === id && change.guildId === guildId);
-    if (!entry || entry.status !== 'completed') throw new Error('Изменение не найдено или недоступно для отката.');
+    if (!entry || entry.status !== 'completed') throw new AdminChangeError('Изменение не найдено или недоступно для отката.');
     const lock = entry.guildId + ':' + entry.kind + ':' + entry.targetId;
-    if (this.locks.has(lock)) throw new Error('Изменение этой цели уже выполняется.');
+    if (this.locks.has(lock)) throw new AdminChangeError('Изменение этой цели уже выполняется.');
     this.locks.add(lock);
     try {
-      if (!isDeepStrictEqual(await readCurrent(structuredClone(entry)), entry.after)) throw new Error('Состояние уже изменилось. Автоматический откат отменён, чтобы сохранить последующие изменения.');
+      if (!isDeepStrictEqual(await readCurrent(structuredClone(entry)), entry.after)) throw new AdminChangeError('Состояние уже изменилось. Автоматический откат отменён, чтобы сохранить последующие изменения.');
       entry.status = 'reverting';
       entry.revertedBy = actorId;
       this.save();

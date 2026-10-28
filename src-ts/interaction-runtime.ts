@@ -793,17 +793,19 @@ async function handleFamilyAndAdminButtons(interaction: Interaction<'cached'>, o
     }
 
     const [action, userId] = interaction.customId.split(':');
-    const member = await options.fetchMemberFast(interaction.guild, userId);
-    if (!member) {
+    const initialMember = await options.fetchMemberFast(interaction.guild, userId);
+    if (!initialMember) {
       await interaction.reply(options.ephemeral({ content: options.copy.profile.notFound }));
       return true;
     }
 
+    let member = initialMember;
     let result: RankActionResult;
     try {
       if (options.adminChanges) {
         const actor = await interaction.member.fetch(true);
         const target = await member.fetch(true);
+        member = target;
         if (!options.canManageRanks(actor) || target.id === interaction.guild.ownerId || target.id === actor.id
           || (actor.id !== interaction.guild.ownerId && actor.roles.highest.position <= target.roles.highest.position)) {
           throw new AdminChangeError('Ранг не изменён: проверьте действующие права и иерархию ролей цели.');

@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { createDataBackups, coreBackupSources, validateStateVersion } from './services/data-backups';
+import { createDataBackups, runtimeBackupSources, validateStateVersion } from './services/data-backups';
 import { createAiBudget } from './services/ai-budget';
 import { pruneClosedRecords } from './services/privacy';
 import { AdminChanges } from './services/admin-changes';
@@ -161,7 +161,7 @@ const client = new Client({
 
 validateStateVersion(DATABASE_FILE);
 if (fs.existsSync(DATA_FILE) && fs.existsSync(DATABASE_FILE)) {
-  try { createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), coreBackupSources(DATA_FILE, DATABASE_FILE)).create(); }
+  try { createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), runtimeBackupSources(DATA_FILE, DATABASE_FILE)).create(); }
   catch { console.error('Предстартовый backup не создан; загрузка данных продолжится только через штатную проверку и восстановление.'); }
 }
 const storage = createStorage({ dataFile: DATA_FILE });
@@ -1565,10 +1565,7 @@ function isActivityExempt(guildId: string, userId: string): boolean {
 const adminChanges = new AdminChanges(`${DATA_FILE}.admin-changes.json`);
 const actionJournal = new ActionJournal(`${DATA_FILE}.actions.json`);
 configureActionJournal(actionJournal);
-const dataBackups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), [
-  ...coreBackupSources(DATA_FILE, DATABASE_FILE),
-  ...['actions', 'admin-changes', 'discord-rate-limit', 'ai-usage'].map(name => ({ name, file: DATA_FILE + '.' + name + '.json', optional: true }))
-], positive('DATA_BACKUP_RETAIN', 14));
+const dataBackups = createDataBackups(process.env.DATA_BACKUP_DIR || path.join(path.dirname(DATA_FILE), 'data-backups'), runtimeBackupSources(DATA_FILE, DATABASE_FILE), positive('DATA_BACKUP_RETAIN', 14));
 const maintenanceFailures = new Set<string>();
 aiBudget.onWarning(async () => {
   for (const guild of client.guilds.cache.values()) {

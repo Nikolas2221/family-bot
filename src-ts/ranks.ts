@@ -97,6 +97,7 @@ export function createRankService(options: {
       if (!role && typeof member.guild?.roles?.fetch === 'function') {
         role = await member.guild.roles.fetch(targetRole.id).catch(() => null);
       }
+      if (member.guild?.roles && !role) throw new Error('Rank role missing or inaccessible: ' + targetRole.id);
       if (role) {
         const unsafeReason = await getUnsafeAssignableRoleReasonAsync(role, { guild: member.guild });
         if (unsafeReason) {

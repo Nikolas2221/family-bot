@@ -15,3 +15,7 @@ storage.local.json
 npm-debug.log*
 .claude
 .aider*
+
+*.admin-changes.json*
+*.ai-usage.json*
+data-backups

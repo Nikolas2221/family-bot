@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { pendingWork, workQueueText, remindWork } from './services/work-queue';
 import { AdminChangeError, describeAdminChange, type AdminChanges } from './services/admin-changes';
 import { explainDiscordError } from './services/discord-errors';
@@ -712,6 +713,7 @@ async function handleCommandRuntimeInner(interaction: any, options: CommandRunti
               const previous = entry.before as import('./types').GuildSettings;
               const problems = await validateSettingsTargets(interaction.guild, previous, actor);
               if (problems.length) throw new AdminChangeError(problems.join(' '));
+              if (!isDeepStrictEqual(database.getGuild(guildId).settings, entry.after)) throw new AdminChangeError('Состояние изменилось во время проверки. Откат отменён.');
               database.setGuildSettings(guildId, previous); database.flush();
             } else {
               const member = await interaction.guild.members.fetch({ user: entry.targetId, force: true });

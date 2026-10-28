@@ -51,7 +51,7 @@ export function createDataBackups(directory: string, sources: BackupSource[], re
   return { create, verify, restoreToEmpty, healthLines: () => ['Копия рабочих данных: ' + last] };
 }
 export function coreBackupSources(storage: string, database: string): BackupSource[] {
-  return [{ name: 'storage', file: storage, validate: validStore }, { name: 'database', file: database, validate: validDatabase }];
+  return [{ name: 'storage', file: storage, validate: validStore }, { name: 'database', file: database, validate: value => validDatabase(value) && ((value as { meta?: { version?: unknown } }).meta?.version === undefined || (value as { meta: { version: unknown } }).meta.version === 1) }];
 }
 export function validateStateVersion(file: string): void {
   if (!fs.existsSync(file)) return;
@@ -60,4 +60,8 @@ export function validateStateVersion(file: string): void {
   if (!value || typeof value !== 'object') return;
   const version = value.meta?.version;
   if (version !== undefined && version !== 1) throw Error('Неподдерживаемая версия рабочих данных. Запуск остановлен до восстановления совместимой версии.');
+}
+
+export function runtimeBackupSources(storage: string, database: string): BackupSource[] {
+  return [...coreBackupSources(storage, database), ...['actions', 'admin-changes', 'discord-rate-limit', 'ai-usage'].map(name => ({ name, file: storage + '.' + name + '.json', optional: true }))];
 }

@@ -76,7 +76,7 @@ export function createDeepSeekService(options: DeepSeekOptions) {
         throw new Error(`DeepSeek HTTP ${response.status}`);
       }
 
-      const payload = await response.json() as any;
+      const payload = await Promise.race([response.json(), hardTimeout]) as any;
       const content = String(payload?.choices?.[0]?.message?.content || '').trim();
       return content || null;
     } finally {

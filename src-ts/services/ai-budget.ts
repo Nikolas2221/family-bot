@@ -9,7 +9,7 @@ export function createAiBudget(file: string, options: { dailyTokens: number; use
   if (fs.existsSync(file)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Usage;
-      if (!parsed || typeof parsed.day !== 'string' || !Number.isFinite(parsed.reserved) || parsed.reserved < 0 || !Number.isFinite(parsed.actual) || !parsed.requests || Object.values(parsed.requests).some(count => !Number.isFinite(count) || count < 0)) throw Error();
+      if (!parsed || typeof parsed.day !== 'string' || !Number.isFinite(parsed.reserved) || parsed.reserved < 0 || !Number.isFinite(parsed.actual) || parsed.actual < 0 || !parsed.requests || typeof parsed.requests !== 'object' || Array.isArray(parsed.requests) || Object.values(parsed.requests).some(count => !Number.isSafeInteger(count) || count < 0)) throw Error();
       state = parsed;
     } catch { unavailable = true; }
   }
@@ -46,5 +46,5 @@ export function createAiBudget(file: string, options: { dailyTokens: number; use
     }
     return response;
   };
-  return { guardedFetch, onWarning: (handler: () => Promise<void>) => { warningHandler = handler; }, healthLines: () => ['ИИ: ' + (unavailable ? 'журнал бюджета недоступен' : 'токены ' + state.reserved + '/' + options.dailyTokens + '; подтверждено провайдером ' + state.actual + (state.reserved >= options.dailyTokens * 0.8 ? '; достигнуто 80% бюджета' : ''))] };
+  return { guardedFetch, onWarning: (handler: () => Promise<void>) => { warningHandler = handler; }, healthLines: () => ['ИИ: ' + (unavailable ? 'журнал бюджета недоступен' : 'токены ' + (state.day === new Date(now()).toLocaleDateString('en-CA', { timeZone: 'Europe/Bucharest' }) ? state.reserved : 0) + '/' + options.dailyTokens + '; подтверждено провайдером ' + (state.day === new Date(now()).toLocaleDateString('en-CA', { timeZone: 'Europe/Bucharest' }) ? state.actual : 0) + (state.day === new Date(now()).toLocaleDateString('en-CA', { timeZone: 'Europe/Bucharest' }) && state.reserved >= options.dailyTokens * 0.8 ? '; достигнуто 80% бюджета' : ''))] };
 }
